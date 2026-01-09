@@ -1,6 +1,12 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { initDatabase, closeDatabase } from './database'
+import { registerAllHandlers } from './ipc'
+import { cryptoService } from './services/CryptoService'
+import { alistService } from './services/AlistService'
+
+// Alist 服务器地址，可通过环境变量配置
+const ALIST_BASE_URL = process.env.ALIST_BASE_URL || 'http://10.2.3.7:5244'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -23,8 +29,11 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   initDatabase()
+  await cryptoService.initialize()
+  alistService.initialize(ALIST_BASE_URL)
+  registerAllHandlers()
   createWindow()
 
   app.on('activate', () => {

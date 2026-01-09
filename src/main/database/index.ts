@@ -27,11 +27,26 @@ CREATE TABLE IF NOT EXISTS sessions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL REFERENCES users(id),
   token_encrypted TEXT NOT NULL,
+  base_path TEXT DEFAULT '/',
   expires_at INTEGER NOT NULL,
   created_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_encrypted);
+
+CREATE TABLE IF NOT EXISTS file_cache (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  path TEXT NOT NULL,
+  content TEXT NOT NULL,
+  cached_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_file_cache_user_path ON file_cache(user_id, path);
+`
+
+// 迁移：添加 base_path 字段到旧数据库
+const MIGRATIONS = `
+ALTER TABLE sessions ADD COLUMN base_path TEXT DEFAULT '/';
 `
 
 export function initDatabase(): Database.Database {
@@ -46,6 +61,13 @@ export function initDatabase(): Database.Database {
   db = new Database(dbPath)
 
   db.exec(SCHEMA)
+
+  // 运行迁移（忽略已存在的列错误）
+  try {
+    db.exec(MIGRATIONS)
+  } catch {
+    // 列已存在，忽略
+  }
 
   return db
 }

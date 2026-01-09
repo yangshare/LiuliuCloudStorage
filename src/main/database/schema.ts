@@ -22,6 +22,7 @@ export const sessions = sqliteTable('sessions', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   userId: integer('user_id').notNull().references(() => users.id),
   tokenEncrypted: text('token_encrypted').notNull(),
+  basePath: text('base_path').default('/'),
   expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date())
 }, (table) => [
@@ -29,8 +30,21 @@ export const sessions = sqliteTable('sessions', {
   index('idx_sessions_token').on(table.tokenEncrypted)
 ])
 
+// 文件缓存表
+export const fileCache = sqliteTable('file_cache', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: integer('user_id').notNull().references(() => users.id),
+  path: text('path').notNull(),
+  content: text('content').notNull(), // JSON string of file list
+  cachedAt: integer('cached_at', { mode: 'timestamp' }).$defaultFn(() => new Date())
+}, (table) => [
+  index('idx_file_cache_user_path').on(table.userId, table.path)
+])
+
 // 类型导出
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
 export type Session = typeof sessions.$inferSelect
 export type NewSession = typeof sessions.$inferInsert
+export type FileCache = typeof fileCache.$inferSelect
+export type NewFileCache = typeof fileCache.$inferInsert

@@ -19,6 +19,10 @@ export interface UploadResult {
   error?: string
 }
 
+export interface UploadOptions {
+  startByte?: number  // 断点续传起始位置
+}
+
 export interface UploadTask {
   id: string
   name: string
@@ -26,6 +30,14 @@ export interface UploadTask {
   status: string
   progress: number
   error: string
+}
+
+export interface DownloadUrlResult {
+  success: boolean
+  rawUrl?: string
+  fileName?: string
+  fileSize?: number
+  error?: string
 }
 
 export interface ListFilesResponse {
@@ -170,7 +182,7 @@ class AlistService {
     return this.client !== null
   }
 
-  async uploadFile(localPath: string, remotePath: string): Promise<UploadResult> {
+  async uploadFile(localPath: string, remotePath: string, options: UploadOptions = {}): Promise<UploadResult> {
     if (!this.client) {
       throw { code: 'NOT_INITIALIZED', message: 'AlistService 未初始化' } as AppError
     }
@@ -189,21 +201,34 @@ class AlistService {
 
       // 获取文件信息
       const fileStats = fs.statSync(localPath)
+      const startByte = options.startByte || 0
 
-      // 创建文件流
-      const fileStream = fs.createReadStream(localPath)
+      // 从断点位置创建文件流（支持断点续传）
+      const fileStream = fs.createReadStream(localPath, {
+        start: startByte,
+        end: fileStats.size - 1
+      })
+
+      // 构建请求头
+      const headers: Record<string, string> = {
+        ...this.getHeaders(),
+        'Content-Type': 'application/octet-stream',
+        'File-Path': fullRemotePath
+      }
+
+      // 添加断点续传 header（关键：Content-Range）
+      if (startByte > 0) {
+        headers['Content-Range'] = `bytes ${startByte}-${fileStats.size - 1}/${fileStats.size}`
+      } else {
+        headers['Content-Length'] = fileStats.size.toString()
+      }
 
       // 流式上传
       const response = await this.client.put<AlistApiResponse<{ task: UploadTask }>>(
         '/api/fs/put',
         fileStream,
         {
-          headers: {
-            ...this.getHeaders(),
-            'Content-Type': 'application/octet-stream',
-            'File-Path': fullRemotePath,
-            'Content-Length': fileStats.size.toString()
-          },
+          headers,
           maxBodyLength: Infinity,
           maxContentLength: Infinity
         }
@@ -225,6 +250,50 @@ class AlistService {
       return {
         success: false,
         error: error.message || '上传失败'
+      }
+    }
+  }
+
+  async getDownloadUrl(remotePath: string): Promise<DownloadUrlResult> {
+    if (!this.client) {
+      throw { code: 'NOT_INITIALIZED', message: 'AlistService 未初始化' } as AppError
+    }
+
+    try {
+      // 添加 base_path 前缀
+      const fullRemotePath = this.getFullPath(remotePath)
+
+      const response = await this.client.post<AlistApiResponse<{
+        raw_url: string
+        file: {
+          name: string
+          size: number
+          modified: string
+        }
+      }>>(
+        '/api/fs/get',
+        { path: fullRemotePath },
+        { headers: this.getHeaders() }
+      )
+
+      if (response.data.code === 200) {
+        return {
+          success: true,
+          rawUrl: response.data.data.raw_url,
+          fileName: response.data.data.file.name,
+          fileSize: response.data.data.file.size
+        }
+      } else {
+        return {
+          success: false,
+          error: response.data.message
+        }
+      }
+    } catch (error: any) {
+      console.error('[AlistService] Get download URL error:', error)
+      return {
+        success: false,
+        error: error.message || '获取下载链接失败'
       }
     }
   }

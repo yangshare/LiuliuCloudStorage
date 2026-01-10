@@ -85,4 +85,178 @@ export class TransferService {
       .where(eq(transferQueue.userId, userId))
       .all()
   }
+
+  // 恢复任务（将 failed 状态改为 in_progress）
+  async resumeTask(taskId: number): Promise<void> {
+    this.db.update(transferQueue)
+      .set({
+        status: 'in_progress',
+        updatedAt: new Date()
+      })
+      .where(eq(transferQueue.id, taskId))
+      .run()
+  }
+
+  // ========== 下载队列查询方法 ==========
+
+  /**
+   * 获取等待中的下载任务
+   */
+  async getPendingDownloads(userId: number): Promise<TransferQueue[]> {
+    return this.db.select()
+      .from(transferQueue)
+      .where(and(
+        eq(transferQueue.userId, userId),
+        eq(transferQueue.taskType, 'download'),
+        eq(transferQueue.status, 'pending')
+      ))
+      .all()
+  }
+
+  /**
+   * 获取进行中的下载任务
+   */
+  async getActiveDownloads(userId: number): Promise<TransferQueue[]> {
+    return this.db.select()
+      .from(transferQueue)
+      .where(and(
+        eq(transferQueue.userId, userId),
+        eq(transferQueue.taskType, 'download'),
+        eq(transferQueue.status, 'in_progress')
+      ))
+      .all()
+  }
+
+  /**
+   * 统计下载数量
+   */
+  async getDownloadCount(userId: number, status?: string): Promise<number> {
+    const conditions = [
+      eq(transferQueue.userId, userId),
+      eq(transferQueue.taskType, 'download')
+    ]
+
+    if (status) {
+      conditions.push(eq(transferQueue.status, status))
+    }
+
+    const result = this.db.select({ count: transferQueue.id })
+      .from(transferQueue)
+      .where(and(...conditions))
+      .all()
+
+    return result.length
+  }
+
+  /**
+   * 根据远程路径获取任务
+   */
+  async getTaskByRemotePath(remotePath: string, taskType: 'upload' | 'download'): Promise<TransferQueue | undefined> {
+    return this.db.select()
+      .from(transferQueue)
+      .where(and(
+        eq(transferQueue.remotePath, remotePath),
+        eq(transferQueue.taskType, taskType)
+      ))
+      .get()
+  }
+
+  /**
+   * 获取所有未完成的下载任务（用于应用重启恢复）
+   */
+  async getIncompleteDownloads(userId: number): Promise<TransferQueue[]> {
+    return this.db.select()
+      .from(transferQueue)
+      .where(and(
+        eq(transferQueue.userId, userId),
+        eq(transferQueue.taskType, 'download'),
+        or(
+          eq(transferQueue.status, 'pending'),
+          eq(transferQueue.status, 'in_progress')
+        )
+      ))
+      .all()
+  }
+
+  /**
+   * 根据任务 ID 获取任务
+   */
+  async getTaskById(taskId: number): Promise<TransferQueue | undefined> {
+    return this.db.select()
+      .from(transferQueue)
+      .where(eq(transferQueue.id, taskId))
+      .get()
+  }
+
+  /**
+   * 取消任务（标记为已取消）
+   */
+  async cancelTask(taskId: number): Promise<void> {
+    this.db.update(transferQueue)
+      .set({
+        status: 'cancelled',
+        updatedAt: new Date()
+      })
+      .where(eq(transferQueue.id, taskId))
+      .run()
+  }
+
+  /**
+   * 删除任务（从数据库移除）
+   */
+  async deleteTask(taskId: number): Promise<void> {
+    this.db.delete(transferQueue)
+      .where(eq(transferQueue.id, taskId))
+      .run()
+  }
+
+  /**
+   * 批量获取任务状态（用于队列管理优化）
+   * @param remotePaths 远程路径数组
+   * @param taskType 任务类型
+   * @returns Map<remotePath, TransferQueue>
+   */
+  async getTasksByRemotePaths(remotePaths: string[], taskType: 'upload' | 'download'): Promise<Map<string, TransferQueue>> {
+    if (remotePaths.length === 0) {
+      return new Map()
+    }
+
+    // 使用 or 条件批量查询
+    const tasks = this.db.select()
+      .from(transferQueue)
+      .where(and(
+        eq(transferQueue.taskType, taskType),
+        // eslint-disable-next-line
+        or(...remotePaths.map(path => eq(transferQueue.remotePath, path)))
+      ))
+      .all()
+
+    // 转换为 Map 以便快速查找
+    const taskMap = new Map<string, TransferQueue>()
+    for (const task of tasks) {
+      taskMap.set(task.remotePath, task)
+    }
+
+    return taskMap
+  }
+
+  /**
+   * 批量取消用户的所有任务
+   */
+  async cancelAllUserTasks(userId: number, taskType: 'upload' | 'download'): Promise<void> {
+    this.db.update(transferQueue)
+      .set({
+        status: 'cancelled',
+        updatedAt: new Date()
+      })
+      .where(and(
+        eq(transferQueue.userId, userId),
+        eq(transferQueue.taskType, taskType),
+        or(
+          eq(transferQueue.status, 'pending'),
+          eq(transferQueue.status, 'in_progress')
+        )
+      ))
+      .run()
+  }
 }

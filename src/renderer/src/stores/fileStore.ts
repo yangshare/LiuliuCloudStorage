@@ -3,6 +3,11 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import type { FileItem } from '../../../shared/types/electron'
 
+// 常量
+const PATH_SEPARATOR = '/'
+const ROOT_PATH = '/'
+const ROOT_LABEL = '根目录'
+
 export interface TreeNode {
   key: string
   label: string
@@ -15,13 +20,15 @@ export const useFileStore = defineStore('file', () => {
 
   // State
   const files = ref<FileItem[]>([])
-  const currentPath = ref<string>('/')
+  const currentPath = ref<string>(ROOT_PATH)
   const isLoadingFiles = ref<boolean>(false)
   const filesError = ref<string | null>(null)
   const selectedFile = ref<FileItem | null>(null)
   const isOnline = ref<boolean>(navigator.onLine)
   const cacheTime = ref<string | null>(null)
-  const treeData = ref<TreeNode[]>([{ key: '/', label: '根目录', isLeaf: false }])
+  const treeData = ref<TreeNode[]>([{ key: ROOT_PATH, label: ROOT_LABEL, isLeaf: false }])
+  const isNavigating = ref<boolean>(false)
+  const isCreatingFolder = ref<boolean>(false) // 防止快速点击重复导航
 
   // 网络状态监听
   function handleOnline() { isOnline.value = true }
@@ -44,6 +51,12 @@ export const useFileStore = defineStore('file', () => {
 
   // Actions
   async function fetchFiles(path: string = '/') {
+    // 防止重复请求
+    if (isNavigating.value) {
+      return
+    }
+
+    isNavigating.value = true
     isLoadingFiles.value = true
     filesError.value = null
     cacheTime.value = null
@@ -69,20 +82,22 @@ export const useFileStore = defineStore('file', () => {
         }
         filesError.value = result.error || '获取文件列表失败'
       }
-    } catch {
+    } catch (error) {
+      console.error('获取文件列表失败:', error)
       filesError.value = '网络错误，请稍后重试'
     } finally {
       isLoadingFiles.value = false
+      isNavigating.value = false
     }
   }
 
   // 面包屑导航数据
   const breadcrumbs = computed(() => {
-    const parts = currentPath.value.split('/').filter(Boolean)
-    const result = [{ path: '/', label: '根目录' }]
+    const parts = currentPath.value.split(PATH_SEPARATOR).filter(Boolean)
+    const result = [{ path: ROOT_PATH, label: ROOT_LABEL }]
     let accPath = ''
     for (const part of parts) {
-      accPath += '/' + part
+      accPath += PATH_SEPARATOR + part
       result.push({ path: accPath, label: part })
     }
     return result
@@ -90,23 +105,29 @@ export const useFileStore = defineStore('file', () => {
 
   // 导航到指定路径
   function navigateTo(path: string) {
+    // 防止重复导航和快速点击
+    if (path === currentPath.value || isNavigating.value) {
+      return
+    }
     fetchFiles(path)
   }
 
   // 进入文件夹
   function enterFolder(file: FileItem) {
-    if (file.isDir) {
-      const newPath = currentPath.value === '/' ? `/${file.name}` : `${currentPath.value}/${file.name}`
+    if (file.isDir && !isNavigating.value) {
+      const newPath = currentPath.value === ROOT_PATH
+        ? `${PATH_SEPARATOR}${file.name}`
+        : `${currentPath.value}${PATH_SEPARATOR}${file.name}`
       fetchFiles(newPath)
     }
   }
 
   // 返回上级目录
   function goUp() {
-    if (currentPath.value === '/') return
-    const parts = currentPath.value.split('/').filter(Boolean)
+    if (currentPath.value === ROOT_PATH) return
+    const parts = currentPath.value.split(PATH_SEPARATOR).filter(Boolean)
     parts.pop()
-    const parentPath = parts.length === 0 ? '/' : '/' + parts.join('/')
+    const parentPath = parts.length === 0 ? ROOT_PATH : `${PATH_SEPARATOR}${parts.join(PATH_SEPARATOR)}`
     fetchFiles(parentPath)
   }
 
@@ -128,15 +149,53 @@ export const useFileStore = defineStore('file', () => {
         return result.data.content
           .filter((f: FileItem) => f.isDir)
           .map((f: FileItem) => ({
-            key: path === '/' ? `/${f.name}` : `${path}/${f.name}`,
+            key: path === ROOT_PATH ? `${PATH_SEPARATOR}${f.name}` : `${path}${PATH_SEPARATOR}${f.name}`,
             label: f.name,
             isLeaf: false
           }))
+      } else if (result.error) {
+        console.warn(`加载目录树子节点失败 [${path}]:`, result.error)
       }
-    } catch {
-      // ignore
+    } catch (error) {
+      console.error(`加载目录树子节点异常 [${path}]:`, error)
     }
     return []
+  }
+
+  // 创建新文件夹
+  async function createFolder(folderName: string): Promise<boolean> {
+    try {
+      isCreatingFolder.value = true
+
+      const folderPath = currentPath.value === ROOT_PATH
+        ? `${PATH_SEPARATOR}${folderName}`
+        : `${currentPath.value}${PATH_SEPARATOR}${folderName}`
+
+      const result = await window.electronAPI.file.mkdir(folderPath)
+
+      if (!result.success) {
+        const errorMsg = result.error || '创建文件夹失败'
+        if (errorMsg.includes('exist') || errorMsg.includes('已存在')) {
+          window.$message.error('文件夹已存在')
+        } else if (errorMsg.includes('permission') || errorMsg.includes('权限')) {
+          window.$message.error('权限不足')
+        } else {
+          window.$message.error(errorMsg)
+        }
+        return false
+      }
+
+      await fetchFiles(currentPath.value)
+      window.$message.success('文件夹创建成功')
+      return true
+
+    } catch (error: any) {
+      console.error('创建文件夹失败:', error)
+      window.$message.error('创建文件夹失败，请重试')
+      return false
+    } finally {
+      isCreatingFolder.value = false
+    }
   }
 
   return {
@@ -150,12 +209,15 @@ export const useFileStore = defineStore('file', () => {
     cacheTime,
     treeData,
     breadcrumbs,
+    isNavigating,
+    isCreatingFolder,
     fetchFiles,
     navigateTo,
     enterFolder,
     goUp,
     refresh,
     selectFile,
-    loadTreeChildren
+    loadTreeChildren,
+    createFolder
   }
 })

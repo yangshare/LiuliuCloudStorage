@@ -1,10 +1,13 @@
-import { ipcMain } from 'electron'
+import { ipcMain, dialog, app } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
 import { alistService } from '../../services/AlistService'
 import { orchestrationService } from '../../services/OrchestrationService'
 import { transferQueueManager, type QueueTask } from '../../services/TransferQueueManager'
 import { TransferService } from '../../services/TransferService'
+import { DownloadManager } from '../../services/DownloadManager'
+import { preferencesService } from '../../services/PreferencesService'
+import { downloadQueueManager, type DownloadQueueTask } from '../../services/DownloadQueueManager'
 
 const transferService = new TransferService()
 
@@ -25,10 +28,20 @@ export function registerTransferHandlers(): void {
         return { success: false, error: uploadResult.error }
       }
 
+      let lastProgress = 0
       const success = await orchestrationService.waitForTaskCompletion(
         uploadResult.taskId!,
         (progress) => {
-          _event.sender.send('transfer:progress', { taskId: localTaskId, progress })
+          // 只在进度变化时发送事件
+          if (progress !== lastProgress) {
+            const transferredSize = Math.floor((fileStats.size * progress) / 100)
+            _event.sender.send('transfer:progress', {
+              taskId: localTaskId,
+              progress,
+              transferredSize
+            })
+            lastProgress = progress
+          }
         }
       )
 
@@ -81,15 +94,336 @@ export function registerTransferHandlers(): void {
     return { restored: tasks.length }
   })
 
-  ipcMain.handle('transfer:download', async (_event, remotePath: string, localPath: string) => {
-    // TODO: 实现下载（Story 4.1）
-    console.log('transfer:download called', { remotePath, localPath })
-    return { taskId: '', error: 'Not implemented' }
+  // 下载文件
+  ipcMain.handle('transfer:download', async (_event, { remotePath, fileName, userId, userToken, username, savePath: customSavePath }) => {
+    try {
+      alistService.setToken(userToken)
+      alistService.setBasePath(`/root/users/${username}/`)
+      alistService.setUserId(userId)
+
+      const downloadManager = new DownloadManager()
+
+      // 获取下载链接
+      const downloadResult = await alistService.getDownloadUrl(remotePath)
+
+      if (!downloadResult.success) {
+        return { success: false, error: downloadResult.error }
+      }
+
+      // 确定保存路径：优先使用自定义路径，否则使用默认路径
+      const savePath = customSavePath || path.join(downloadManager.getDefaultDownloadPath(), fileName)
+
+      // 生成任务 ID
+      const taskId = `download_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+      // 开始下载（异步执行，不阻塞）
+      downloadManager.startDownload({
+        id: taskId,
+        url: downloadResult.rawUrl!,
+        savePath,
+        fileName: downloadResult.fileName!,
+        fileSize: downloadResult.fileSize!,
+        userId,
+        userToken,
+        username,
+        remotePath
+      }, (progress) => {
+        // 发送进度更新事件到渲染进程
+        _event.sender.send('transfer:download-progress', {
+          taskId,
+          fileName: downloadResult.fileName,
+          progress: progress.percentage,
+          downloadedBytes: progress.downloadedBytes,
+          totalBytes: progress.totalBytes,
+          speed: progress.speed
+        })
+      }).then(() => {
+        // 下载完成
+        _event.sender.send('transfer:download-completed', {
+          taskId,
+          fileName: downloadResult.fileName,
+          savePath
+        })
+      }).catch((error) => {
+        // 下载失败
+        _event.sender.send('transfer:download-failed', {
+          taskId,
+          fileName: downloadResult.fileName,
+          error: error.message
+        })
+      })
+
+      return {
+        success: true,
+        taskId,
+        savePath
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || '下载失败'
+      }
+    }
   })
 
-  ipcMain.handle('transfer:cancel', async (_event, taskId: string) => {
-    // TODO: 实现取消传输（Story 3.8, 4.6）
-    console.log('transfer:cancel called', { taskId })
-    return { success: false, error: 'Not implemented' }
+  // 另存为：打开保存对话框并返回用户选择的路径
+  ipcMain.handle('transfer:saveAs', async (_event, { fileName, userId }) => {
+    try {
+      const downloadManager = new DownloadManager()
+
+      // 获取上次选择的路径
+      const lastPath = preferencesService.getLastDownloadPath(userId)
+      const defaultPath = lastPath
+        ? path.join(lastPath, fileName)
+        : path.join(downloadManager.getDefaultDownloadPath(), fileName)
+
+      // 打开保存对话框
+      const result = await dialog.showSaveDialog({
+        title: '选择下载保存位置',
+        defaultPath,
+        buttonLabel: '保存',
+        filters: [
+          { name: 'All Files', extensions: ['*'] }
+        ],
+        properties: ['createDirectory']
+      })
+
+      if (result.canceled || !result.filePath) {
+        return {
+          success: false,
+          canceled: true
+        }
+      }
+
+      // 保存最后选择的目录
+      const selectedDir = path.dirname(result.filePath)
+      preferencesService.saveLastDownloadPath(userId, selectedDir)
+
+      return {
+        success: true,
+        savePath: result.filePath
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message
+      }
+    }
+  })
+
+  ipcMain.handle('transfer:cancel', async (_event, taskId: number) => {
+    try {
+      const result = await transferQueueManager.cancelTask(taskId)
+      return result
+    } catch (error: any) {
+      console.error('[IPC] 取消任务失败:', error)
+      return { success: false, error: error.message || '取消任务失败' }
+    }
+  })
+
+  // 恢复上传任务
+  ipcMain.handle('transfer:resume', async (_event, { taskId, userId, userToken, username }) => {
+    try {
+      const task = await transferService.getTask(taskId)
+      if (!task) {
+        return { success: false, error: '任务不存在' }
+      }
+
+      if (!task.resumable) {
+        return { success: false, error: '该任务不支持恢复' }
+      }
+
+      // 重置状态并重新添加到队列
+      await transferService.resumeTask(taskId)
+      await transferQueueManager.addTask({
+        id: task.id,
+        filePath: task.filePath,
+        remotePath: task.remotePath,
+        userId: task.userId,
+        userToken,
+        username,
+        fileName: task.fileName,
+        fileSize: task.fileSize
+      })
+
+      return { success: true }
+    } catch (error: any) {
+      return { success: false, error: error.message || '恢复任务失败' }
+    }
+  })
+
+  // 自动重试所有失败任务（网络恢复时调用）
+  ipcMain.handle('transfer:auto-retry-all', async (_event, { userId, userToken, username }) => {
+    try {
+      const count = await transferQueueManager.autoRetryAll(userId, userToken, username)
+      return { success: true, retriedCount: count }
+    } catch (error: any) {
+      return { success: false, error: error.message || '自动重试失败' }
+    }
+  })
+
+  // ========== 下载队列管理 ==========
+
+  // 初始化下载队列管理器
+  ipcMain.handle('transfer:initDownloadQueue', async (_event, { userId, userToken, username }) => {
+    try {
+      // 恢复队列中的任务
+      const restoredCount = await downloadQueueManager.restoreQueue(userId, userToken, username)
+
+      // 监听队列更新事件并发送到渲染进程
+      downloadQueueManager.setProgressCallback((data) => {
+        _event.sender.send('transfer:download-progress', data)
+      })
+
+      return { success: true, restoredCount }
+    } catch (error: any) {
+      return { success: false, error: error.message || '初始化下载队列失败' }
+    }
+  })
+
+  // 添加到下载队列
+  ipcMain.handle('transfer:queueDownload', async (_event, taskData) => {
+    try {
+      // 获取下载链接
+      alistService.setToken(taskData.userToken)
+      alistService.setBasePath(`/root/users/${taskData.username}/`)
+      alistService.setUserId(taskData.userId)
+
+      const downloadResult = await alistService.getDownloadUrl(taskData.remotePath)
+
+      if (!downloadResult.success) {
+        return { success: false, error: downloadResult.error }
+      }
+
+      // 确定保存路径
+      const downloadManager = new DownloadManager()
+      const defaultPath = downloadManager.getDefaultDownloadPath()
+      const savePath = taskData.savePath || path.join(defaultPath, taskData.fileName)
+
+      // 构建完整任务
+      const task: DownloadQueueTask = {
+        ...taskData,
+        id: taskData.id || `download_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        url: downloadResult.rawUrl!,
+        savePath,
+        fileSize: downloadResult.fileSize || taskData.fileSize,
+        priority: taskData.priority || 0
+      }
+
+      // 添加到队列
+      await downloadQueueManager.addToQueue(task)
+
+      return { success: true, taskId: task.id }
+    } catch (error: any) {
+      return { success: false, error: error.message || '添加到下载队列失败' }
+    }
+  })
+
+  // 获取下载队列状态
+  ipcMain.handle('transfer:getDownloadQueue', async () => {
+    try {
+      const state = await downloadQueueManager.getQueueState()
+      return { success: true, state }
+    } catch (error: any) {
+      return { success: false, error: error.message || '获取队列状态失败' }
+    }
+  })
+
+  // 暂停下载队列
+  ipcMain.handle('transfer:pauseDownloadQueue', async () => {
+    try {
+      downloadQueueManager.pauseQueue()
+      return { success: true }
+    } catch (error: any) {
+      return { success: false, error: error.message || '暂停队列失败' }
+    }
+  })
+
+  // 恢复下载队列
+  ipcMain.handle('transfer:resumeDownloadQueue', async () => {
+    try {
+      downloadQueueManager.resumeQueue()
+      return { success: true }
+    } catch (error: any) {
+      return { success: false, error: error.message || '恢复队列失败' }
+    }
+  })
+
+  // 清空下载队列（已完成和失败的任务）
+  ipcMain.handle('transfer:clearDownloadQueue', async () => {
+    try {
+      await downloadQueueManager.clearQueue()
+      return { success: true }
+    } catch (error: any) {
+      return { success: false, error: error.message || '清空队列失败' }
+    }
+  })
+
+  // ========== 下载恢复和取消 ==========
+
+  // 恢复下载任务（Story 4-5: 下载断点续传）
+  ipcMain.handle('transfer:resumeDownload', async (_event, { taskId }) => {
+    try {
+      const downloadManager = new DownloadManager()
+
+      // 恢复下载
+      await downloadManager.resumeDownload(taskId, (progress) => {
+        // 发送进度更新事件到渲染进程
+        _event.sender.send('transfer:download-progress', {
+          taskId,
+          progress: progress.percentage,
+          downloadedBytes: progress.downloadedBytes,
+          totalBytes: progress.totalBytes,
+          speed: progress.speed
+        })
+      })
+
+      // 下载完成
+      _event.sender.send('transfer:download-completed', { taskId })
+
+      return { success: true }
+    } catch (error: any) {
+      return { success: false, error: error.message || '恢复下载失败' }
+    }
+  })
+
+  // 取消下载任务（Story 4-6: 取消下载任务）
+  ipcMain.handle('transfer:cancelDownload', async (_event, { taskId }) => {
+    try {
+      const downloadManager = new DownloadManager()
+
+      // 取消下载（中止网络请求并删除部分文件）
+      await downloadManager.cancelDownload(taskId)
+
+      // 更新数据库状态
+      await transferService.cancelTask(Number(taskId))
+
+      // 从队列移除
+      await downloadQueueManager.removeFromQueue(taskId.toString())
+
+      // 通知渲染进程
+      _event.sender.send('transfer:download-cancelled', { taskId })
+
+      return { success: true }
+    } catch (error: any) {
+      return { success: false, error: error.message || '取消下载失败' }
+    }
+  })
+
+  // 取消所有下载（批量取消）
+  ipcMain.handle('transfer:cancelAllDownloads', async (_event, { userId }) => {
+    try {
+      const downloadManager = new DownloadManager()
+
+      // 取消所有进行中和等待的任务
+      await transferService.cancelAllUserTasks(userId, 'download')
+
+      // 清空队列
+      await downloadQueueManager.clearQueue()
+
+      return { success: true }
+    } catch (error: any) {
+      return { success: false, error: error.message || '取消所有下载失败' }
+    }
   })
 }

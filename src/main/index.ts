@@ -5,6 +5,7 @@ import { registerAllHandlers } from './ipc'
 import { cryptoService } from './services/CryptoService'
 import { alistService } from './services/AlistService'
 import { orchestrationService } from './services/OrchestrationService'
+import { preferencesService } from './services/PreferencesService'
 
 // Alist 服务器地址，可通过环境变量配置
 const ALIST_BASE_URL = process.env.ALIST_BASE_URL || 'http://10.2.3.7:5244'
@@ -54,4 +55,5 @@ app.on('window-all-closed', () => {
 
 app.on('quit', () => {
   closeDatabase()
+  preferencesService.close()
 })

@@ -1,8 +1,46 @@
 <script setup lang="ts">
+import { ref, watch } from 'vue'
 import { NTree } from 'naive-ui'
 import { useFileStore, type TreeNode } from '../../stores/fileStore'
 
 const fileStore = useFileStore()
+const expandedKeys = ref<string[]>([])
+
+// 监听 currentPath 变化，自动展开路径上的所有节点
+watch(() => fileStore.currentPath, async (newPath) => {
+  const pathParts = newPath.split('/').filter(Boolean)
+  const keysToExpand: string[] = []
+
+  // 逐级展开路径
+  for (let i = 0; i < pathParts.length; i++) {
+    const subPath = '/' + pathParts.slice(0, i + 1).join('/')
+    keysToExpand.push(subPath)
+  }
+
+  // 添加到展开列表
+  expandedKeys.value = [...new Set([...expandedKeys.value, ...keysToExpand])]
+
+  // 预加载路径上的所有节点
+  for (const path of keysToExpand) {
+    const children = await fileStore.loadTreeChildren(path)
+    // 更新 treeData 中的节点（如果有）
+    updateTreeNode(fileStore.treeData, path, children)
+  }
+}, { immediate: true })
+
+// 递归更新树节点
+function updateTreeNode(nodes: TreeNode[], path: string, children: TreeNode[]) {
+  for (const node of nodes) {
+    if (node.key === path) {
+      node.children = children
+      return true
+    }
+    if (node.children && updateTreeNode(node.children, path, children)) {
+      return true
+    }
+  }
+  return false
+}
 
 async function handleLoad(node: TreeNode) {
   const children = await fileStore.loadTreeChildren(node.key)
@@ -25,8 +63,10 @@ function handleSelect(keys: string[]) {
     <n-tree
       :data="fileStore.treeData"
       :selected-keys="[fileStore.currentPath]"
+      :expanded-keys="expandedKeys"
       :on-load="handleLoad"
       @update:selected-keys="handleSelect"
+      @update:expanded-keys="(keys) => expandedKeys = keys"
       selectable
       block-line
       expand-on-click

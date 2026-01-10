@@ -57,16 +57,16 @@ function handleDrop(e: DragEvent) {
 async function selectFiles() {
   if (!fileStore.isOnline) return
   const result = await window.electronAPI.dialog.openFile()
-  if (result?.filePaths?.length) {
-    transferStore.addPathsToUploadQueue(result.filePaths, fileStore.currentPath)
+  if (!result.canceled && result.files?.length) {
+    transferStore.addPathsToUploadQueue(result.files.map(f => f.path), fileStore.currentPath)
   }
 }
 
 async function selectFolder() {
   if (!fileStore.isOnline) return
   const result = await window.electronAPI.dialog.openFile({ directory: true })
-  if (result?.filePaths?.length) {
-    transferStore.addPathsToUploadQueue(result.filePaths, fileStore.currentPath)
+  if (!result.canceled && result.files?.length) {
+    transferStore.addPathsToUploadQueue(result.files.map(f => f.path), fileStore.currentPath)
   }
 }
 </script>

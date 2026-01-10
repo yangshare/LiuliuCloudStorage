@@ -4,7 +4,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 const validChannels = [
   'auth:login', 'auth:logout', 'auth:register', 'auth:check-session', 'auth:complete-onboarding',
   'file:list', 'file:mkdir', 'file:delete',
-  'transfer:upload', 'transfer:download', 'transfer:cancel', 'transfer:list',
+  'transfer:upload', 'transfer:download', 'transfer:cancel', 'transfer:list', 'transfer:progress',
+  'transfer:add-to-queue', 'transfer:queue-status', 'transfer:restore-queue',
   'quota:get', 'quota:update',
   'crypto:encrypt', 'crypto:decrypt', 'crypto:isReady',
   'dialog:openFile',
@@ -43,6 +44,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     list: (path: string) => ipcRenderer.invoke('file:list', path),
     mkdir: (path: string) => ipcRenderer.invoke('file:mkdir', path),
     delete: (path: string) => ipcRenderer.invoke('file:delete', path)
+  },
+
+  transfer: {
+    upload: (filePath: string, remotePath: string, userId: number, userToken: string, username: string, localTaskId: string) =>
+      ipcRenderer.invoke('transfer:upload', { filePath, remotePath, userId, userToken, username, localTaskId }),
+    addToQueue: (task: { id: number; filePath: string; remotePath: string; userId: number; userToken: string; username: string; fileName: string; fileSize: number }) =>
+      ipcRenderer.invoke('transfer:add-to-queue', task),
+    getQueueStatus: () => ipcRenderer.invoke('transfer:queue-status'),
+    list: (userId: number) => ipcRenderer.invoke('transfer:list', userId),
+    restoreQueue: (userId: number, userToken: string, username: string) =>
+      ipcRenderer.invoke('transfer:restore-queue', { userId, userToken, username }),
+    onProgress: (callback: (data: { taskId: string | number, progress: number }) => void) =>
+      ipcRenderer.on('transfer:progress', (_event, data) => callback(data)),
+    removeProgressListener: (callback: (data: { taskId: string | number, progress: number }) => void) =>
+      ipcRenderer.removeListener('transfer:progress', callback as never)
   },
 
   dialog: {

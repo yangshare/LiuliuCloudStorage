@@ -42,6 +42,34 @@ CREATE TABLE IF NOT EXISTS file_cache (
   cached_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_file_cache_user_path ON file_cache(user_id, path);
+
+CREATE TABLE IF NOT EXISTS transfer_queue (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  task_type TEXT NOT NULL,
+  file_name TEXT NOT NULL,
+  file_path TEXT NOT NULL,
+  remote_path TEXT NOT NULL,
+  file_size INTEGER NOT NULL,
+  transferred_size INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'pending',
+  task_id TEXT,
+  error_message TEXT,
+  resumable INTEGER DEFAULT 0,
+  created_at INTEGER,
+  updated_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_transfer_queue_user_id ON transfer_queue(user_id);
+CREATE INDEX IF NOT EXISTS idx_transfer_queue_status ON transfer_queue(status);
+CREATE INDEX IF NOT EXISTS idx_transfer_queue_task_type ON transfer_queue(task_type);
+CREATE INDEX IF NOT EXISTS idx_transfer_queue_user_status ON transfer_queue(user_id, status);
+
+CREATE TRIGGER IF NOT EXISTS update_transfer_queue_timestamp
+AFTER UPDATE ON transfer_queue
+FOR EACH ROW
+BEGIN
+  UPDATE transfer_queue SET updated_at = strftime('%s', 'now') WHERE id = NEW.id;
+END;
 `
 
 // 迁移：添加 base_path 字段到旧数据库

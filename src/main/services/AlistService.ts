@@ -1,5 +1,7 @@
 import { createHttpClient, AppError } from './httpClient'
 import { AxiosInstance } from 'axios'
+import * as fs from 'fs'
+import * as path from 'path'
 
 export interface FileItem {
   name: string
@@ -9,6 +11,21 @@ export interface FileItem {
   sign?: string
   thumb?: string
   type?: number
+}
+
+export interface UploadResult {
+  success: boolean
+  taskId?: string
+  error?: string
+}
+
+export interface UploadTask {
+  id: string
+  name: string
+  state: number
+  status: string
+  progress: number
+  error: string
 }
 
 export interface ListFilesResponse {
@@ -151,6 +168,65 @@ class AlistService {
 
   isInitialized(): boolean {
     return this.client !== null
+  }
+
+  async uploadFile(localPath: string, remotePath: string): Promise<UploadResult> {
+    if (!this.client) {
+      throw { code: 'NOT_INITIALIZED', message: 'AlistService 未初始化' } as AppError
+    }
+
+    try {
+      // 检查本地文件是否存在
+      if (!fs.existsSync(localPath)) {
+        return {
+          success: false,
+          error: '本地文件不存在'
+        }
+      }
+
+      // 添加 base_path 前缀
+      const fullRemotePath = this.getFullPath(remotePath)
+
+      // 获取文件信息
+      const fileStats = fs.statSync(localPath)
+
+      // 创建文件流
+      const fileStream = fs.createReadStream(localPath)
+
+      // 流式上传
+      const response = await this.client.put<AlistApiResponse<{ task: UploadTask }>>(
+        '/api/fs/put',
+        fileStream,
+        {
+          headers: {
+            ...this.getHeaders(),
+            'Content-Type': 'application/octet-stream',
+            'File-Path': fullRemotePath,
+            'Content-Length': fileStats.size.toString()
+          },
+          maxBodyLength: Infinity,
+          maxContentLength: Infinity
+        }
+      )
+
+      if (response.data.code === 200) {
+        return {
+          success: true,
+          taskId: response.data.data.task.id
+        }
+      } else {
+        return {
+          success: false,
+          error: response.data.message
+        }
+      }
+    } catch (error: any) {
+      console.error('[AlistService] Upload error:', error)
+      return {
+        success: false,
+        error: error.message || '上传失败'
+      }
+    }
   }
 }
 

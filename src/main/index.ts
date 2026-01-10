@@ -4,9 +4,11 @@ import { initDatabase, closeDatabase } from './database'
 import { registerAllHandlers } from './ipc'
 import { cryptoService } from './services/CryptoService'
 import { alistService } from './services/AlistService'
+import { orchestrationService } from './services/OrchestrationService'
 
 // Alist 服务器地址，可通过环境变量配置
 const ALIST_BASE_URL = process.env.ALIST_BASE_URL || 'http://10.2.3.7:5244'
+const N8N_BASE_URL = process.env.N8N_BASE_URL || 'http://10.2.3.7:5678'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -33,6 +35,7 @@ app.whenReady().then(async () => {
   initDatabase()
   await cryptoService.initialize()
   alistService.initialize(ALIST_BASE_URL)
+  orchestrationService.initialize(N8N_BASE_URL)
   registerAllHandlers()
   createWindow()
 

@@ -104,7 +104,7 @@ class AlistService {
   private getHeaders(): Record<string, string> {
     const headers: Record<string, string> = {}
     if (this.token) {
-      headers['Authorization'] = this.token
+      headers['Authorization'] = `Bearer ${this.token}`
     }
     return headers
   }
@@ -251,6 +251,26 @@ class AlistService {
         success: false,
         error: error.message || '上传失败'
       }
+    }
+  }
+
+  async removeFile(dir: string, names: string[]): Promise<void> {
+    if (!this.client) {
+      throw { code: 'NOT_INITIALIZED', message: 'AlistService 未初始化' } as AppError
+    }
+
+    const fullDir = this.getFullPath(dir)
+    const response = await this.client.post<AlistApiResponse<null>>(
+      '/api/fs/remove',
+      { dir: fullDir, names },
+      { headers: this.getHeaders() }
+    )
+
+    if (response.data.code !== 200) {
+      throw {
+        code: `ALIST_${response.data.code}`,
+        message: response.data.message || '删除文件失败'
+      } as AppError
     }
   }
 

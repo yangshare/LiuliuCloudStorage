@@ -497,7 +497,7 @@ export const useTransferStore = defineStore('transfer', () => {
       const { useAuthStore } = await import('@/stores/authStore')
       const authStore = useAuthStore()
 
-      if (!authStore.isAuthenticated || !authStore.user) {
+      if (!authStore.isLoggedIn || !authStore.user) {
         return {
           success: false,
           error: '用户未登录,无法添加下载任务'
@@ -505,7 +505,7 @@ export const useTransferStore = defineStore('transfer', () => {
       }
 
       const userId = authStore.user.id
-      const userToken = authStore.token
+      const userToken = authStore.user.token
       const username = authStore.user.username
 
       const taskId = `download_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`

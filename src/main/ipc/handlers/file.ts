@@ -54,6 +54,15 @@ export function registerFileHandlers(): void {
       const appError = error as AppError
       console.error('[file:list] Error:', appError)
 
+      // 检测 401 错误（token 失效），标记需要重新登录
+      if (appError.code === 'ALIST_401') {
+        return {
+          success: false,
+          error: appError.message || 'Token 已失效，请重新登录',
+          code: 'AUTH_REQUIRED'
+        }
+      }
+
       // 尝试从缓存读取
       try {
         const db = getDatabase()
@@ -112,9 +121,30 @@ export function registerFileHandlers(): void {
     }
   })
 
-  ipcMain.handle('file:delete', async (_event, path: string): Promise<MkdirResult> => {
-    // TODO: 实现删除文件（未来 Story）
-    console.log('file:delete called', { path })
-    return { success: false, error: 'Not implemented' }
+  ipcMain.handle('file:delete', async (_event, dir: string, fileName: string): Promise<MkdirResult> => {
+    try {
+      await alistService.removeFile(dir, [fileName])
+
+      // 记录删除操作日志
+      const userId = alistService.getCurrentUserId()
+      if (userId) {
+        activityService.logActivity({
+          userId,
+          actionType: ActionType.DELETE,
+          fileCount: 1,
+          details: { dir, fileName }
+        }).catch(err => {
+          console.warn('[file:delete] 日志记录失败:', err)
+        })
+      }
+
+      return { success: true }
+    } catch (error) {
+      const appError = error as AppError
+      return {
+        success: false,
+        error: appError.message || '删除文件失败'
+      }
+    }
   })
 }

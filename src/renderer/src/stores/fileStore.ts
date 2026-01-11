@@ -74,6 +74,12 @@ export const useFileStore = defineStore('file', () => {
           isOnline.value = true
         }
       } else {
+        // 检测 401 认证错误（token 失效），自动跳转登录页
+        if ((result as any).code === 'AUTH_REQUIRED') {
+          await window.electronAPI.auth.logout()
+          router.push('/login')
+          return
+        }
         // 检测 403 权限错误，跳转登录页
         if (result.error?.includes('403') || result.error?.includes('permission')) {
           await window.electronAPI.auth.logout()

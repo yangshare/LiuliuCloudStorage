@@ -51,13 +51,12 @@ export class TrayService {
 
     // 尝试多个可能的路径
     const possiblePaths = [
-      // 开发环境路径
-      join(process.resourcesPath, 'assets', 'icons', iconName),
-      join(__dirname, '../../assets/icons', iconName),
-      join(process.cwd(), 'assets', 'icons', iconName),
+      // 开发环境路径 - 源代码目录
+      join(process.cwd(), 'src', 'assets', 'icons', iconName),
+      join(__dirname, '../../src/assets/icons', iconName),
       // 打包后路径
+      join(process.resourcesPath, 'assets', 'icons', iconName),
       join(process.resourcesPath, iconName),
-      join(__dirname, '..', iconName),
     ]
 
     for (const iconPath of possiblePaths) {

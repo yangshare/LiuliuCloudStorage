@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 // 允许的 IPC 通道白名单
 const validChannels = [
-  'auth:login', 'auth:logout', 'auth:register', 'auth:check-session', 'auth:complete-onboarding', 'auth:get-users', 'auth:get-storage-stats',
+  'auth:login', 'auth:logout', 'auth:register', 'auth:check-session', 'auth:complete-onboarding', 'auth:get-current-user', 'auth:get-users', 'auth:get-storage-stats',
   'file:list', 'file:mkdir', 'file:delete',
   'transfer:upload', 'transfer:download', 'transfer:saveAs', 'transfer:cancel', 'transfer:list', 'transfer:progress',
   'transfer:add-to-queue', 'transfer:queue-status', 'transfer:restore-queue',
@@ -47,6 +47,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     register: (username: string, password: string) => ipcRenderer.invoke('auth:register', username, password),
     checkSession: () => ipcRenderer.invoke('auth:check-session'),
     completeOnboarding: () => ipcRenderer.invoke('auth:complete-onboarding'),
+    getCurrentUser: () => ipcRenderer.invoke('auth:get-current-user'),
     getUsers: (params?: { page?: number; pageSize?: number; search?: string }) => ipcRenderer.invoke('auth:get-users', params),
     getStorageStats: () => ipcRenderer.invoke('auth:get-storage-stats')
   },
@@ -54,7 +55,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   file: {
     list: (path: string) => ipcRenderer.invoke('file:list', path),
     mkdir: (path: string) => ipcRenderer.invoke('file:mkdir', path),
-    delete: (path: string) => ipcRenderer.invoke('file:delete', path)
+    delete: (dir: string, fileName: string) => ipcRenderer.invoke('file:delete', dir, fileName)
   },
 
   transfer: {

@@ -5,7 +5,7 @@ import { alistService } from '../../services/AlistService'
 import { activityService, ActionType } from '../../services/ActivityService'
 import { DEFAULT_QUOTA } from '../../../shared/constants'
 
-const N8N_WEBHOOK_URL = 'http://10.2.3.7:5678/webhook/liuliu'
+const N8N_WEBHOOK_URL = 'http://192.168.6.3:5678/webhook/liuliu'
 
 let currentSession: { userId: number; username: string; token: string } | null = null
 
@@ -140,12 +140,23 @@ function ensureUser(username: string): number {
 export function registerAuthHandlers(): void {
   ipcMain.handle('auth:login', async (_event, username: string, password: string) => {
     try {
+      console.log('[auth:login] 开始登录流程, 用户名:', username)
       const result = await callWebhook('login', { username, password })
+      console.log('[auth:login] Webhook 返回结果:', {
+        success: result.success,
+        hasToken: !!result.token,
+        tokenLength: result.token ? result.token.length : 0,
+        tokenPreview: result.token ? result.token.substring(0, 30) + '...' : 'no token'
+      })
+
       if (result.success && result.token) {
         // 设置 token 后获取用户信息
+        console.log('[auth:login] 设置 AlistService token')
         alistService.setToken(result.token)
         try {
+          console.log('[auth:login] 调用 getMe() 获取用户信息')
           const userInfo = await alistService.getMe()
+          console.log('[auth:login] 成功获取用户信息:', userInfo.username)
           const basePath = userInfo.basePath || '/'
           const userId = ensureUser(username)
           saveSession(userId, username, result.token, basePath)
@@ -220,6 +231,48 @@ export function registerAuthHandlers(): void {
     db.prepare('UPDATE users SET onboarding_completed = 1, updated_at = ? WHERE id = ?')
       .run(Date.now(), currentSession.userId)
     return { success: true }
+  })
+
+  /**
+   * 获取当前用户信息
+   */
+  ipcMain.handle('auth:get-current-user', async () => {
+    try {
+      const session = getStoredSession()
+      if (!session) {
+        return { success: false, message: '用户未登录' }
+      }
+
+      const db = getDatabase()
+      const user = db.prepare(`
+        SELECT id, username, is_admin as isAdmin, quota_total as quotaTotal, quota_used as quotaUsed
+        FROM users WHERE id = ?
+      `).get(session.userId) as {
+        id: number
+        username: string
+        isAdmin: number
+        quotaTotal: number
+        quotaUsed: number
+      } | undefined
+
+      if (!user) {
+        return { success: false, message: '用户不存在' }
+      }
+
+      return {
+        success: true,
+        data: {
+          id: user.id,
+          username: user.username,
+          isAdmin: user.isAdmin === 1,
+          quotaTotal: user.quotaTotal,
+          quotaUsed: user.quotaUsed
+        }
+      }
+    } catch (error: any) {
+      console.error('获取当前用户信息失败:', error)
+      return { success: false, message: error.message || '获取用户信息失败' }
+    }
   })
 
   /**

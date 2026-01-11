@@ -16,12 +16,16 @@
     "pnpm": ">=8.0.0"
   },
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "chcp 65001 && electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "playwright test --debug",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
@@ -38,7 +42,9 @@
   },
   "devDependencies": {
     "@electron/rebuild": "^3.6.0",
+    "@faker-js/faker": "^10.2.0",
     "@pinia/nuxt": "^0.5.0",
+    "@playwright/test": "^1.57.0",
     "@types/better-sqlite3": "^7.6.11",
     "@vitejs/plugin-vue": "^5.0.0",
     "@vitest/ui": "^4.0.16",

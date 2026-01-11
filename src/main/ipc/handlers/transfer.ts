@@ -8,6 +8,7 @@ import { TransferService } from '../../services/TransferService'
 import { DownloadManager } from '../../services/DownloadManager'
 import { preferencesService } from '../../services/PreferencesService'
 import { downloadQueueManager, type DownloadQueueTask } from '../../services/DownloadQueueManager'
+import { getCurrentSession } from './auth'
 
 const transferService = new TransferService()
 
@@ -284,10 +285,34 @@ export function registerTransferHandlers(): void {
   // 添加到下载队列
   ipcMain.handle('transfer:queueDownload', async (_event, taskData) => {
     try {
+      console.log('[transfer:queueDownload] 开始处理下载请求')
+
+      // 从后端 session 获取 token（前端传递的 token 可能为空）
+      const session = getCurrentSession()
+      console.log('[transfer:queueDownload] Session 状态:', session ? '已登录' : '未登录')
+
+      if (!session) {
+        return { success: false, error: '用户未登录' }
+      }
+
+      const userToken = session.token
+      const username = session.username
+      const userId = session.userId
+
+      console.log('[transfer:queueDownload] 用户信息:', {
+        userId,
+        username,
+        tokenLength: userToken ? userToken.length : 0,
+        tokenPreview: userToken ? userToken.substring(0, 20) + '...' : 'empty'
+      })
+
       // 获取下载链接
-      alistService.setToken(taskData.userToken)
-      alistService.setBasePath(`/root/users/${taskData.username}/`)
-      alistService.setUserId(taskData.userId)
+      alistService.setToken(userToken)
+      alistService.setBasePath(`/root/users/${username}/`)
+      alistService.setUserId(userId)
+
+      console.log('[transfer:queueDownload] AlistService 配置完成，准备获取下载链接')
+      console.log('[transfer:queueDownload] 请求路径:', taskData.remotePath)
 
       const downloadResult = await alistService.getDownloadUrl(taskData.remotePath)
 
@@ -307,7 +332,10 @@ export function registerTransferHandlers(): void {
         url: downloadResult.rawUrl!,
         savePath,
         fileSize: downloadResult.fileSize || taskData.fileSize,
-        priority: taskData.priority || 0
+        priority: taskData.priority || 0,
+        userId,
+        userToken,
+        username
       }
 
       // 添加到队列

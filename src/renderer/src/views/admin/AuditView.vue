@@ -38,10 +38,10 @@
         </n-space>
 
         <!-- 统计信息 -->
-        <n-statistic-group>
+        <n-space size="large">
           <n-statistic label="总记录数" :value="totalLogs" />
           <n-statistic label="今日活跃用户" :value="dau" />
-        </n-statistic-group>
+        </n-space>
 
         <!-- 日志表格 -->
         <n-data-table
@@ -65,7 +65,6 @@ import {
   NSelect,
   NDatePicker,
   NDataTable,
-  NStatisticGroup,
   NStatistic,
   NTag,
   useMessage,

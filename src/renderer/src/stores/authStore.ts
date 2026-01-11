@@ -52,23 +52,28 @@ export const useAuthStore = defineStore('auth', () => {
     onboardingCompleted?: boolean
   }) {
     if (session.valid && session.username) {
-      // 需要通过 IPC 获取用户详细信息，包括 isAdmin
-      window.electronAPI.auth.getUsers?.()
+      // 使用专门的 API 获取当前用户信息
+      window.electronAPI.auth.getCurrentUser?.()
         .then((result: any) => {
-          if (result.success) {
-            // 如果能获取用户列表，说明当前用户是管理员
-            // 这里需要进一步获取当前用户的详细信息
-            // 暂时设置 isAdmin 为 true，后续可以通过专门的 API 获取准确信息
+          if (result.success && result.data) {
             setUser({
-              id: 0, // 需要从后端获取
-              username: session.username!,
+              id: result.data.id,
+              username: result.data.username,
               token: '', // token 已存储在后端
-              isAdmin: true
+              isAdmin: result.data.isAdmin
+            })
+          } else {
+            // 降级方案：如果获取失败，使用 session 中的用户名
+            setUser({
+              id: 0,
+              username: session.username!,
+              token: '',
+              isAdmin: false
             })
           }
         })
         .catch(() => {
-          // 获取用户列表失败，不是管理员
+          // 获取用户信息失败，使用默认值
           setUser({
             id: 0,
             username: session.username!,

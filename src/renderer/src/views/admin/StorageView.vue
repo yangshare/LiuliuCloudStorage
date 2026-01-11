@@ -4,35 +4,29 @@
     <n-card title="存储概览">
       <n-space vertical size="large" v-if="!loading">
         <!-- 总使用率进度条 -->
-        <n-statistic-group>
+        <n-space size="large">
           <n-statistic label="总存储配额">
-            <template #default>
-              <n-number-animation :from="0" :to="stats.totalQuota" :precision="0" />
-              <template #suffix>
-                <span class="text-sm">B ({{ formatBytes(stats.totalQuota) }})</span>
-              </template>
+            <n-number-animation :from="0" :to="stats.totalQuota" :precision="0" />
+            <template #suffix>
+              <span class="text-sm">B ({{ formatBytes(stats.totalQuota) }})</span>
             </template>
           </n-statistic>
           <n-statistic label="已使用">
-            <template #default>
-              <n-number-animation :from="0" :to="stats.totalUsed" :precision="0" />
-              <template #suffix>
-                <span class="text-sm">B ({{ formatBytes(stats.totalUsed) }})</span>
-              </template>
+            <n-number-animation :from="0" :to="stats.totalUsed" :precision="0" />
+            <template #suffix>
+              <span class="text-sm">B ({{ formatBytes(stats.totalUsed) }})</span>
             </template>
           </n-statistic>
           <n-statistic label="剩余空间">
-            <template #default>
-              <n-number-animation :from="0" :to="stats.remaining" :precision="0" />
-              <template #suffix>
-                <span class="text-sm">B ({{ formatBytes(stats.remaining) }})</span>
-              </template>
+            <n-number-animation :from="0" :to="stats.remaining" :precision="0" />
+            <template #suffix>
+              <span class="text-sm">B ({{ formatBytes(stats.remaining) }})</span>
             </template>
           </n-statistic>
           <n-statistic label="用户数">
             {{ stats.userCount }}
           </n-statistic>
-        </n-statistic-group>
+        </n-space>
 
         <n-divider />
 
@@ -84,7 +78,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, h } from 'vue'
 import {
-  NCard, NSpace, NStatistic, NStatisticGroup, NNumberAnimation, NText, NDivider,
+  NCard, NSpace, NStatistic, NNumberAnimation, NText, NDivider,
   NProgress, NDataTable, NSpin, NAlert, NIcon, type DataTableColumns
 } from 'naive-ui'
 import { RefreshOutline as RefreshIcon } from '@vicons/ionicons5'

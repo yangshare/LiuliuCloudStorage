@@ -4,7 +4,7 @@
     @update:show="$emit('update:show', $event)"
   >
     <n-card
-      style="width: 500px"
+      style="width: 550px"
       title="调整用户配额"
       :bordered="false"
       size="huge"
@@ -35,32 +35,83 @@
 
         <n-divider />
 
-        <n-form-item label="新配额总量" path="quotaTotal">
-          <n-input-number
-            v-model:value="formData.quotaTotal"
-            :min="user.quotaUsed"
-            :max="107374182400"
-            :precision="0"
-            placeholder="输入新的配额总量(字节)"
-            style="width: 100%"
-          >
-            <template #suffix>
-              <span>B</span>
-            </template>
-          </n-input-number>
+        <!-- Story 7.5 MEDIUM FIX: 添加 GB 输入模式，提升用户体验 -->
+        <n-form-item label="输入模式">
+          <n-radio-group v-model:value="inputMode">
+            <n-radio-button value="gb">
+              GB (推荐)
+            </n-radio-button>
+            <n-radio-button value="bytes">
+              字节
+            </n-radio-button>
+          </n-radio-group>
         </n-form-item>
 
-        <n-form-item>
-          <template #label>
-            <n-space align="center">
-              <span>新配额总量</span>
-              <n-tag size="small" :type="quotaPreviewType">
-                {{ formatBytes(formData.quotaTotal) }}
-              </n-tag>
+        <!-- GB 输入模式 -->
+        <template v-if="inputMode === 'gb'">
+          <n-form-item label="新配额总量 (GB)" path="quotaTotalGB">
+            <n-input-number
+              v-model:value="formData.quotaTotalGB"
+              :min="Math.ceil(user.quotaUsed / (1024 * 1024 * 1024))"
+              :max="1000"
+              :precision="2"
+              :step="1"
+              placeholder="输入新的配额总量(GB)"
+              style="width: 100%"
+            >
+              <template #suffix>
+                <span>GB</span>
+              </template>
+            </n-input-number>
+          </n-form-item>
+
+          <n-form-item>
+            <template #label>
+              <n-space align="center">
+                <span>配额预览</span>
+                <n-tag size="small" :type="quotaPreviewType">
+                  {{ formatBytes(formData.quotaTotal) }}
+                </n-tag>
+              </n-space>
+            </template>
+            <n-space vertical>
+              <n-text>{{ formData.quotaTotalGB }} GB = {{ formatBytes(formData.quotaTotal) }}</n-text>
+              <n-text v-if="formData.quotaTotal < user.quotaTotal" type="warning">
+                ⚠️ 新配额小于当前已使用量
+              </n-text>
             </n-space>
-          </template>
-          <n-input :value="formatBytes(formData.quotaTotal)" disabled />
-        </n-form-item>
+          </n-form-item>
+        </template>
+
+        <!-- 字节输入模式 (原有方式) -->
+        <template v-else>
+          <n-form-item label="新配额总量 (字节)" path="quotaTotal">
+            <n-input-number
+              v-model:value="formData.quotaTotal"
+              :min="user.quotaUsed"
+              :max="107374182400"
+              :precision="0"
+              placeholder="输入新的配额总量(字节)"
+              style="width: 100%"
+            >
+              <template #suffix>
+                <span>B</span>
+              </template>
+            </n-input-number>
+          </n-form-item>
+
+          <n-form-item>
+            <template #label>
+              <n-space align="center">
+                <span>配额预览</span>
+                <n-tag size="small" :type="quotaPreviewType">
+                  {{ formatBytes(formData.quotaTotal) }} ({{ (formData.quotaTotal / (1024 * 1024 * 1024)).toFixed(2) }} GB)
+                </n-tag>
+              </n-space>
+            </template>
+            <n-input :value="formatBytes(formData.quotaTotal)" disabled />
+          </n-form-item>
+        </template>
 
         <n-alert v-if="formData.quotaTotal < user.quotaTotal" type="warning" title="警告">
           新配额小于当前已使用量 ({{ formatBytes(user.quotaUsed) }}),用户可能无法继续上传文件
@@ -89,7 +140,8 @@
 import { ref, computed, watch } from 'vue'
 import {
   NModal, NCard, NForm, NFormItem, NInput, NInputNumber, NButton, NSpace,
-  NDivider, NProgress, NTag, NAlert, type FormInst, type FormRules
+  NDivider, NProgress, NTag, NAlert, NText, NRadioGroup, NRadioButton,
+  type FormInst, type FormRules
 } from 'naive-ui'
 import { adminService, type UserListItem } from '../../services/AdminService'
 
@@ -104,21 +156,36 @@ interface Emits {
 }
 
 const props = defineProps<Props>()
-defineEmits<Emits>()
+const emit = defineEmits<Emits>()
 
 const formRef = ref<FormInst | null>(null)
 const submitting = ref(false)
 
+// Story 7.5 MEDIUM FIX: 添加输入模式状态 (GB/字节)
+const inputMode = ref<'gb' | 'bytes'>('gb')
+
 const formData = ref({
-  quotaTotal: 0
+  quotaTotal: 0,
+  quotaTotalGB: 0  // Story 7.5 MEDIUM FIX: 添加 GB 输入字段
 })
 
-// 监听user变化,初始化表单数据
+// 监听 user 变化,初始化表单数据
 watch(() => props.user, (newUser) => {
   if (newUser) {
     formData.value.quotaTotal = newUser.quotaTotal
+    formData.value.quotaTotalGB = newUser.quotaTotal / (1024 * 1024 * 1024)
   }
 }, { immediate: true })
+
+// Story 7.5 MEDIUM FIX: GB 输入同步到字节值
+watch(() => formData.value.quotaTotalGB, (newGB) => {
+  formData.value.quotaTotal = Math.round(newGB * 1024 * 1024 * 1024)
+})
+
+// Story 7.5 MEDIUM FIX: 字节输入同步到 GB 值
+watch(() => formData.value.quotaTotal, (newBytes) => {
+  formData.value.quotaTotalGB = newBytes / (1024 * 1024 * 1024)
+})
 
 // 配额预览类型
 const quotaPreviewType = computed(() => {
@@ -130,24 +197,44 @@ const quotaPreviewType = computed(() => {
 })
 
 // 表单验证规则
-const rules: FormRules = {
-  quotaTotal: [
-    {
-      required: true,
-      type: 'number',
-      message: '请输入配额总量',
-      trigger: ['blur', 'change']
-    },
-    {
-      validator: (rule, value) => {
-        if (!props.user) return true
-        return value >= props.user.quotaUsed
+const rules = computed(() => {
+  const minGB = props.user ? Math.ceil(props.user.quotaUsed / (1024 * 1024 * 1024)) : 1
+
+  return {
+    quotaTotal: [
+      {
+        required: true,
+        type: 'number',
+        message: '请输入配额总量',
+        trigger: ['blur', 'change']
       },
-      message: '配额总量不能小于已使用量',
-      trigger: ['blur', 'change']
-    }
-  ]
-}
+      {
+        validator: (rule, value) => {
+          if (!props.user) return true
+          return value >= props.user.quotaUsed
+        },
+        message: '配额总量不能小于已使用量',
+        trigger: ['blur', 'change']
+      }
+    ],
+    quotaTotalGB: [
+      {
+        required: true,
+        type: 'number',
+        message: '请输入配额总量',
+        trigger: ['blur', 'change']
+      },
+      {
+        validator: (rule, value) => {
+          if (!props.user) return true
+          return value >= minGB
+        },
+        message: `配额总量不能小于 ${minGB} GB (当前已使用量)`,
+        trigger: ['blur', 'change']
+      }
+    ]
+  }
+})
 
 // 格式化字节数
 const formatBytes = (bytes: number): string => {
@@ -166,6 +253,7 @@ const handleSubmit = async () => {
     await formRef.value.validate()
 
     submitting.value = true
+    // 始终使用字节值提交
     await adminService.adjustUserQuota(props.user.id, formData.value.quotaTotal)
 
     window.$message?.success('配额调整成功')

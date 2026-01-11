@@ -1,6 +1,7 @@
 import { TransferService } from './TransferService'
 import { alistService } from './AlistService'
 import { orchestrationService } from './OrchestrationService'
+import { activityService, ActionType } from './ActivityService'
 import { BrowserWindow } from 'electron'
 
 export interface QueueTask {
@@ -84,6 +85,16 @@ class TransferQueueManager {
           }
         )
         await this.transferService.updateStatus(task.id, 'completed')
+
+        // Story 9.2 CRITICAL FIX: 记录上传操作日志
+        activityService.logActivity({
+          userId: task.userId,
+          actionType: ActionType.UPLOAD,
+          fileCount: 1,
+          fileSize: task.fileSize,
+          details: { fileName: task.fileName, remotePath: task.remotePath }
+        }).catch(err => console.error('[TransferQueueManager] 记录上传日志失败:', err))
+
         // 清除重试计数和 alistTaskId
         this.retryCount.delete(task.id)
         this.activeTaskIds.delete(task.id)

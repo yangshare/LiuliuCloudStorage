@@ -18,6 +18,10 @@ import { useTransferStore } from '../stores/transferStore'
 const fileStore = useFileStore()
 const transferStore = useTransferStore()
 const showCreateFolderModal = ref(false)
+const showFileInput = ref(false)
+
+// 隐藏的文件输入元素
+const fileInputRef = ref<HTMLInputElement | null>(null)
 
 const uploadQueue = computed(() => transferStore.uploadQueue)
 const downloadQueue = computed(() => transferStore.downloadQueue)
@@ -85,6 +89,25 @@ function handleKeydown(e: KeyboardEvent) {
   }
 }
 
+// Story 8.3: 处理托盘快速上传
+function handleTrayQuickUpload() {
+  showFileInput.value = true
+  // 触发隐藏的文件输入
+  fileInputRef.value?.click()
+}
+
+// 处理文件选择
+function handleFileSelect(event: Event) {
+  const target = event.target as HTMLInputElement
+  const files = target.files
+  if (files && files.length > 0) {
+    transferStore.addToUploadQueue(Array.from(files), fileStore.currentPath)
+  }
+  // 重置输入以允许重复选择同一文件
+  target.value = ''
+  showFileInput.value = false
+}
+
 onMounted(() => {
   fileStore.fetchFiles('/')
   window.addEventListener('dragenter', handleWindowDragEnter)
@@ -92,6 +115,8 @@ onMounted(() => {
   window.addEventListener('dragover', handleWindowDragOver)
   window.addEventListener('drop', handleWindowDrop)
   window.addEventListener('keydown', handleKeydown)
+  // Story 8.3: 监听托盘快速上传消息
+  window.electronAPI?.onTrayQuickUpload?.(handleTrayQuickUpload)
 })
 
 onUnmounted(() => {
@@ -153,6 +178,14 @@ onUnmounted(() => {
         </n-text>
       </div>
     </div>
+    <!-- Story 8.3: 隐藏的文件输入（用于托盘快速上传） -->
+    <input
+      ref="fileInputRef"
+      type="file"
+      multiple
+      style="display: none"
+      @change="handleFileSelect"
+    />
   </div>
 </template>
 

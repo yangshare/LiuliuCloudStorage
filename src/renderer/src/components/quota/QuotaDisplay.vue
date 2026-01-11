@@ -15,11 +15,7 @@
             :percentage="percentage"
             :color="progressColor"
             :show-indicator="true"
-          >
-            <template #default="{ percentage }">
-              {{ percentage }}%
-            </template>
-          </n-progress>
+          />
 
           <n-space justify="space-between">
             <n-text depth="3" style="font-size: 12px">

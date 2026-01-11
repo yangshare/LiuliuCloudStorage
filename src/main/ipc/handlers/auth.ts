@@ -2,6 +2,7 @@ import { ipcMain, net } from 'electron'
 import { getDatabase } from '../../database'
 import { cryptoService } from '../../services/CryptoService'
 import { alistService } from '../../services/AlistService'
+import { activityService, ActionType } from '../../services/ActivityService'
 import { DEFAULT_QUOTA } from '../../../shared/constants'
 
 const N8N_WEBHOOK_URL = 'http://10.2.3.7:5678/webhook/liuliu'
@@ -110,15 +111,29 @@ export function getCurrentSession(): { userId: number; username: string; token: 
   return currentSession
 }
 
+/**
+ * 确保用户存在，如果不存在则创建 (Story 6.3 - CRITICAL FIX: 添加并发保护)
+ *
+ * 使用 INSERT OR IGNORE 避免并发情况下的重复用户创建
+ */
 function ensureUser(username: string): number {
   const db = getDatabase()
-  let user = db.prepare('SELECT id FROM users WHERE username = ?').get(username) as { id: number } | undefined
+
+  // Story 6.3: 为新用户分配默认配额
+  // 使用 INSERT OR IGNORE 避免并发问题
+  db.prepare(`
+    INSERT OR IGNORE INTO users
+    (username, password_hash, quota_total, quota_used, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(username, '', DEFAULT_QUOTA, 0, Date.now(), Date.now())
+
+  // 查询用户ID（无论是刚创建的还是已存在的）
+  const user = db.prepare('SELECT id FROM users WHERE username = ?').get(username) as { id: number } | undefined
+
   if (!user) {
-    // Story 6.3: 为新用户分配默认配额
-    const result = db.prepare('INSERT INTO users (username, password_hash, quota_total, quota_used, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(username, '', DEFAULT_QUOTA, 0, Date.now(), Date.now())
-    return result.lastInsertRowid as number
+    throw new Error('创建用户失败')
   }
+
   return user.id
 }
 
@@ -134,6 +149,15 @@ export function registerAuthHandlers(): void {
           const basePath = userInfo.basePath || '/'
           const userId = ensureUser(username)
           saveSession(userId, username, result.token, basePath)
+
+          // Story 9.2 CRITICAL FIX: 记录登录操作日志
+          activityService.logActivity({
+            userId,
+            actionType: ActionType.LOGIN,
+            fileCount: 0,
+            fileSize: 0,
+            details: { username }
+          }).catch(err => console.error('[auth] 记录登录日志失败:', err))
         } catch (err) {
           console.error('[auth] Failed to get user info:', err)
           return { success: false, message: '获取用户信息失败' }
@@ -147,7 +171,22 @@ export function registerAuthHandlers(): void {
   })
 
   ipcMain.handle('auth:logout', async () => {
+    const userId = currentSession?.userId
+    const username = currentSession?.username
+
     clearSession()
+
+    // Story 9.2 CRITICAL FIX: 记录登出操作日志
+    if (userId && username) {
+      activityService.logActivity({
+        userId,
+        actionType: ActionType.LOGOUT,
+        fileCount: 0,
+        fileSize: 0,
+        details: { username }
+      }).catch(err => console.error('[auth] 记录登出日志失败:', err))
+    }
+
     return { success: true }
   })
 
@@ -262,6 +301,7 @@ export function registerAuthHandlers(): void {
 
   /**
    * 获取存储统计信息（管理员功能）
+   * Story 7.4 CRITICAL FIX: 通过 n8n Webhook 获取存储统计 (Dual-Flow Architecture)
    */
   ipcMain.handle('auth:get-storage-stats', async () => {
     try {
@@ -274,13 +314,29 @@ export function registerAuthHandlers(): void {
       const db = getDatabase()
 
       // 检查当前用户是否为管理员
-      const adminUser = db.prepare('SELECT is_admin FROM users WHERE id = ?').get(session.userId) as { is_admin: number } | undefined
+      const adminUser = db.prepare('SELECT is_admin, username FROM users WHERE id = ?').get(session.userId) as { is_admin: number; username: string } | undefined
 
       if (!adminUser || adminUser.is_admin !== 1) {
         throw new Error('权限不足：仅管理员可以查看存储统计')
       }
 
-      // 获取所有用户的配额信息
+      // Story 7.4 CRITICAL FIX: 调用 n8n Webhook 获取存储统计 (Dual-Flow Architecture)
+      try {
+        const webhookResult = await callWebhook('admin/storage/stats', {
+          adminUserId: session.userId,
+          adminUsername: adminUser.username,
+          timestamp: Date.now()
+        })
+
+        if (webhookResult.success && webhookResult.data) {
+          console.log('[auth] 使用 n8n Webhook 获取存储统计')
+          return webhookResult
+        }
+      } catch (n8nError) {
+        console.warn('[auth] n8n Webhook 调用失败，降级到本地查询:', n8nError)
+      }
+
+      // 降级方案: 直接查询数据库
       const users = db.prepare(`
         SELECT
           id,

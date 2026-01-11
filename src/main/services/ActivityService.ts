@@ -1,6 +1,8 @@
-import { db } from '../database'
+import { getDatabase } from '../database'
 import { activityLogs, dailyStats } from '../database/schema'
-import type { NewActivityLogs } from '../database/schema'
+import type { NewActivityLogs, NewDailyStats } from '../database/schema'
+import { count, desc, eq, gte, lte } from 'drizzle-orm'
+import { drizzle } from 'drizzle-orm/better-sqlite3'
 
 /**
  * 操作类型枚举
@@ -22,6 +24,10 @@ export class ActivityService {
   private static instance: ActivityService | null = null
 
   private constructor() {}
+
+  private get db() {
+    return drizzle(getDatabase())
+  }
 
   static getInstance(): ActivityService {
     if (!ActivityService.instance) {
@@ -136,6 +142,7 @@ export class ActivityService {
 
   /**
    * 获取用户操作日志
+   * Story 9.3 MEDIUM FIX: 修复 total 计算，使用 count() 获取实际总数
    */
   async getUserLogs(
     userId: number,
@@ -148,7 +155,31 @@ export class ActivityService {
     }
   ): Promise<{ logs: any[]; total: number }> {
     try {
-      let query = db
+      // 构建基础查询条件
+      const conditions = [eq(activityLogs.userId, userId)]
+
+      if (options?.actionType) {
+        conditions.push(eq(activityLogs.actionType, options.actionType))
+      }
+
+      if (options?.startDate) {
+        conditions.push(gte(activityLogs.createdAt, options.startDate))
+      }
+
+      if (options?.endDate) {
+        conditions.push(lte(activityLogs.createdAt, options.endDate))
+      }
+
+      // 获取总数 - Story 9.3 FIX: 使用 count() 而非 logs.length
+      const countResult = await db
+        .select({ count: count() })
+        .from(activityLogs)
+        .where(...conditions)
+
+      const total = countResult[0]?.count || 0
+
+      // 获取分页数据
+      const logs = await db
         .select({
           id: activityLogs.id,
           actionType: activityLogs.actionType,
@@ -158,31 +189,12 @@ export class ActivityService {
           details: activityLogs.details
         })
         .from(activityLogs)
-        .where(eq(activityLogs.userId, userId))
-
-      // 添加筛选条件
-      if (options?.actionType) {
-        query = query.where(eq(activityLogs.actionType, options.actionType))
-      }
-
-      if (options?.startDate) {
-        query = query.where(gte(activityLogs.createdAt, options.startDate))
-      }
-
-      if (options?.endDate) {
-        query = query.where(lte(activityLogs.createdAt, options.endDate))
-      }
-
-      // 获取总数
-      const total = await query
-
-      // 应用分页和排序
-      const logs = await query
+        .where(...conditions)
         .orderBy(desc(activityLogs.createdAt))
         .limit(options?.limit || 50)
         .offset(options?.offset || 0)
 
-      return { logs, total: logs.length }
+      return { logs, total }
     } catch (error) {
       console.error('[ActivityService] 获取用户日志失败:', error)
       return { logs: [], total: 0 }
@@ -191,6 +203,7 @@ export class ActivityService {
 
   /**
    * 获取所有用户的操作日志（管理员）
+   * Story 9.3 MEDIUM FIX: 修复 total 计算，使用 count() 获取实际总数
    */
   async getAllLogs(options?: {
     limit?: number
@@ -201,7 +214,35 @@ export class ActivityService {
     endDate?: Date
   }): Promise<{ logs: any[]; total: number }> {
     try {
-      let query = db
+      // 构建基础查询条件
+      const conditions: any[] = []
+
+      if (options?.userId) {
+        conditions.push(eq(activityLogs.userId, options.userId))
+      }
+
+      if (options?.actionType) {
+        conditions.push(eq(activityLogs.actionType, options.actionType))
+      }
+
+      if (options?.startDate) {
+        conditions.push(gte(activityLogs.createdAt, options.startDate))
+      }
+
+      if (options?.endDate) {
+        conditions.push(lte(activityLogs.createdAt, options.endDate))
+      }
+
+      // 获取总数 - Story 9.3 FIX: 使用 count() 而非 logs.length
+      const countResult = await db
+        .select({ count: count() })
+        .from(activityLogs)
+        .where(...conditions)
+
+      const total = countResult[0]?.count || 0
+
+      // 获取分页数据
+      const logs = await db
         .select({
           id: activityLogs.id,
           userId: activityLogs.userId,
@@ -212,31 +253,12 @@ export class ActivityService {
           details: activityLogs.details
         })
         .from(activityLogs)
-
-      // 添加筛选条件
-      if (options?.userId) {
-        query = query.where(eq(activityLogs.userId, options.userId))
-      }
-
-      if (options?.actionType) {
-        query = query.where(eq(activityLogs.actionType, options.actionType))
-      }
-
-      if (options?.startDate) {
-        query = query.where(gte(activityLogs.createdAt, options.startDate))
-      }
-
-      if (options?.endDate) {
-        query = query.where(lte(activityLogs.createdAt, options.endDate))
-      }
-
-      // 应用分页和排序
-      const logs = await query
+        .where(...conditions)
         .orderBy(desc(activityLogs.createdAt))
         .limit(options?.limit || 100)
         .offset(options?.offset || 0)
 
-      return { logs, total: logs.length }
+      return { logs, total }
     } catch (error) {
       console.error('[ActivityService] 获取所有日志失败:', error)
       return { logs: [], total: 0 }
@@ -245,17 +267,19 @@ export class ActivityService {
 
   /**
    * 获取每日活跃用户数（DAU）
+   * Story 9.3 CRITICAL FIX: 使用 COUNT(DISTINCT user_id) 计算唯一用户数，而非记录数
    */
   async getDailyActiveUsers(date?: string): Promise<number> {
     const targetDate = date || new Date().toISOString().split('T')[0]
 
     try {
+      // Story 9.3 FIX: 从 daily_stats 表统计唯一用户数
       const result = await db
-        .select()
+        .select({ count: count() })
         .from(dailyStats)
         .where(eq(dailyStats.date, targetDate))
 
-      return result.length
+      return result[0]?.count || 0
     } catch (error) {
       console.error('[ActivityService] 获取DAU失败:', error)
       return 0
@@ -307,6 +331,3 @@ export class ActivityService {
 
 // 导出单例
 export const activityService = ActivityService.getInstance()
-
-// 导出辅助函数（如果需要使用 eq, gte, lte, desc）
-import { eq, gte, lte, desc } from 'drizzle-orm'

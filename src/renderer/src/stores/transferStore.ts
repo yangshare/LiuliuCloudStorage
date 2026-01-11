@@ -223,13 +223,21 @@ export const useTransferStore = defineStore('transfer', () => {
       const quotaStore = useQuotaStore()
       quotaStore.calculateQuota()
 
-      // 显示完成通知
+      // 显示应用内通知
       const notification = useNotification()
       notification.success({
         title: '上传完成',
         content: `文件 "${data.fileName}" 已成功上传`,
         duration: 3000
       })
+
+      // Story 8.4: 显示系统通知
+      if (window.electronAPI?.notification?.show) {
+        window.electronAPI.notification.show({
+          title: '溜溜网盘',
+          body: `文件 ${data.fileName} 上传完成`
+        })
+      }
     }
   }
 
@@ -241,13 +249,21 @@ export const useTransferStore = defineStore('transfer', () => {
       task.error = data.error
       task.resumable = true  // 失败任务可恢复
 
-      // 显示失败通知
+      // 显示应用内失败通知
       const notification = useNotification()
       notification.error({
         title: '上传失败',
         content: `文件 "${data.fileName}" 上传失败：${data.error}`,
         duration: 5000
       })
+
+      // Story 8.4: 显示系统失败通知
+      if (window.electronAPI?.notification?.show) {
+        window.electronAPI.notification.show({
+          title: '上传失败',
+          body: `文件 ${data.fileName} 上传失败：${data.error}`
+        })
+      }
     }
   }
 
@@ -655,22 +671,30 @@ export const useTransferStore = defineStore('transfer', () => {
       progress.downloadedBytes = progress.totalBytes
     }
 
-    // 刷新配额信息
-    const quotaStore = useQuotaStore()
-    quotaStore.refreshQuota()
+    // Story 6.2 CRITICAL FIX: 下载不应该影响配额使用量
+    // 下载是保存到用户本地，不占用服务器存储空间
+    // 移除了 quotaStore.refreshQuota() 调用
 
     // 延迟清理已完成任务的进度数据（5秒后删除）
     setTimeout(() => {
       downloadProgressMap.value.delete(data.taskId)
     }, COMPLETED_TASK_CLEANUP_DELAY_MS)
 
-    // 显示完成通知
+    // 显示应用内完成通知
     const notification = useNotification()
     notification.success({
       title: '下载完成',
       content: `文件 "${data.fileName}" 已成功下载到 ${data.savePath}`,
       duration: 3000
     })
+
+    // Story 8.4: 显示系统下载完成通知
+    if (window.electronAPI?.notification?.show) {
+      window.electronAPI.notification.show({
+        title: '溜溜网盘',
+        body: `文件 ${data.fileName} 下载完成`
+      })
+    }
   }
 
   // 下载失败处理函数
@@ -680,13 +704,21 @@ export const useTransferStore = defineStore('transfer', () => {
       task.status = 'failed'
       task.error = data.error
 
-      // 显示失败通知
+      // 显示应用内失败通知
       const notification = useNotification()
       notification.error({
         title: '下载失败',
         content: `文件 "${data.fileName}" 下载失败：${data.error}`,
         duration: 5000
       })
+
+      // Story 8.4: 显示系统下载失败通知
+      if (window.electronAPI?.notification?.show) {
+        window.electronAPI.notification.show({
+          title: '下载失败',
+          body: `文件 ${data.fileName} 下载失败：${data.error}`
+        })
+      }
     }
   }
 

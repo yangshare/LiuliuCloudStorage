@@ -1,6 +1,6 @@
 import { app, BrowserWindow, Menu, Tray, nativeImage, nativeTheme } from 'electron'
 import { join } from 'path'
-import { readFileSync } from 'fs'
+import { readFileSync, existsSync } from 'fs'
 
 /**
  * 托盘服务类
@@ -44,19 +44,35 @@ export class TrayService {
 
   /**
    * 获取托盘图标
-   * 根据平台和传输状态返回相应图标
+   * Story 8.1 CRITICAL FIX: 根据平台和打包状态正确处理图标路径
    */
   private getTrayIcon(): nativeImage {
     const iconName = this.isTransferring ? 'tray-active.png' : 'tray-idle.png'
 
-    try {
-      // 尝试从assets目录加载图标
-      const iconPath = join(__dirname, '../../assets/icons', iconName)
-      return nativeImage.createFromPath(iconPath)
-    } catch (error) {
-      // 如果图标文件不存在，使用占位图标
-      return this.createPlaceholderIcon()
+    // 尝试多个可能的路径
+    const possiblePaths = [
+      // 开发环境路径
+      join(process.resourcesPath, 'assets', 'icons', iconName),
+      join(__dirname, '../../assets/icons', iconName),
+      join(process.cwd(), 'assets', 'icons', iconName),
+      // 打包后路径
+      join(process.resourcesPath, iconName),
+      join(__dirname, '..', iconName),
+    ]
+
+    for (const iconPath of possiblePaths) {
+      if (existsSync(iconPath)) {
+        try {
+          return nativeImage.createFromPath(iconPath)
+        } catch (error) {
+          console.warn(`[TrayService] 无法加载图标: ${iconPath}`, error)
+        }
+      }
     }
+
+    // 如果所有路径都失败，使用占位图标
+    console.warn('[TrayService] 未找到托盘图标文件，使用占位图标')
+    return this.createPlaceholderIcon()
   }
 
   /**

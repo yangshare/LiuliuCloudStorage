@@ -75,10 +75,11 @@ interface Props {
 
 interface Emits {
   (e: 'update:show', value: boolean): void
+  (e: 'adjustQuota', user: UserListItem): void  // Story 7.1 CRITICAL FIX: 添加配额调整事件
 }
 
 defineProps<Props>()
-defineEmits<Emits>()
+const emit = defineEmits<Emits>()
 
 const formatBytes = (bytes: number): string => {
   if (bytes === 0) return '0 B'
@@ -93,8 +94,9 @@ const formatDate = (dateString: string): string => {
   return date.toLocaleString('zh-CN')
 }
 
+// Story 7.1 CRITICAL FIX: 实现配额调整功能，触发事件让父组件打开配额调整对话框
 const handleAdjustQuota = () => {
-  // TODO: 在 Story 7.5 中实现配额调整功能
-  window.$message?.info('配额调整功能将在 Story 7.5 中实现')
+  if (!user) return
+  emit('adjustQuota', user)
 }
 </script>

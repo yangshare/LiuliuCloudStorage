@@ -21,13 +21,14 @@ export class TrayMonitorService {
 
   /**
    * 开始监控传输状态
+   * Story 8.2 MEDIUM FIX: 移除重复的 watch，只监控活跃任务数量
    */
   startMonitoring(): void {
     if (this.isMonitoring) return
 
     const transferStore = useTransferStore()
 
-    // 监控上传队列状态变化
+    // Story 8.2 MEDIUM FIX: 只监控活跃传输任务数量，避免重复更新
     watch(
       () => [
         transferStore.uploadQueue.filter(t => t.status === 'in_progress').length,
@@ -41,36 +42,6 @@ export class TrayMonitorService {
         )
       },
       { immediate: true, deep: true }
-    )
-
-    // 监控上传队列变化
-    watch(
-      () => transferStore.uploadQueue,
-      (queue) => {
-        const activeUploads = queue.filter(t => t.status === 'in_progress').length
-        const activeDownloads = transferStore.downloadQueue.filter(t => t.status === 'in_progress').length
-        this.updateTrayStatus(
-          activeUploads > 0 || activeDownloads > 0,
-          activeUploads,
-          activeDownloads
-        )
-      },
-      { deep: true }
-    )
-
-    // 监控下载队列变化
-    watch(
-      () => transferStore.downloadQueue,
-      (queue) => {
-        const activeUploads = transferStore.uploadQueue.filter(t => t.status === 'in_progress').length
-        const activeDownloads = queue.filter(t => t.status === 'in_progress').length
-        this.updateTrayStatus(
-          activeUploads > 0 || activeDownloads > 0,
-          activeUploads,
-          activeDownloads
-        )
-      },
-      { deep: true }
     )
 
     this.isMonitoring = true

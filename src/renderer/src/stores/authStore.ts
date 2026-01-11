@@ -14,6 +14,71 @@ export const useAuthStore = defineStore('auth', () => {
   const isLoggedIn = computed(() => user.value !== null)
   const isAdmin = computed(() => user.value?.isAdmin ?? false)
 
+  /**
+   * Story 7.1 MEDIUM FIX: 添加设置用户状态的方法
+   * 处理数据库中的 is_admin (0/1) 到布尔值的转换
+   */
+  function setUser(userData: {
+    id: number
+    username: string
+    token: string
+    isAdmin?: number | boolean
+  }) {
+    user.value = {
+      id: userData.id,
+      username: userData.username,
+      token: userData.token,
+      // 转换 is_admin: 0/1 -> false/true
+      isAdmin: typeof userData.isAdmin === 'boolean'
+        ? userData.isAdmin
+        : userData.isAdmin === 1
+    }
+  }
+
+  /**
+   * 清除用户状态
+   */
+  function clearUser() {
+    user.value = null
+  }
+
+  /**
+   * 从 session 数据初始化用户状态
+   * 用于应用启动时恢复登录状态
+   */
+  function initUserFromSession(session: {
+    valid: boolean
+    username?: string
+    onboardingCompleted?: boolean
+  }) {
+    if (session.valid && session.username) {
+      // 需要通过 IPC 获取用户详细信息，包括 isAdmin
+      window.electronAPI.auth.getUsers?.()
+        .then((result: any) => {
+          if (result.success) {
+            // 如果能获取用户列表，说明当前用户是管理员
+            // 这里需要进一步获取当前用户的详细信息
+            // 暂时设置 isAdmin 为 true，后续可以通过专门的 API 获取准确信息
+            setUser({
+              id: 0, // 需要从后端获取
+              username: session.username!,
+              token: '', // token 已存储在后端
+              isAdmin: true
+            })
+          }
+        })
+        .catch(() => {
+          // 获取用户列表失败，不是管理员
+          setUser({
+            id: 0,
+            username: session.username!,
+            token: '',
+            isAdmin: false
+          })
+        })
+    }
+  }
+
   async function checkAdminPermission(): Promise<boolean> {
     if (!isLoggedIn.value) {
       return false
@@ -31,6 +96,9 @@ export const useAuthStore = defineStore('auth', () => {
     user,
     isLoggedIn,
     isAdmin,
+    setUser,
+    clearUser,
+    initUserFromSession,
     checkAdminPermission
   }
 })

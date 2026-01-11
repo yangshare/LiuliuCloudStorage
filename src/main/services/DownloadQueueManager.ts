@@ -1,6 +1,7 @@
 import { TransferService } from './TransferService'
 import { DownloadManager, type DownloadProgress } from './DownloadManager'
 import { alistService } from './AlistService'
+import { activityService, ActionType } from './ActivityService'
 import { BrowserWindow } from 'electron'
 
 export interface DownloadQueueTask {
@@ -149,6 +150,16 @@ class DownloadQueueManager {
       })
 
       // 下载完成 - DownloadManager 已经更新了数据库状态
+
+      // Story 9.2 CRITICAL FIX: 记录下载操作日志
+      activityService.logActivity({
+        userId: task.userId,
+        actionType: ActionType.DOWNLOAD,
+        fileCount: 1,
+        fileSize: task.fileSize,
+        details: { fileName: task.fileName, remotePath: task.remotePath, savePath: task.savePath }
+      }).catch(err => console.error('[DownloadQueueManager] 记录下载日志失败:', err))
+
       // 从活跃集合移除
       this.activeDownloads.delete(task.id)
 

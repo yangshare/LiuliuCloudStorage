@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import { alistService, FileItem } from '../../services/AlistService'
 import { AppError } from '../../services/httpClient'
 import { getDatabase } from '../../database'
+import { activityService, ActionType } from '../../services/ActivityService'
 
 export interface FileListResult {
   success: boolean
@@ -87,6 +88,20 @@ export function registerFileHandlers(): void {
   ipcMain.handle('file:mkdir', async (_event, path: string): Promise<MkdirResult> => {
     try {
       await alistService.createFolder(path)
+
+      // Story 9.2: 记录文件夹创建日志
+      const userId = alistService.getCurrentUserId()
+      if (userId) {
+        activityService.logActivity({
+          userId,
+          actionType: ActionType.FOLDER_CREATE,
+          fileCount: 1,
+          details: { path }
+        }).catch(err => {
+          console.warn('[file:mkdir] 日志记录失败:', err)
+        })
+      }
+
       return { success: true }
     } catch (error) {
       const appError = error as AppError

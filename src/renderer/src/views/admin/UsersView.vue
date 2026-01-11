@@ -39,6 +39,14 @@
   <user-detail-dialog
     v-model:show="showDetailDialog"
     :user="selectedUser"
+    @adjust-quota="handleAdjustQuotaFromDetail"
+  />
+
+  <!-- 配额调整对话框 (Story 7.1 CRITICAL FIX: 从用户详情打开) -->
+  <quota-adjust-dialog
+    v-model:show="showQuotaAdjustDialog"
+    :user="selectedUser"
+    @success="handleQuotaAdjusted"
   />
 </template>
 
@@ -48,6 +56,7 @@ import { NDataTable, NCard, NSpace, NInput, NText, NIcon, NProgress, NTag, type 
 import { SearchOutline as SearchIcon } from '@vicons/ionicons5'
 import { adminService, type UserListItem } from '../../services/AdminService'
 import UserDetailDialog from '../../components/admin/UserDetailDialog.vue'
+import QuotaAdjustDialog from '../../components/admin/QuotaAdjustDialog.vue'
 
 const loading = ref(false)
 const userList = ref<UserListItem[]>([])
@@ -57,6 +66,7 @@ const currentPage = ref(1)
 const pageSize = 20
 const showDetailDialog = ref(false)
 const selectedUser = ref<UserListItem | null>(null)
+const showQuotaAdjustDialog = ref(false)  // Story 7.1 CRITICAL FIX: 添加配额调整对话框状态
 
 // 搜索防抖
 let searchTimer: NodeJS.Timeout | null = null
@@ -97,6 +107,18 @@ const handlePageChange = (page: number) => {
 const handleRowClick = (row: UserListItem) => {
   selectedUser.value = row
   showDetailDialog.value = true
+}
+
+// Story 7.1 CRITICAL FIX: 从用户详情对话框打开配额调整
+const handleAdjustQuotaFromDetail = (user: UserListItem) => {
+  selectedUser.value = user
+  showDetailDialog.value = false  // 关闭详情对话框
+  showQuotaAdjustDialog.value = true  // 打开配额调整对话框
+}
+
+// 配额调整成功后重新加载
+const handleQuotaAdjusted = () => {
+  loadUsers()
 }
 
 // 格式化字节数

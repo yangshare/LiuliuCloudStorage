@@ -1,4 +1,6 @@
-import { Notification, BrowserWindow } from 'electron'
+import { Notification, BrowserWindow, nativeImage } from 'electron'
+import { join } from 'path'
+import { existsSync } from 'fs'
 
 /**
  * 通知服务类
@@ -146,22 +148,48 @@ export class NotificationService {
 
   /**
    * 获取图标路径
+   * Story 8.4 CRITICAL FIX: 修复通知图标路径为空的问题
    */
   private getIconPath(): string {
-    // 返回应用图标路径（如果存在）
-    return ''  // 使用默认图标
+    // 尝试多个可能的路径
+    const possiblePaths = [
+      // 开发环境路径
+      join(process.resourcesPath, 'assets', 'icons', 'app-icon.png'),
+      join(__dirname, '../../assets/icons/app-icon.png'),
+      join(process.cwd(), 'assets', 'icons/app-icon.png'),
+      // 打包后路径
+      join(process.resourcesPath, 'app-icon.png'),
+      // Windows exe 图标
+      join(process.execPath, '..', 'resources', 'app-icon.png'),
+    ]
+
+    for (const iconPath of possiblePaths) {
+      if (existsSync(iconPath)) {
+        return iconPath
+      }
+    }
+
+    // 如果找不到图标文件，返回空字符串使用系统默认图标
+    console.warn('[NotificationService] 未找到应用图标文件')
+    return ''
   }
 
   /**
    * 聚焦主窗口
+   * Story 8.4 MEDIUM FIX: 添加导航到文件目录的参数支持
    */
-  private focusWindow(): void {
+  private focusWindow(navigateToPath?: string): void {
     if (this.mainWindow) {
       if (this.mainWindow.isMinimized()) {
         this.mainWindow.restore()
       }
       this.mainWindow.show()
       this.mainWindow.focus()
+
+      // 如果提供了导航路径，发送消息到渲染进程进行导航
+      if (navigateToPath) {
+        this.mainWindow.webContents.send('navigate-to-path', { path: navigateToPath })
+      }
     }
   }
 

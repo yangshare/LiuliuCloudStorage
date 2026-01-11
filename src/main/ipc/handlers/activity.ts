@@ -8,7 +8,7 @@ export function registerActivityHandlers(): void {
   // 记录操作日志
   ipcMain.handle(
     'activity:log',
-    (_, params: {
+    async (_, params: {
       userId: number
       actionType: ActionType
       fileCount?: number
@@ -17,7 +17,8 @@ export function registerActivityHandlers(): void {
       userAgent?: string
       details?: Record<string, any>
     }) => {
-      activityService.logActivity(params)
+      // Story 9.2 MEDIUM FIX: 添加 await 确保日志记录完成
+      await activityService.logActivity(params)
       return { success: true }
     }
   )

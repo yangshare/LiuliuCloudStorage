@@ -16,7 +16,7 @@ const validChannels = [
   'quota:get', 'quota:update', 'quota:calculate', 'quota:admin-update',
   'crypto:encrypt', 'crypto:decrypt', 'crypto:isReady',
   'dialog:openFile',
-  'tray:update-transfer-status', 'tray:update-transfer-counts', 'tray:show-window', 'tray:hide-window',
+  'tray:update-transfer-status', 'tray:update-transfer-counts', 'tray:show-window', 'tray:hide-window', 'tray-quick-upload',
   'notification:show', 'app:getVersion', 'app:set-login-item-settings', 'app:get-login-item-settings',
   'activity:log', 'activity:get-user-logs', 'activity:get-all-logs', 'activity:get-dau', 'activity:get-user-stats'
 ]
@@ -149,7 +149,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     updateTransferStatus: (isTransferring: boolean) => ipcRenderer.invoke('tray:update-transfer-status', isTransferring),
     updateTransferCounts: (uploadCount: number, downloadCount: number) => ipcRenderer.invoke('tray:update-transfer-counts', uploadCount, downloadCount),
     showWindow: () => ipcRenderer.invoke('tray:show-window'),
-    hideWindow: () => ipcRenderer.invoke('tray:hide-window')
+    hideWindow: () => ipcRenderer.invoke('tray:hide-window'),
+    // Story 8.3: 监听托盘快速上传消息
+    onTrayQuickUpload: (callback: () => void) => ipcRenderer.on('tray-quick-upload', () => callback())
   },
 
   notification: {

@@ -70,16 +70,21 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   if (to.path === '/login' || to.path === '/register') return true
 
+  const authStore = useAuthStore()
   const session = await window.electronAPI.auth.checkSession()
+
   if (!session.valid) return '/login'
+
+  // Story 7.1 MEDIUM FIX: 初始化用户状态，包括 isAdmin
+  if (!authStore.user) {
+    authStore.initUserFromSession(session)
+  }
 
   if (to.path === '/onboarding') return true
   if (!session.onboardingCompleted) return '/onboarding'
 
   // 管理员权限检查
   if (to.meta.requiresAdmin) {
-    const authStore = useAuthStore()
-
     if (!authStore.isAdmin) {
       // 尝试验证管理员权限
       const hasPermission = await authStore.checkAdminPermission()

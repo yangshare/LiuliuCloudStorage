@@ -1,6 +1,6 @@
 import { TransferService } from './TransferService'
 import { DownloadManager, type DownloadProgress } from './DownloadManager'
-import { AlistService } from './AlistService'
+import { alistService } from './AlistService'
 import { BrowserWindow } from 'electron'
 
 export interface DownloadQueueTask {

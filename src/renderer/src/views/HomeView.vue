@@ -11,6 +11,7 @@ import DropZone from '../components/transfer/DropZone.vue'
 import TransferProgressList from '../components/transfer/TransferProgressList.vue'
 import DownloadProgressPanel from '../components/transfer/DownloadProgressPanel.vue'
 import CreateFolderModal from '../components/file/CreateFolderModal.vue'
+import QuotaDisplay from '../components/quota/QuotaDisplay.vue'
 import { useFileStore } from '../stores/fileStore'
 import { useTransferStore } from '../stores/transferStore'
 
@@ -106,6 +107,9 @@ onUnmounted(() => {
   <div class="home">
     <n-layout has-sider style="height: 100%">
       <n-layout-sider bordered :width="260" content-style="padding: 0; overflow: auto;">
+        <div class="quota-section">
+          <QuotaDisplay />
+        </div>
         <DirectoryTree />
       </n-layout-sider>
       <n-layout-content>
@@ -203,5 +207,10 @@ onUnmounted(() => {
 
 .download-panel {
   width: 100%;
+}
+
+.quota-section {
+  padding: 12px;
+  border-bottom: 1px solid var(--n-border-color);
 }
 </style>

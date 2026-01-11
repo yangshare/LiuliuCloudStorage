@@ -6,6 +6,23 @@ export function formatFileSize(bytes: number): string {
   return `${(bytes / Math.pow(k, i)).toFixed(1)} ${units[i]}`
 }
 
+/**
+ * 格式化配额显示（使用整数，符合AC要求）
+ * @param bytes - 字节数
+ * @returns 格式化后的字符串（如 "3 GB" 而不是 "3.5 GB"）
+ * @example
+ * formatQuotaSize(3221225472) // "3 GB"
+ * formatQuotaSize(10737418240) // "10 GB"
+ */
+export function formatQuotaSize(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  const k = 1024
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  // 使用 Math.round 而不是 toFixed(1)，显示整数
+  return `${Math.round(bytes / Math.pow(k, i))} ${units[i]}`
+}
+
 export function formatDate(isoString: string): string {
   const date = new Date(isoString)
   const year = date.getFullYear()

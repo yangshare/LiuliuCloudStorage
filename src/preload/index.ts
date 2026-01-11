@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 // 允许的 IPC 通道白名单
 const validChannels = [
-  'auth:login', 'auth:logout', 'auth:register', 'auth:check-session', 'auth:complete-onboarding',
+  'auth:login', 'auth:logout', 'auth:register', 'auth:check-session', 'auth:complete-onboarding', 'auth:get-users', 'auth:get-storage-stats',
   'file:list', 'file:mkdir', 'file:delete',
   'transfer:upload', 'transfer:download', 'transfer:saveAs', 'transfer:cancel', 'transfer:list', 'transfer:progress',
   'transfer:add-to-queue', 'transfer:queue-status', 'transfer:restore-queue',
@@ -13,10 +13,12 @@ const validChannels = [
   'transfer:pauseDownloadQueue', 'transfer:resumeDownloadQueue', 'transfer:clearDownloadQueue',
   'transfer:resumeDownload', 'transfer:cancelDownload', 'transfer:cancelAllDownloads',
   'transfer:queue-updated',
-  'quota:get', 'quota:update',
+  'quota:get', 'quota:update', 'quota:calculate', 'quota:admin-update',
   'crypto:encrypt', 'crypto:decrypt', 'crypto:isReady',
   'dialog:openFile',
-  'app:getVersion'
+  'tray:update-transfer-status', 'tray:update-transfer-counts', 'tray:show-window', 'tray:hide-window',
+  'notification:show', 'app:getVersion', 'app:set-login-item-settings', 'app:get-login-item-settings',
+  'activity:log', 'activity:get-user-logs', 'activity:get-all-logs', 'activity:get-dau', 'activity:get-user-stats'
 ]
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -44,7 +46,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     logout: () => ipcRenderer.invoke('auth:logout'),
     register: (username: string, password: string) => ipcRenderer.invoke('auth:register', username, password),
     checkSession: () => ipcRenderer.invoke('auth:check-session'),
-    completeOnboarding: () => ipcRenderer.invoke('auth:complete-onboarding')
+    completeOnboarding: () => ipcRenderer.invoke('auth:complete-onboarding'),
+    getUsers: (params?: { page?: number; pageSize?: number; search?: string }) => ipcRenderer.invoke('auth:get-users', params),
+    getStorageStats: () => ipcRenderer.invoke('auth:get-storage-stats')
   },
 
   file: {
@@ -132,6 +136,42 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   dialog: {
     openFile: (options?: { directory?: boolean }) => ipcRenderer.invoke('dialog:openFile', options)
+  },
+
+  quota: {
+    get: () => ipcRenderer.invoke('quota:get'),
+    update: (quotaUsed: number) => ipcRenderer.invoke('quota:update', quotaUsed),
+    calculate: () => ipcRenderer.invoke('quota:calculate'),
+    adminUpdate: (userId: number, quotaTotal: number) => ipcRenderer.invoke('quota:admin-update', userId, quotaTotal)
+  },
+
+  tray: {
+    updateTransferStatus: (isTransferring: boolean) => ipcRenderer.invoke('tray:update-transfer-status', isTransferring),
+    updateTransferCounts: (uploadCount: number, downloadCount: number) => ipcRenderer.invoke('tray:update-transfer-counts', uploadCount, downloadCount),
+    showWindow: () => ipcRenderer.invoke('tray:show-window'),
+    hideWindow: () => ipcRenderer.invoke('tray:hide-window')
+  },
+
+  notification: {
+    show: (options: { title: string; body: string }) => ipcRenderer.invoke('notification:show', options)
+  },
+
+  app: {
+    getVersion: () => ipcRenderer.invoke('app:getVersion'),
+    setLoginItemSettings: (settings: { openAtLogin: boolean }) => ipcRenderer.invoke('app:set-login-item-settings', settings),
+    getLoginItemSettings: () => ipcRenderer.invoke('app:get-login-item-settings')
+  },
+
+  activity: {
+    log: (params: { userId: number; actionType: string; fileCount?: number; fileSize?: number; ipAddress?: string; userAgent?: string; details?: Record<string, any> }) =>
+      ipcRenderer.invoke('activity:log', params),
+    getUserLogs: (userId: number, options?: { limit?: number; offset?: number; actionType?: string; startDate?: string; endDate?: string }) =>
+      ipcRenderer.invoke('activity:get-user-logs', userId, options),
+    getAllLogs: (options?: { limit?: number; offset?: number; userId?: number; actionType?: string; startDate?: string; endDate?: string }) =>
+      ipcRenderer.invoke('activity:get-all-logs', options),
+    getDAU: (date?: string) => ipcRenderer.invoke('activity:get-dau', date),
+    getUserStats: (userId: number, startDate?: string, endDate?: string) =>
+      ipcRenderer.invoke('activity:get-user-stats', userId, startDate, endDate)
   }
 })
 

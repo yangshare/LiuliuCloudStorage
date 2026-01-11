@@ -6,6 +6,8 @@ import { cryptoService } from './services/CryptoService'
 import { alistService } from './services/AlistService'
 import { orchestrationService } from './services/OrchestrationService'
 import { preferencesService } from './services/PreferencesService'
+import { trayService } from './services/TrayService'
+import { notificationService } from './services/NotificationService'
 
 // Alist 服务器地址，可通过环境变量配置
 const ALIST_BASE_URL = process.env.ALIST_BASE_URL || 'http://10.2.3.7:5244'
@@ -21,6 +23,20 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       nodeIntegration: false,
       contextIsolation: true
+    }
+  })
+
+  // 设置托盘服务的主窗口引用
+  trayService.setMainWindow(mainWindow)
+
+  // 设置通知服务的主窗口引用
+  notificationService.setMainWindow(mainWindow)
+
+  // 监听窗口关闭事件，最小化到托盘而不是直接关闭
+  mainWindow.on('close', (event) => {
+    if (!app.isQuitting) {
+      event.preventDefault()
+      mainWindow?.hide()
     }
   })
 
@@ -40,6 +56,9 @@ app.whenReady().then(async () => {
   registerAllHandlers()
   createWindow()
 
+  // 初始化系统托盘
+  trayService.initialize()
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow()
@@ -48,12 +67,18 @@ app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
+  // Windows/Linux: 不退出应用，保持在托盘运行
+  // macOS: 即使所有窗口关闭也保持应用运行
+  // 不做任何操作，让应用在后台运行
+})
+
+app.on('before-quit', () => {
+  // 设置退出标志，允许窗口真正关闭
+  app.isQuitting = true
 })
 
 app.on('quit', () => {
   closeDatabase()
   preferencesService.close()
+  trayService.destroy()
 })

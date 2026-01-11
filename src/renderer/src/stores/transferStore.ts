@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useNotification } from 'naive-ui'
 import { throttle } from 'lodash-es'
+import { useQuotaStore } from './quotaStore'
 
 // ==================== 常量定义 ====================
 
@@ -217,6 +218,10 @@ export const useTransferStore = defineStore('transfer', () => {
       task.status = 'completed'
       task.progress = 100
       task.transferredSize = task.fileSize
+
+      // 计算并更新配额（Story 6.2）
+      const quotaStore = useQuotaStore()
+      quotaStore.calculateQuota()
 
       // 显示完成通知
       const notification = useNotification()
@@ -649,6 +654,10 @@ export const useTransferStore = defineStore('transfer', () => {
       progress.percentage = 100
       progress.downloadedBytes = progress.totalBytes
     }
+
+    // 刷新配额信息
+    const quotaStore = useQuotaStore()
+    quotaStore.refreshQuota()
 
     // 延迟清理已完成任务的进度数据（5秒后删除）
     setTimeout(() => {

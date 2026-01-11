@@ -1,4 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import { useAuthStore } from '@/stores/authStore'
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -22,6 +23,45 @@ const router = createRouter({
       path: '/onboarding',
       name: 'onboarding',
       component: () => import('../views/OnboardingView.vue')
+    },
+    {
+      path: '/admin',
+      name: 'admin',
+      component: () => import('../views/AdminView.vue'),
+      meta: { requiresAdmin: true },
+      redirect: '/admin/dashboard',
+      children: [
+        {
+          path: 'dashboard',
+          name: 'admin-dashboard',
+          component: () => import('../views/admin/DashboardView.vue')
+        },
+        {
+          path: 'users',
+          name: 'admin-users',
+          component: () => import('../views/admin/UsersView.vue')
+        },
+        {
+          path: 'storage',
+          name: 'admin-storage',
+          component: () => import('../views/admin/StorageView.vue')
+        },
+        {
+          path: 'quota',
+          name: 'admin-quota',
+          component: () => import('../views/admin/QuotaView.vue')
+        },
+        {
+          path: 'audit',
+          name: 'admin-audit',
+          component: () => import('../views/admin/AuditView.vue')
+        }
+      ]
+    },
+    {
+      path: '/settings',
+      name: 'settings',
+      component: () => import('../views/SettingsView.vue')
     }
   ]
 })
@@ -35,6 +75,20 @@ router.beforeEach(async (to) => {
 
   if (to.path === '/onboarding') return true
   if (!session.onboardingCompleted) return '/onboarding'
+
+  // 管理员权限检查
+  if (to.meta.requiresAdmin) {
+    const authStore = useAuthStore()
+
+    if (!authStore.isAdmin) {
+      // 尝试验证管理员权限
+      const hasPermission = await authStore.checkAdminPermission()
+      if (!hasPermission) {
+        console.warn('权限不足：仅管理员可以访问此页面')
+        return '/home'
+      }
+    }
+  }
 
   return true
 })

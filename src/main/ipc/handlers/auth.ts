@@ -2,6 +2,7 @@ import { ipcMain, net } from 'electron'
 import { getDatabase } from '../../database'
 import { cryptoService } from '../../services/CryptoService'
 import { alistService } from '../../services/AlistService'
+import { DEFAULT_QUOTA } from '../../../shared/constants'
 
 const N8N_WEBHOOK_URL = 'http://10.2.3.7:5678/webhook/liuliu'
 
@@ -104,12 +105,18 @@ function clearSession(): void {
   alistService.setBasePath('')
 }
 
+// 导出获取当前会话的函数，供其他handlers使用
+export function getCurrentSession(): { userId: number; username: string; token: string } | null {
+  return currentSession
+}
+
 function ensureUser(username: string): number {
   const db = getDatabase()
   let user = db.prepare('SELECT id FROM users WHERE username = ?').get(username) as { id: number } | undefined
   if (!user) {
-    const result = db.prepare('INSERT INTO users (username, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?)')
-      .run(username, '', Date.now(), Date.now())
+    // Story 6.3: 为新用户分配默认配额
+    const result = db.prepare('INSERT INTO users (username, password_hash, quota_total, quota_used, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(username, '', DEFAULT_QUOTA, 0, Date.now(), Date.now())
     return result.lastInsertRowid as number
   }
   return user.id
@@ -174,5 +181,141 @@ export function registerAuthHandlers(): void {
     db.prepare('UPDATE users SET onboarding_completed = 1, updated_at = ? WHERE id = ?')
       .run(Date.now(), currentSession.userId)
     return { success: true }
+  })
+
+  /**
+   * 获取所有用户列表（管理员功能）
+   * 支持分页和搜索
+   */
+  ipcMain.handle('auth:get-users', async (_event, params: { page?: number; pageSize?: number; search?: string } = {}) => {
+    try {
+      const session = getStoredSession()
+
+      if (!session) {
+        throw new Error('用户未登录')
+      }
+
+      const db = getDatabase()
+
+      // 检查当前用户是否为管理员
+      const adminUser = db.prepare('SELECT is_admin FROM users WHERE id = ?').get(session.userId) as { is_admin: number } | undefined
+
+      if (!adminUser || adminUser.is_admin !== 1) {
+        throw new Error('权限不足：仅管理员可以查看用户列表')
+      }
+
+      // 解析参数
+      const page = params.page || 1
+      const pageSize = params.pageSize || 20
+      const search = params.search || ''
+
+      // 构建查询条件
+      let whereClause = ''
+      let queryParams: any[] = []
+
+      if (search) {
+        whereClause = 'WHERE username LIKE ?'
+        queryParams.push(`%${search}%`)
+      }
+
+      // 获取总数
+      const countResult = db.prepare(`SELECT COUNT(*) as total FROM users ${whereClause}`)
+        .get(...queryParams) as { total: number }
+
+      // 获取分页数据
+      const offset = (page - 1) * pageSize
+      const users = db.prepare(`
+        SELECT
+          id,
+          username,
+          quota_total as quotaTotal,
+          quota_used as quotaUsed,
+          is_admin as isAdmin,
+          created_at as createdAt
+        FROM users
+        ${whereClause}
+        ORDER BY created_at DESC
+        LIMIT ? OFFSET ?
+      `).all(...queryParams, pageSize, offset) as Array<{
+        id: number
+        username: string
+        quotaTotal: number
+        quotaUsed: number
+        isAdmin: number
+        createdAt: number
+      }>
+
+      return {
+        success: true,
+        data: {
+          list: users,
+          total: countResult.total,
+          page,
+          pageSize
+        }
+      }
+    } catch (error: any) {
+      console.error('获取用户列表失败:', error)
+      throw new Error(error.message || '获取用户列表失败')
+    }
+  })
+
+  /**
+   * 获取存储统计信息（管理员功能）
+   */
+  ipcMain.handle('auth:get-storage-stats', async () => {
+    try {
+      const session = getStoredSession()
+
+      if (!session) {
+        throw new Error('用户未登录')
+      }
+
+      const db = getDatabase()
+
+      // 检查当前用户是否为管理员
+      const adminUser = db.prepare('SELECT is_admin FROM users WHERE id = ?').get(session.userId) as { is_admin: number } | undefined
+
+      if (!adminUser || adminUser.is_admin !== 1) {
+        throw new Error('权限不足：仅管理员可以查看存储统计')
+      }
+
+      // 获取所有用户的配额信息
+      const users = db.prepare(`
+        SELECT
+          id,
+          username,
+          quota_total as quotaTotal,
+          quota_used as quotaUsed
+        FROM users
+        ORDER BY quota_used DESC
+      `).all() as Array<{
+        id: number
+        username: string
+        quotaTotal: number
+        quotaUsed: number
+      }>
+
+      // 计算总量
+      const totalQuota = users.reduce((sum, user) => sum + user.quotaTotal, 0)
+      const totalUsed = users.reduce((sum, user) => sum + user.quotaUsed, 0)
+      const remaining = totalQuota - totalUsed
+      const usageRate = totalQuota > 0 ? (totalUsed / totalQuota) * 100 : 0
+
+      return {
+        success: true,
+        data: {
+          totalQuota,
+          totalUsed,
+          remaining,
+          usageRate,
+          userCount: users.length,
+          topUsers: users.slice(0, 10) // Top 10 users by quota used
+        }
+      }
+    } catch (error: any) {
+      console.error('获取存储统计失败:', error)
+      throw new Error(error.message || '获取存储统计失败')
+    }
   })
 }

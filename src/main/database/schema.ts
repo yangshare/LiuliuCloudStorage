@@ -64,6 +64,43 @@ export const transferQueue = sqliteTable('transfer_queue', {
   index('idx_transfer_queue_user_status').on(table.userId, table.status)
 ])
 
+// 操作日志表
+export const activityLogs = sqliteTable('activity_logs', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: integer('user_id').notNull().references(() => users.id),
+  actionType: text('action_type', { enum: ['upload', 'download', 'delete', 'folder_create', 'login', 'logout'] }).notNull(),
+  fileCount: integer('file_count').notNull().default(0),
+  fileSize: integer('file_size').notNull().default(0),
+  ipAddress: text('ip_address'),
+  userAgent: text('user_agent'),
+  details: text('details'), // JSON string for additional details
+  createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date())
+}, (table) => [
+  index('idx_activity_logs_user_id').on(table.userId),
+  index('idx_activity_logs_created_at').on(table.createdAt),
+  index('idx_activity_logs_action_type').on(table.actionType),
+  index('idx_activity_logs_user_created').on(table.userId, table.createdAt)
+])
+
+// 每日统计表
+export const dailyStats = sqliteTable('daily_stats', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: integer('user_id').notNull().references(() => users.id),
+  date: text('date').notNull(), // YYYY-MM-DD format
+  uploadCount: integer('upload_count').notNull().default(0),
+  downloadCount: integer('download_count').notNull().default(0),
+  deleteCount: integer('delete_count').notNull().default(0),
+  folderCreateCount: integer('folder_create_count').notNull().default(0),
+  totalFiles: integer('total_files').notNull().default(0),
+  totalSize: integer('total_size').notNull().default(0),
+  createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date())
+}, (table) => [
+  index('idx_daily_stats_user_id').on(table.userId),
+  index('idx_daily_stats_date').on(table.date),
+  index('idx_daily_stats_user_date').on(table.userId, table.date).unique()
+])
+
 // 类型导出
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
@@ -73,3 +110,7 @@ export type FileCache = typeof fileCache.$inferSelect
 export type NewFileCache = typeof fileCache.$inferInsert
 export type TransferQueue = typeof transferQueue.$inferSelect
 export type NewTransferQueue = typeof transferQueue.$inferInsert
+export type ActivityLogs = typeof activityLogs.$inferSelect
+export type NewActivityLogs = typeof activityLogs.$inferInsert
+export type DailyStats = typeof dailyStats.$inferSelect
+export type NewDailyStats = typeof dailyStats.$inferInsert

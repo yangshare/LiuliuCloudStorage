@@ -140,26 +140,32 @@ function ensureUser(username: string): number {
 export function registerAuthHandlers(): void {
   ipcMain.handle('auth:login', async (_event, username: string, password: string) => {
     try {
-      console.log('[auth:login] 开始登录流程, 用户名:', username)
-      const result = await callWebhook('login', { username, password })
-      console.log('[auth:login] Webhook 返回结果:', {
+      console.log('[auth:login] ========== 开始登录流程 ==========')
+      console.log('[auth:login] 用户名:', username)
+
+      // 直接调用 Alist 登录接口
+      const result = await alistService.login(username, password)
+      console.log('[auth:login] Alist 登录结果:', {
         success: result.success,
         hasToken: !!result.token,
-        tokenLength: result.token ? result.token.length : 0,
-        tokenPreview: result.token ? result.token.substring(0, 30) + '...' : 'no token'
+        tokenLength: result.token?.length || 0,
+        message: result.message
       })
 
       if (result.success && result.token) {
-        // 设置 token 后获取用户信息
-        console.log('[auth:login] 设置 AlistService token')
-        alistService.setToken(result.token)
         try {
-          console.log('[auth:login] 调用 getMe() 获取用户信息')
+          console.log('[auth:login] ========== 调用 getMe() 获取用户信息 ==========')
           const userInfo = await alistService.getMe()
-          console.log('[auth:login] 成功获取用户信息:', userInfo.username)
+          console.log('[auth:login] 成功获取用户信息:', {
+            username: userInfo.username,
+            basePath: userInfo.basePath,
+            id: userInfo.id
+          })
           const basePath = userInfo.basePath || '/'
           const userId = ensureUser(username)
+          console.log('[auth:login] 本地用户ID:', userId)
           saveSession(userId, username, result.token, basePath)
+          console.log('[auth:login] ========== 登录成功 ==========')
 
           // Story 9.2 CRITICAL FIX: 记录登录操作日志
           activityService.logActivity({
@@ -169,14 +175,24 @@ export function registerAuthHandlers(): void {
             fileSize: 0,
             details: { username }
           }).catch(err => console.error('[auth] 记录登录日志失败:', err))
-        } catch (err) {
-          console.error('[auth] Failed to get user info:', err)
-          return { success: false, message: '获取用户信息失败' }
+
+          return { success: true }
+        } catch (err: any) {
+          console.error('[auth:login] ========== 获取用户信息失败 ==========')
+          console.error('[auth:login] 错误详情:', {
+            code: err.code,
+            message: err.message,
+            stack: err.stack
+          })
+          return { success: false, message: err.message || '获取用户信息失败' }
         }
       }
+
+      console.log('[auth:login] ========== 登录失败 ==========')
       return result
     } catch (err) {
-      console.error('Login error:', err)
+      console.error('[auth:login] ========== 登录异常 ==========')
+      console.error('[auth:login] 异常详情:', err)
       return { success: false, message: '网络错误，请稍后重试' }
     }
   })

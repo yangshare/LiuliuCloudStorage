@@ -1,7 +1,6 @@
 import { createHttpClient, AppError } from './httpClient'
 import { AxiosInstance } from 'axios'
 import * as fs from 'fs'
-import * as path from 'path'
 
 export interface FileItem {
   name: string
@@ -66,6 +65,7 @@ interface AlistApiResponse<T> {
 class AlistService {
   private client: AxiosInstance | null = null
   private token: string = ''
+  private deviceKey: string = ''  // Alist 要求的设备密钥
   private basePath: string = ''
   private userId: number | null = null
 
@@ -104,9 +104,58 @@ class AlistService {
   private getHeaders(): Record<string, string> {
     const headers: Record<string, string> = {}
     if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`
+      // Alist 直接使用 token，不需要 Bearer 前缀
+      headers['Authorization'] = this.token
+    }
+    if (this.deviceKey) {
+      headers['device-key'] = this.deviceKey
     }
     return headers
+  }
+
+  /**
+   * 调用 Alist 登录接口获取 token
+   */
+  async login(username: string, password: string): Promise<{ success: boolean; token?: string; message?: string }> {
+    if (!this.client) {
+      return { success: false, message: 'AlistService 未初始化' }
+    }
+
+    try {
+      console.log('[AlistService.login] 发起登录请求, 用户名:', username)
+      const response = await this.client.post<AlistApiResponse<{ token: string; device_key: string }>>(
+        '/api/auth/login',
+        { username, password }
+      )
+
+      console.log('[AlistService.login] 响应数据:', {
+        code: response.data.code,
+        message: response.data.message,
+        hasData: !!response.data.data
+      })
+
+      if (response.data.code === 200 && response.data.data?.token) {
+        const token = response.data.data.token
+        const deviceKey = response.data.data.device_key
+        this.token = token
+        this.deviceKey = deviceKey
+        console.log('[AlistService.login] Token 已设置, 长度:', token.length, '前30字符:', token.substring(0, 30))
+        console.log('[AlistService.login] DeviceKey 已设置:', deviceKey)
+        return { success: true, token }
+      } else {
+        console.error('[AlistService.login] 登录失败, 响应码:', response.data.code)
+        return {
+          success: false,
+          message: response.data.message || '登录失败'
+        }
+      }
+    } catch (error: any) {
+      console.error('[AlistService.login] 异常:', error.message)
+      return {
+        success: false,
+        message: error.response?.data?.message || error.message || '网络错误，请稍后重试'
+      }
+    }
   }
 
   async getMe(): Promise<UserInfo> {
@@ -114,10 +163,19 @@ class AlistService {
       throw { code: 'NOT_INITIALIZED', message: 'AlistService 未初始化' } as AppError
     }
 
+    const headers = this.getHeaders()
+    console.log('[AlistService.getMe] 调用 /api/me')
+    console.log('[AlistService.getMe] Token 存在:', !!this.token, '长度:', this.token?.length)
+    console.log('[AlistService.getMe] DeviceKey 存在:', !!this.deviceKey, '值:', this.deviceKey)
+    console.log('[AlistService.getMe] 请求头 Authorization:', headers['Authorization']?.substring(0, 30) + '...')
+    console.log('[AlistService.getMe] 请求头 device-key:', headers['device-key'])
+
     const response = await this.client.get<AlistApiResponse<UserInfo>>(
       '/api/me',
-      { headers: this.getHeaders() }
+      { headers }
     )
+
+    console.log('[AlistService.getMe] 响应码:', response.data.code, '消息:', response.data.message)
 
     if (response.data.code !== 200) {
       throw {

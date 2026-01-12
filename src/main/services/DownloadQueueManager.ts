@@ -120,6 +120,9 @@ class DownloadQueueManager {
     // 标记为活跃
     this.activeDownloads.add(task.id)
 
+    // 立即通知渲染进程：任务进入 active 状态
+    this.emitQueueUpdated()
+
     try {
       // 开始下载(传递 dbId 以避免创建重复的数据库记录)
       await this.downloadManager.startDownload({ ...task, dbId: task.dbId }, (progress) => {
@@ -200,10 +203,10 @@ class DownloadQueueManager {
    * 获取队列状态
    */
   async getQueueState(): Promise<{
-    pending: DownloadQueueTask[]
-    active: DownloadQueueTask[]
-    completed: DownloadQueueTask[]
-    failed: DownloadQueueTask[]
+    pending: any[]
+    active: any[]
+    completed: any[]
+    failed: any[]
   }> {
     const tasks = Array.from(this.queue.values())
 
@@ -211,30 +214,50 @@ class DownloadQueueManager {
     const remotePaths = tasks.map(task => task.remotePath)
     const taskStatusMap = await this.transferService.getTasksByRemotePaths(remotePaths, 'download')
 
-    const pending: DownloadQueueTask[] = []
-    const active: DownloadQueueTask[] = []
-    const completed: DownloadQueueTask[] = []
-    const failed: DownloadQueueTask[] = []
+    const pending: any[] = []
+    const active: any[] = []
+    const completed: any[] = []
+    const failed: any[] = []
+
+    // 转换为前端期望的数据结构
+    const toFrontendTask = (task: DownloadQueueTask, dbTask: any, status: string) => ({
+      id: task.id,
+      fileName: task.fileName,
+      remotePath: task.remotePath,
+      savePath: task.savePath,
+      fileSize: task.fileSize,
+      downloadedBytes: dbTask?.transferredSize || 0,
+      status: status,
+      progress: dbTask?.transferredSize && task.fileSize ? Math.round((dbTask.transferredSize / task.fileSize) * 100) : 0,
+      speed: 0,
+      error: dbTask?.errorMessage,
+      createdAt: dbTask?.createdAt ? new Date(dbTask.createdAt * 1000) : new Date()
+    })
 
     for (const task of tasks) {
       const dbTask = taskStatusMap.get(task.remotePath)
+
+      // 优先检查内存中的活跃状态（比数据库状态更实时）
+      if (this.activeDownloads.has(task.id)) {
+        active.push(toFrontendTask(task, dbTask, 'in_progress'))
+        continue
+      }
 
       if (!dbTask) continue
 
       switch (dbTask.status) {
         case 'pending':
-          pending.push(task)
+          pending.push(toFrontendTask(task, dbTask, 'pending'))
           break
         case 'in_progress':
-          if (this.activeDownloads.has(task.id)) {
-            active.push(task)
-          }
+          // 如果数据库显示 in_progress 但内存中没有，说明可能是恢复的任务
+          active.push(toFrontendTask(task, dbTask, 'in_progress'))
           break
         case 'completed':
-          completed.push(task)
+          completed.push(toFrontendTask(task, dbTask, 'completed'))
           break
         case 'failed':
-          failed.push(task)
+          failed.push(toFrontendTask(task, dbTask, 'failed'))
           break
       }
     }
@@ -364,8 +387,14 @@ class DownloadQueueManager {
   /**
    * 发送队列更新事件
    */
-  private async emitQueueUpdated(): void {
+  private async emitQueueUpdated(): Promise<void> {
     const state = await this.getQueueState()
+    console.log('[DownloadQueueManager] 发送队列更新事件:', {
+      pending: state.pending.length,
+      active: state.active.length,
+      completed: state.completed.length,
+      failed: state.failed.length
+    })
     const windows = BrowserWindow.getAllWindows()
     windows.forEach(win => {
       win.webContents.send('transfer:queue-updated', state)

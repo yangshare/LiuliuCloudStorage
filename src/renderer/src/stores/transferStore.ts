@@ -332,13 +332,13 @@ export const useTransferStore = defineStore('transfer', () => {
         userToken,
         username
       )
-      if (result.success) {
+      if (result?.success) {
         const task = uploadQueue.value.find(t => t.id === taskId)
         if (task) {
           task.status = 'in_progress'
         }
       }
-      return result
+      return result || { success: false, error: '未返回结果' }
     } catch (error: any) {
       return { success: false, error: error.message || '恢复任务失败' }
     }
@@ -348,14 +348,14 @@ export const useTransferStore = defineStore('transfer', () => {
   async function autoRetryFailedTasks(userId: number, userToken: string, username: string) {
     try {
       const result = await window.electronAPI.transfer.autoRetryAll(userId, userToken, username)
-      if (result.success) {
+      if (result?.success) {
         // 更新所有失败任务的状态为 in_progress
         const failedTasks = uploadQueue.value.filter(t => t.status === 'failed' && t.resumable)
         failedTasks.forEach(task => {
           task.status = 'in_progress'
         })
       }
-      return result
+      return result || { success: false, error: '未返回结果' }
     } catch (error: any) {
       return { success: false, error: error.message || '自动重试失败' }
     }
@@ -396,6 +396,12 @@ export const useTransferStore = defineStore('transfer', () => {
   const completedDownloads = ref<DownloadTask[]>([])
   const failedDownloads = ref<DownloadTask[]>([])
   const isDownloadQueuePaused = ref(false)
+
+  // UI 状态：进度面板折叠状态（持久化到 localStorage）
+  const STORAGE_KEY_PANEL_COLLAPSED = 'liuliu_progress_panel_collapsed'
+  const isProgressPanelCollapsed = ref<boolean>(
+    localStorage.getItem(STORAGE_KEY_PANEL_COLLAPSED) === 'true'
+  )
 
   // 下载进度数据（使用 Map 存储以便快速查找）
   const downloadProgressMap = ref<Map<string, {
@@ -478,6 +484,12 @@ export const useTransferStore = defineStore('transfer', () => {
       // 监听队列更新事件(保存监听器引用以便清理)
       if (window.electronAPI?.transfer?.onQueueUpdated) {
         queueUpdatedListener = (state: any) => {
+          console.log('[transferStore] 收到队列更新事件:', {
+            pending: state.pending?.length || 0,
+            active: state.active?.length || 0,
+            completed: state.completed?.length || 0,
+            failed: state.failed?.length || 0
+          })
           downloadQueue.value = state.pending
           activeDownloads.value = state.active
           completedDownloads.value = state.completed
@@ -521,7 +533,10 @@ export const useTransferStore = defineStore('transfer', () => {
         priority: downloadQueue.value.length
       })
 
-      return result || { success: false, error: '队列下载功能未实现' }
+      console.log('[transferStore.queueDownload] IPC 返回:', result)
+      const returnValue = result || { success: false, error: '队列下载功能未实现' }
+      console.log('[transferStore.queueDownload] 实际返回:', returnValue)
+      return returnValue
     } catch (error: any) {
       return {
         success: false,
@@ -617,11 +632,11 @@ export const useTransferStore = defineStore('transfer', () => {
         username
       )
 
-      if (result.success) {
+      if (result?.success) {
         task.savePath = result.savePath
       } else {
         task.status = 'failed'
-        task.error = result.error
+        task.error = result?.error || '下载失败'
       }
     } catch (error: any) {
       task.status = 'failed'
@@ -744,13 +759,13 @@ export const useTransferStore = defineStore('transfer', () => {
       const saveAsResult = await window.electronAPI.transfer.saveAs(fileName, userId)
 
       // 2. 用户取消操作
-      if (saveAsResult.canceled) {
+      if (saveAsResult?.canceled) {
         return { success: false, canceled: true }
       }
 
       // 3. 保存对话框失败
-      if (!saveAsResult.success || !saveAsResult.filePath) {
-        return { success: false, error: saveAsResult.error || '选择保存位置失败' }
+      if (!saveAsResult?.success || !saveAsResult?.filePath) {
+        return { success: false, error: saveAsResult?.error || '选择保存位置失败' }
       }
 
       // 4. 开始下载到用户选择的路径
@@ -763,7 +778,7 @@ export const useTransferStore = defineStore('transfer', () => {
         saveAsResult.filePath
       )
 
-      return downloadResult
+      return downloadResult || { success: false, error: '下载失败' }
     } catch (error: any) {
       return {
         success: false,
@@ -779,8 +794,8 @@ export const useTransferStore = defineStore('transfer', () => {
     try {
       const result = await window.electronAPI.transfer.resumeDownload(taskId)
 
-      if (!result.success) {
-        throw new Error(result.error || '恢复下载失败')
+      if (!result?.success) {
+        throw new Error(result?.error || '恢复下载失败')
       }
 
       // 更新本地状态
@@ -805,8 +820,8 @@ export const useTransferStore = defineStore('transfer', () => {
     try {
       const result = await window.electronAPI.transfer.cancelDownload(taskId)
 
-      if (!result.success) {
-        throw new Error(result.error || '取消下载失败')
+      if (!result?.success) {
+        throw new Error(result?.error || '取消下载失败')
       }
 
       // 更新本地状态
@@ -842,8 +857,8 @@ export const useTransferStore = defineStore('transfer', () => {
     try {
       const result = await window.electronAPI.transfer.cancelAllDownloads(authStore.user.id)
 
-      if (!result.success) {
-        throw new Error(result.error || '取消所有下载失败')
+      if (!result?.success) {
+        throw new Error(result?.error || '取消所有下载失败')
       }
 
       // 清空本地队列
@@ -859,6 +874,14 @@ export const useTransferStore = defineStore('transfer', () => {
     }
   }
 
+  /**
+   * 切换进度面板折叠状态
+   */
+  function toggleProgressPanel() {
+    isProgressPanelCollapsed.value = !isProgressPanelCollapsed.value
+    localStorage.setItem(STORAGE_KEY_PANEL_COLLAPSED, String(isProgressPanelCollapsed.value))
+  }
+
   return {
     uploadQueue,
     downloadQueue,
@@ -869,6 +892,7 @@ export const useTransferStore = defineStore('transfer', () => {
     uploadError,
     queueStatus,
     isDownloadQueuePaused,
+    isProgressPanelCollapsed,
     pendingUploads,
     activeUploads,
     completedUploads,
@@ -892,6 +916,7 @@ export const useTransferStore = defineStore('transfer', () => {
     resumeDownload,
     cancelDownload,
     cancelAllDownloads,
+    toggleProgressPanel,
     isOnline,
     downloadProgressMap,
     activeDownloadProgress,

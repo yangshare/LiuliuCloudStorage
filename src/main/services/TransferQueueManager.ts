@@ -57,7 +57,7 @@ class TransferQueueManager {
 
       // 配置 AlistService
       alistService.setToken(task.userToken)
-      alistService.setBasePath(`/root/users/${task.username}/`)
+      alistService.setBasePath('/alist/')
       alistService.setUserId(task.userId)
 
       // 获取任务信息（支持断点续传）

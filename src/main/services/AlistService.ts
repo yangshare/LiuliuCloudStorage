@@ -67,6 +67,7 @@ class AlistService {
   private token: string = ''
   private deviceKey: string = ''  // Alist 要求的设备密钥
   private basePath: string = ''
+  private storagePath: string = '/baidu'  // 存储名称前缀（如 /baidu, /alist）
   private userId: number | null = null
 
   initialize(baseURL: string): void {
@@ -79,6 +80,10 @@ class AlistService {
 
   setBasePath(path: string): void {
     this.basePath = path
+  }
+
+  setStoragePath(path: string): void {
+    this.storagePath = path
   }
 
   setUserId(id: number): void {
@@ -94,11 +99,16 @@ class AlistService {
   }
 
   private getFullPath(path: string): string {
+    // 对于 Alist API，使用存储路径前缀（如 /baidu/封面素材/...）
     const normalizedPath = path.startsWith('/') ? path : `/${path}`
-    if (this.basePath === '/') {
+    if (this.storagePath === '/') {
       return normalizedPath
     }
-    return `${this.basePath}${normalizedPath}`
+    // 确保不重复斜杠
+    const cleanStoragePath = this.storagePath.endsWith('/') ? this.storagePath.slice(0, -1) : this.storagePath
+    const fullPath = `${cleanStoragePath}${normalizedPath}`
+    console.log('[AlistService.getFullPath] storagePath:', this.storagePath, 'path:', path, '→ fullPath:', fullPath)
+    return fullPath
   }
 
   private getHeaders(): Record<string, string> {
@@ -342,29 +352,38 @@ class AlistService {
       const fullRemotePath = this.getFullPath(remotePath)
 
       const response = await this.client.post<AlistApiResponse<{
-        raw_url: string
-        file: {
-          name: string
-          size: number
-          modified: string
-        }
+        rawUrl: string
+        name: string
+        size: number
+        modified: string
       }>>(
         '/api/fs/get',
         { path: fullRemotePath },
         { headers: this.getHeaders() }
       )
 
+      console.log('[AlistService.getDownloadUrl] 响应:', {
+        code: response.data.code,
+        message: response.data.message,
+        dataKeys: response.data.data ? Object.keys(response.data.data) : 'null',
+        rawData: response.data.data
+      })
+
       if (response.data.code === 200) {
         return {
           success: true,
-          rawUrl: response.data.data.raw_url,
-          fileName: response.data.data.file.name,
-          fileSize: response.data.data.file.size
+          rawUrl: response.data.data.rawUrl,
+          fileName: response.data.data.name,
+          fileSize: response.data.data.size
         }
       } else {
+        console.error('[AlistService.getDownloadUrl] Alist API 返回错误:', {
+          code: response.data.code,
+          message: response.data.message
+        })
         return {
           success: false,
-          error: response.data.message
+          error: `Alist错误(${response.data.code}): ${response.data.message}`
         }
       }
     } catch (error: any) {

@@ -23,7 +23,7 @@ export class QuotaCalculationService {
    */
   async calculateQuota(userId: number, username: string): Promise<number> {
     try {
-      const userPath = `/root/users/${username}/`
+      const userPath = '/alist/'
 
       // 方法1: 尝试通过 n8n Webhook 计算配额（更准确）
       try {

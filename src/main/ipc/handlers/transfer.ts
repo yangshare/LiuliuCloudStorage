@@ -17,7 +17,7 @@ export function registerTransferHandlers(): void {
   ipcMain.handle('transfer:upload', async (_event, { filePath, remotePath, userId, userToken, username, localTaskId }) => {
     try {
       alistService.setToken(userToken)
-      alistService.setBasePath(`/root/users/${username}/`)
+      alistService.setBasePath('/alist/')
       alistService.setUserId(userId)
 
       const fileStats = fs.statSync(filePath)
@@ -99,7 +99,7 @@ export function registerTransferHandlers(): void {
   ipcMain.handle('transfer:download', async (_event, { remotePath, fileName, userId, userToken, username, savePath: customSavePath }) => {
     try {
       alistService.setToken(userToken)
-      alistService.setBasePath(`/root/users/${username}/`)
+      alistService.setBasePath('/alist/')
       alistService.setUserId(userId)
 
       const downloadManager = new DownloadManager()
@@ -308,13 +308,22 @@ export function registerTransferHandlers(): void {
 
       // 获取下载链接
       alistService.setToken(userToken)
-      alistService.setBasePath(`/root/users/${username}/`)
+      // TODO: basePath 应该从用户配置获取，默认使用 /alist/
+      alistService.setBasePath('/alist/')
       alistService.setUserId(userId)
 
       console.log('[transfer:queueDownload] AlistService 配置完成，准备获取下载链接')
       console.log('[transfer:queueDownload] 请求路径:', taskData.remotePath)
 
       const downloadResult = await alistService.getDownloadUrl(taskData.remotePath)
+
+      console.log('[transfer:queueDownload] 下载链接获取结果:', {
+        success: downloadResult.success,
+        hasRawUrl: !!downloadResult.rawUrl,
+        fileName: downloadResult.fileName,
+        fileSize: downloadResult.fileSize,
+        error: downloadResult.error
+      })
 
       if (!downloadResult.success) {
         return { success: false, error: downloadResult.error }
@@ -337,6 +346,8 @@ export function registerTransferHandlers(): void {
         userToken,
         username
       }
+
+      console.log('[transfer:queueDownload] 构建任务:', { id: task.id, url: task.url?.substring(0, 50) + '...', savePath: task.savePath })
 
       // 添加到队列
       await downloadQueueManager.addToQueue(task)

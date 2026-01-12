@@ -59,7 +59,7 @@ export class ActivityService {
         details: params.details ? JSON.stringify(params.details) : null
       }
 
-      await db.insert(activityLogs).values(log)
+      await this.db.insert(activityLogs).values(log)
 
       // 异步更新每日统计（不等待完成）
       this.updateDailyStats(params.userId, params.actionType, params.fileCount || 0, params.fileSize || 0)
@@ -84,7 +84,7 @@ export class ActivityService {
 
     try {
       // 查询今日是否已有统计记录
-      const existing = await db
+      const existing = await this.db
         .select()
         .from(dailyStats)
         .where(eq(dailyStats.userId, userId))
@@ -115,7 +115,7 @@ export class ActivityService {
             break
         }
 
-        await db
+        await this.db
           .update(dailyStats)
           .set(updateData)
           .where(eq(dailyStats.id, existing[0].id))
@@ -132,7 +132,7 @@ export class ActivityService {
           totalSize: fileSize
         }
 
-        await db.insert(dailyStats).values(newStats)
+        await this.db.insert(dailyStats).values(newStats)
       }
     } catch (error) {
       console.error('[ActivityService] 更新每日统计失败:', error)
@@ -171,7 +171,7 @@ export class ActivityService {
       }
 
       // 获取总数 - Story 9.3 FIX: 使用 count() 而非 logs.length
-      const countResult = await db
+      const countResult = await this.db
         .select({ count: count() })
         .from(activityLogs)
         .where(...conditions)
@@ -179,7 +179,7 @@ export class ActivityService {
       const total = countResult[0]?.count || 0
 
       // 获取分页数据
-      const logs = await db
+      const logs = await this.db
         .select({
           id: activityLogs.id,
           actionType: activityLogs.actionType,
@@ -234,7 +234,7 @@ export class ActivityService {
       }
 
       // 获取总数 - Story 9.3 FIX: 使用 count() 而非 logs.length
-      const countResult = await db
+      const countResult = await this.db
         .select({ count: count() })
         .from(activityLogs)
         .where(...conditions)
@@ -242,7 +242,7 @@ export class ActivityService {
       const total = countResult[0]?.count || 0
 
       // 获取分页数据
-      const logs = await db
+      const logs = await this.db
         .select({
           id: activityLogs.id,
           userId: activityLogs.userId,
@@ -274,7 +274,7 @@ export class ActivityService {
 
     try {
       // Story 9.3 FIX: 从 daily_stats 表统计唯一用户数
-      const result = await db
+      const result = await this.db
         .select({ count: count() })
         .from(dailyStats)
         .where(eq(dailyStats.date, targetDate))
@@ -296,7 +296,7 @@ export class ActivityService {
     totalSize: number
   }> {
     try {
-      let query = db
+      let query = this.db
         .select()
         .from(dailyStats)
         .where(eq(dailyStats.userId, userId))

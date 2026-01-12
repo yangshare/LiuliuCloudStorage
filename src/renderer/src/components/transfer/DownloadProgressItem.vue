@@ -48,34 +48,34 @@
       <!-- 进度条 -->
       <n-progress
         type="line"
-        :percentage="progress.percentage"
+        :percentage="progress.percentage || 0"
         :indicator-placement="'inside'"
         :processing="progress.status === 'in_progress'"
-        :color="getProgressColor(progress.percentage)"
+        :color="getProgressColor(progress.status)"
         :height="20"
         :border-radius="4"
       >
-        <template #default="{ percentage }">
-          <span class="progress-percentage">{{ percentage }}%</span>
+        <template #default>
+          <span class="progress-percentage">{{ progress.percentage || 0 }}%</span>
         </template>
       </n-progress>
 
       <!-- 详细信息 -->
       <n-space :size="16" class="progress-details">
         <n-text depth="3" style="font-size: 12px; min-width: 120px">
-          {{ formatFileSize(progress.downloadedBytes) }} / {{ formatFileSize(progress.totalBytes) }}
+          {{ formatFileSize(progress.downloadedBytes || 0) }} / {{ formatFileSize(progress.totalBytes || 0) }}
         </n-text>
         <n-text depth="3" style="font-size: 12px; min-width: 80px">
-          {{ formatSpeed(progress.speed) }}
+          {{ formatSpeed(progress.speed || 0) }}
         </n-text>
         <n-text v-if="progress.status === 'in_progress'" depth="3" style="font-size: 12px">
-          剩余: {{ formatTime(progress.eta) }}
+          剩余: {{ formatTime(progress.eta || 0) }}
         </n-text>
         <n-text v-else-if="progress.status === 'completed'" depth="3" type="success" style="font-size: 12px">
           完成
         </n-text>
         <n-text v-else-if="progress.status === 'failed'" depth="3" type="error" style="font-size: 12px">
-          失败
+          {{ progress.errorMessage || '下载失败' }}
         </n-text>
       </n-space>
     </n-space>
@@ -96,6 +96,7 @@ export interface DownloadProgressData {
   speed: number // bytes per second
   eta: number // estimated time arrival (seconds)
   status: 'pending' | 'in_progress' | 'completed' | 'failed'
+  errorMessage?: string // 错误信息（失败时显示）
 }
 
 const props = defineProps<{
@@ -161,10 +162,14 @@ function getStatusText(status: string): string {
   return texts[status] || '未知'
 }
 
-function getProgressColor(percentage: number): string {
-  if (percentage < 30) return '#f56c6c'
-  if (percentage < 70) return '#e6a23c'
-  return '#18a058'
+function getProgressColor(status: string): string {
+  const colors: Record<string, string> = {
+    pending: '#909399',      // 灰色 - 等待中
+    in_progress: '#2080f0',  // 蓝色 - 下载中
+    completed: '#18a058',    // 绿色 - 完成
+    failed: '#f56c6c'        // 红色 - 失败
+  }
+  return colors[status] || '#2080f0'
 }
 </script>
 
@@ -201,5 +206,36 @@ function getProgressColor(percentage: number): string {
   font-size: 12px;
   font-weight: 600;
   color: white;
+}
+
+/* 进度条流光动画 */
+.download-progress-item :deep(.n-progress-graph-line-fill) {
+  position: relative;
+  overflow: hidden;
+}
+
+.download-progress-item :deep(.n-progress-graph-line-fill::after) {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 100%
+  );
+  animation: progress-shimmer 2s ease-in-out infinite;
+}
+
+@keyframes progress-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
 </style>

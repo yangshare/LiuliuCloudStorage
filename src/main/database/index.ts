@@ -70,6 +70,39 @@ FOR EACH ROW
 BEGIN
   UPDATE transfer_queue SET updated_at = strftime('%s', 'now') WHERE id = NEW.id;
 END;
+
+CREATE TABLE IF NOT EXISTS activity_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  action_type TEXT NOT NULL,
+  file_count INTEGER NOT NULL DEFAULT 0,
+  file_size INTEGER NOT NULL DEFAULT 0,
+  ip_address TEXT,
+  user_agent TEXT,
+  details TEXT,
+  created_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_user_id ON activity_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_action_type ON activity_logs(action_type);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_user_created ON activity_logs(user_id, created_at);
+
+CREATE TABLE IF NOT EXISTS daily_stats (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  date TEXT NOT NULL,
+  upload_count INTEGER NOT NULL DEFAULT 0,
+  download_count INTEGER NOT NULL DEFAULT 0,
+  delete_count INTEGER NOT NULL DEFAULT 0,
+  folder_create_count INTEGER NOT NULL DEFAULT 0,
+  total_files INTEGER NOT NULL DEFAULT 0,
+  total_size INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER,
+  updated_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_daily_stats_user_id ON daily_stats(user_id);
+CREATE INDEX IF NOT EXISTS idx_daily_stats_date ON daily_stats(date);
+CREATE INDEX IF NOT EXISTS idx_daily_stats_user_date ON daily_stats(user_id, date);
 `
 
 // 迁移：添加 base_path 字段到旧数据库
@@ -87,6 +120,13 @@ export function initDatabase(): Database.Database {
 
   const dbPath = join(userDataPath, 'liuliu.db')
   db = new Database(dbPath)
+
+  // 启用 WAL 模式以支持并发读写
+  db.pragma('journal_mode = WAL')
+  // 设置繁忙超时（5秒）
+  db.pragma('busy_timeout = 5000')
+  // 启用外键约束
+  db.pragma('foreign_keys = ON')
 
   db.exec(SCHEMA)
 

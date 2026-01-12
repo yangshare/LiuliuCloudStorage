@@ -181,6 +181,9 @@ export class DownloadManager {
         request.setHeader('Range', `bytes=${startPosition}-`)
       }
 
+      // 百度网盘下载大于 20M 文件需要设置 User-Agent
+      request.setHeader('User-Agent', 'pan.baidu.com')
+
       request.on('response', (response) => {
         // 检查服务器是否支持 Range 请求
         const acceptRanges = response.headers['accept-ranges']

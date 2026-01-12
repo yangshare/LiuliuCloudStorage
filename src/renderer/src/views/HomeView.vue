@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed } from 'vue'
-import { NLayout, NLayoutSider, NLayoutContent, NCard, NButton, NSpace, NIcon, NText } from 'naive-ui'
-import { CloudUploadOutline, FolderOutline } from '@vicons/ionicons5'
+import { NLayout, NLayoutSider, NLayoutContent, NCard, NButton, NSpace, NIcon, NText, NDrawer } from 'naive-ui'
+import { CloudUploadOutline, FolderOutline, ListOutline } from '@vicons/ionicons5'
 import FileList from '../components/file/FileList.vue'
 import DirectoryTree from '../components/file/DirectoryTree.vue'
 import Breadcrumb from '../components/file/Breadcrumb.vue'
@@ -10,22 +10,30 @@ import OfflineBanner from '../components/common/OfflineBanner.vue'
 import DropZone from '../components/transfer/DropZone.vue'
 import TransferProgressList from '../components/transfer/TransferProgressList.vue'
 import DownloadProgressPanel from '../components/transfer/DownloadProgressPanel.vue'
+import DownloadQueuePanel from '../components/transfer/DownloadQueuePanel.vue'
 import CreateFolderModal from '../components/file/CreateFolderModal.vue'
 import QuotaDisplay from '../components/quota/QuotaDisplay.vue'
 import { useFileStore } from '../stores/fileStore'
 import { useTransferStore } from '../stores/transferStore'
+import { useAuthStore } from '../stores/authStore'
 
 const fileStore = useFileStore()
 const transferStore = useTransferStore()
+const authStore = useAuthStore()
 const showCreateFolderModal = ref(false)
 const showFileInput = ref(false)
+const showQueueDrawer = ref(false)
 
 // 隐藏的文件输入元素
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
 const uploadQueue = computed(() => transferStore.uploadQueue)
 const downloadQueue = computed(() => transferStore.downloadQueue)
-const hasActiveDownloads = computed(() => transferStore.activeDownloads.length > 0)
+// 临时调试：同时检查 downloadQueue 和 activeDownloads
+const hasActiveDownloads = computed(() =>
+  transferStore.activeDownloads.length > 0 ||
+  transferStore.downloadQueue.some(t => t.status === 'in_progress' || t.status === 'pending')
+)
 const showOverlay = ref(false)
 const dragCount = ref(0)
 let dragCounter = 0
@@ -110,6 +118,16 @@ function handleFileSelect(event: Event) {
 
 onMounted(() => {
   fileStore.fetchFiles('/')
+
+  // 初始化下载队列
+  if (authStore.isLoggedIn && authStore.user) {
+    transferStore.initDownloadQueue(
+      authStore.user.id,
+      authStore.token,
+      authStore.user.username
+    )
+  }
+
   window.addEventListener('dragenter', handleWindowDragEnter)
   window.addEventListener('dragleave', handleWindowDragLeave)
   window.addEventListener('dragover', handleWindowDragOver)
@@ -143,6 +161,12 @@ onUnmounted(() => {
             <n-space justify="space-between" align="center">
               <Breadcrumb />
               <n-space>
+                <n-button size="small" @click="showQueueDrawer = true">
+                  <template #icon>
+                    <n-icon><ListOutline /></n-icon>
+                  </template>
+                  队列管理
+                </n-button>
                 <n-button size="small" @click="showCreateFolderModal = true" :disabled="!fileStore.isOnline">
                   <template #icon>
                     <n-icon><FolderOutline /></n-icon>
@@ -186,6 +210,12 @@ onUnmounted(() => {
       style="display: none"
       @change="handleFileSelect"
     />
+    <!-- 下载队列管理抽屉 -->
+    <n-drawer v-model:show="showQueueDrawer" :width="700" placement="right">
+      <n-drawer-content title="下载队列管理" closable>
+        <DownloadQueuePanel />
+      </n-drawer-content>
+    </n-drawer>
   </div>
 </template>
 

@@ -192,9 +192,9 @@ import {
   useNotification
 } from 'naive-ui'
 import {
-  Clock as ClockIcon,
-  DownloadArrow as DownloadIcon,
-  Check as CheckIcon,
+  Time as ClockIcon,
+  Download as DownloadIcon,
+  Checkmark as CheckIcon,
   CloseCircle as ErrorIcon
 } from '@vicons/ionicons5'
 import { useTransferStore } from '@/stores/transferStore'

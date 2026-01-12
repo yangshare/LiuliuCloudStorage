@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NDataTable, NSpin, NAlert, NButton, NEmpty, NTag, NDropdown, NModal } from 'naive-ui'
+import { NDataTable, NSpin, NAlert, NButton, NEmpty, NTag, NDropdown, NModal, useMessage } from 'naive-ui'
 import { h, computed, ref } from 'vue'
 import { useFileStore } from '../../stores/fileStore'
 import { useTransferStore } from '../../stores/transferStore'
@@ -11,6 +11,7 @@ import type { FileItem } from '../../../../shared/types/electron'
 const fileStore = useFileStore()
 const transferStore = useTransferStore()
 const authStore = useAuthStore()
+const message = useMessage()
 
 // 右键菜单状态
 const showContextMenu = ref(false)
@@ -117,18 +118,24 @@ async function handleDownload(file: FileItem) {
 
   console.log('[FileList] 开始下载:', { remotePath, fileName: file.name })
 
+  // 立即显示 toast 提示
+  message.info(`正在添加到下载队列: ${file.name}`)
+
   // 添加到下载队列
   try {
+    console.log('[FileList] 调用 transferStore.queueDownload, remotePath:', remotePath, 'fileName:', file.name)
     const result = await transferStore.queueDownload(remotePath, file.name)
-    console.log('[FileList] queueDownload 结果:', result)
+    console.log('[FileList] queueDownload 返回值类型:', typeof result, '是否为null:', result === null, '值:', result)
     if (result?.success) {
-      window.$message.success(`已添加到下载队列: ${file.name}`)
+      console.log('[FileList] 准备显示成功消息')
+      message.success(`已添加到下载队列: ${file.name}`)
     } else {
-      window.$message.error(result?.error || '添加到下载队列失败')
+      console.log('[FileList] 准备显示错误消息, error:', result?.error)
+      message.error(result?.error || '添加到下载队列失败')
     }
   } catch (error: any) {
     console.error('[FileList] queueDownload 异常:', error)
-    window.$message.error(error.message || '下载失败')
+    message.error(error.message || '下载失败')
   }
 }
 
@@ -214,13 +221,13 @@ async function confirmDelete() {
     )
 
     if (result.success) {
-      window.$message.success('删除成功')
+      message.success('删除成功')
       fileStore.refresh()
     } else {
-      window.$message.error(result.error || '删除失败')
+      message.error(result.error || '删除失败')
     }
   } catch (error: any) {
-    window.$message.error(error.message || '删除失败')
+    message.error(error.message || '删除失败')
   } finally {
     isDeleting.value = false
     showDeleteConfirm.value = false

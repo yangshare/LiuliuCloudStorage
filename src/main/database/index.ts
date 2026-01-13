@@ -102,7 +102,15 @@ CREATE TABLE IF NOT EXISTS daily_stats (
 );
 CREATE INDEX IF NOT EXISTS idx_daily_stats_user_id ON daily_stats(user_id);
 CREATE INDEX IF NOT EXISTS idx_daily_stats_date ON daily_stats(date);
-CREATE INDEX IF NOT EXISTS idx_daily_stats_user_date ON daily_stats(user_id, date);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_stats_user_date ON daily_stats(user_id, date);
+
+CREATE TABLE IF NOT EXISTS download_config (
+  id INTEGER PRIMARY KEY NOT NULL,
+  default_path TEXT NOT NULL,
+  auto_create_date_folder INTEGER DEFAULT 0 NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
 `
 
 // 迁移：添加 base_path 字段到旧数据库
@@ -135,6 +143,29 @@ export function initDatabase(): Database.Database {
     db.exec(MIGRATIONS)
   } catch {
     // 列已存在，忽略
+  }
+
+  // 初始化默认下载配置
+  try {
+    const configExists = db.prepare('SELECT COUNT(*) as count FROM download_config WHERE id = 1').get() as { count: number }
+    if (configExists.count === 0) {
+      const downloadsPath = app.getPath('downloads')
+      const defaultPath = join(downloadsPath, '溜溜网盘')
+
+      // 确保默认下载目录存在
+      if (!existsSync(defaultPath)) {
+        mkdirSync(defaultPath, { recursive: true })
+      }
+
+      const now = Math.floor(Date.now() / 1000)
+
+      db.prepare(`
+        INSERT INTO download_config (id, default_path, auto_create_date_folder, created_at, updated_at)
+        VALUES (1, ?, 0, ?, ?)
+      `).run(defaultPath, now, now)
+    }
+  } catch (error) {
+    console.error('Failed to initialize download config:', error)
   }
 
   return db

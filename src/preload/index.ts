@@ -18,7 +18,8 @@ const validChannels = [
   'dialog:openFile',
   'tray:update-transfer-status', 'tray:update-transfer-counts', 'tray:show-window', 'tray:hide-window', 'tray-quick-upload',
   'notification:show', 'app:getVersion', 'app:set-login-item-settings', 'app:get-login-item-settings',
-  'activity:log', 'activity:get-user-logs', 'activity:get-all-logs', 'activity:get-dau', 'activity:get-user-stats'
+  'activity:log', 'activity:get-user-logs', 'activity:get-all-logs', 'activity:get-dau', 'activity:get-user-stats',
+  'downloadConfig:selectDirectory', 'downloadConfig:get', 'downloadConfig:update', 'downloadConfig:openDirectory', 'downloadConfig:openFileDirectory', 'downloadConfig:reset', 'downloadConfig:createDirectory'
 ]
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -175,6 +176,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getDAU: (date?: string) => ipcRenderer.invoke('activity:get-dau', date),
     getUserStats: (userId: number, startDate?: string, endDate?: string) =>
       ipcRenderer.invoke('activity:get-user-stats', userId, startDate, endDate)
+  },
+
+  downloadConfig: {
+    selectDirectory: () => ipcRenderer.invoke('downloadConfig:selectDirectory'),
+    get: () => ipcRenderer.invoke('downloadConfig:get'),
+    update: (updates: { defaultPath?: string; autoCreateDateFolder?: boolean }) => ipcRenderer.invoke('downloadConfig:update', updates),
+    openDirectory: () => ipcRenderer.invoke('downloadConfig:openDirectory'),
+    openFileDirectory: (filePath: string) => ipcRenderer.invoke('downloadConfig:openFileDirectory', filePath),
+    reset: () => ipcRenderer.invoke('downloadConfig:reset'),
+    createDirectory: (dirPath: string) => ipcRenderer.invoke('downloadConfig:createDirectory', dirPath)
   }
 })
 

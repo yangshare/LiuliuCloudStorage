@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, index, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 // 用户表
 export const users = sqliteTable('users', {
@@ -98,8 +98,17 @@ export const dailyStats = sqliteTable('daily_stats', {
 }, (table) => [
   index('idx_daily_stats_user_id').on(table.userId),
   index('idx_daily_stats_date').on(table.date),
-  index('idx_daily_stats_user_date').on(table.userId, table.date).unique()
+  uniqueIndex('idx_daily_stats_user_date').on(table.userId, table.date)
 ])
+
+// 下载配置表
+export const downloadConfig = sqliteTable('download_config', {
+  id: integer('id').primaryKey(),
+  defaultPath: text('default_path').notNull(),
+  autoCreateDateFolder: integer('auto_create_date_folder', { mode: 'boolean' }).notNull().default(false),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date())
+})
 
 // 类型导出
 export type User = typeof users.$inferSelect
@@ -114,3 +123,5 @@ export type ActivityLogs = typeof activityLogs.$inferSelect
 export type NewActivityLogs = typeof activityLogs.$inferInsert
 export type DailyStats = typeof dailyStats.$inferSelect
 export type NewDailyStats = typeof dailyStats.$inferInsert
+export type DownloadConfig = typeof downloadConfig.$inferSelect
+export type NewDownloadConfig = typeof downloadConfig.$inferInsert

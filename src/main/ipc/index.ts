@@ -7,6 +7,7 @@ import { registerTrayHandlers } from './handlers/tray'
 import { registerNotificationHandlers } from './handlers/notification'
 import { registerAppHandlers } from './handlers/app'
 import { registerActivityHandlers } from './handlers/activity'
+import { registerDownloadConfigHandlers } from './handlers/downloadConfig'
 
 export function registerAllHandlers(): void {
   registerAuthHandlers()
@@ -18,4 +19,5 @@ export function registerAllHandlers(): void {
   registerNotificationHandlers()
   registerAppHandlers()
   registerActivityHandlers()
+  registerDownloadConfigHandlers()
 }

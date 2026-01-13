@@ -2,6 +2,7 @@ import { net, app } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
 import { TransferService } from './TransferService'
+import { downloadConfigService } from './downloadConfigService'
 
 export interface DownloadTaskInput {
   id: string
@@ -38,6 +39,9 @@ export class DownloadManager {
     let dbTask: any = null
 
     try {
+      // 应用日期子目录逻辑
+      const finalSavePath = await this.applyDateFolderLogic(task.savePath, task.fileName)
+
       // 检查是否已提供数据库记录 ID
       if (task.dbId) {
         // 使用现有的数据库记录
@@ -51,7 +55,7 @@ export class DownloadManager {
           userId: task.userId,
           taskType: 'download',
           fileName: task.fileName,
-          filePath: task.savePath,
+          filePath: finalSavePath,
           remotePath: task.remotePath,
           fileSize: task.fileSize,
           status: 'pending',
@@ -65,7 +69,7 @@ export class DownloadManager {
       await this.transferService.updateStatus(dbTask.id, 'in_progress')
 
       // 开始下载
-      await this.downloadFile(task.url, task.savePath, dbTask.id, async (progress) => {
+      await this.downloadFile(task.url, finalSavePath, dbTask.id, async (progress) => {
         // 更新进度到数据库
         await this.transferService.updateProgress(dbTask.id, progress.downloadedBytes)
 
@@ -313,5 +317,40 @@ export class DownloadManager {
 
   getDefaultDownloadPath(): string {
     return app.getPath('downloads')
+  }
+
+  /**
+   * 应用日期子目录逻辑
+   * 如果配置开启,则在保存路径中添加 YYYY-MM 格式的子目录
+   */
+  private async applyDateFolderLogic(basePath: string, fileName: string): Promise<string> {
+    try {
+      const config = downloadConfigService.getConfig()
+
+      if (config.autoCreateDateFolder) {
+        // 生成 YYYY-MM 格式的子目录
+        const now = new Date()
+        const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+
+        // 从 basePath 中提取目录部分(如果 basePath 包含文件名)
+        const baseDir = path.dirname(basePath)
+        const dateFolder = path.join(baseDir, yearMonth)
+
+        // 确保日期子目录存在
+        if (!fs.existsSync(dateFolder)) {
+          fs.mkdirSync(dateFolder, { recursive: true })
+        }
+
+        // 返回完整路径
+        return path.join(dateFolder, fileName)
+      }
+
+      // 如果配置关闭,直接返回原路径
+      return basePath
+    } catch (error) {
+      console.error('应用日期文件夹逻辑失败:', error)
+      // 出错时返回原路径
+      return basePath
+    }
   }
 }

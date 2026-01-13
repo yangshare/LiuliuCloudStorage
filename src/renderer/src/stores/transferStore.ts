@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import { useNotification } from 'naive-ui'
+import { ref, computed, h } from 'vue'
+import { useNotification, useMessage } from 'naive-ui'
 import { throttle } from 'lodash-es'
 import { useQuotaStore } from './quotaStore'
 
@@ -695,12 +695,39 @@ export const useTransferStore = defineStore('transfer', () => {
       downloadProgressMap.value.delete(data.taskId)
     }, COMPLETED_TASK_CLEANUP_DELAY_MS)
 
-    // 显示应用内完成通知
+    // 显示应用内完成通知（带打开文件夹按钮）
     const notification = useNotification()
     notification.success({
       title: '下载完成',
       content: `文件 "${data.fileName}" 已成功下载到 ${data.savePath}`,
-      duration: 3000
+      duration: 5000,
+      action: () => h(
+        'button',
+        {
+          onClick: async () => {
+            try {
+              const result = await window.electronAPI?.downloadConfig.openFileDirectory(data.savePath)
+              if (!result?.success) {
+                const msg = useMessage()
+                msg.error(result?.error || '无法打开目录')
+              }
+            } catch (error: any) {
+              const msg = useMessage()
+              msg.error('打开目录失败: ' + error.message)
+            }
+          },
+          style: {
+            padding: '4px 12px',
+            backgroundColor: '#18a058',
+            color: 'white',
+            border: 'none',
+            borderRadius: '3px',
+            cursor: 'pointer',
+            fontSize: '12px'
+          }
+        },
+        '打开文件夹'
+      )
     })
 
     // Story 8.4: 显示系统下载完成通知

@@ -5,6 +5,7 @@ import { useFileStore } from '../../stores/fileStore'
 import { useTransferStore } from '../../stores/transferStore'
 import { useAuthStore } from '../../stores/authStore'
 import FileIcon from './FileIcon.vue'
+import DownloadDialog from '../download/DownloadDialog.vue'
 import { formatFileSize, formatDate } from '../../utils/formatters'
 import type { FileItem } from '../../../../shared/types/electron'
 
@@ -22,6 +23,10 @@ const selectedFileForContextMenu = ref<FileItem | null>(null)
 // 删除确认对话框状态
 const showDeleteConfirm = ref(false)
 const isDeleting = ref(false)
+
+// 下载对话框状态
+const showDownloadDialog = ref(false)
+const fileForDownload = ref<FileItem | null>(null)
 
 // 离线模式提示
 const offlineModeMessage = computed(() => {
@@ -150,11 +155,21 @@ const contextMenuOptions = computed(() => {
       disabled: selectedFileForContextMenu.value.isDir
     },
     {
+      label: '下载到...',
+      key: 'downloadTo',
+      disabled: selectedFileForContextMenu.value.isDir
+    },
+    {
       label: '另存为...',
       key: 'saveAs',
       disabled: selectedFileForContextMenu.value.isDir
     },
     { type: 'divider', key: 'd1' },
+    {
+      label: '打开下载目录',
+      key: 'openDownloadDir'
+    },
+    { type: 'divider', key: 'd2' },
     {
       label: '删除',
       key: 'delete'
@@ -189,6 +204,12 @@ async function handleContextMenuSelect(key: string) {
       await handleDownload(file)
       break
 
+    case 'downloadTo':
+      // 下载到指定位置
+      fileForDownload.value = file
+      showDownloadDialog.value = true
+      break
+
     case 'saveAs':
       // 另存为
       await transferStore.downloadWithSaveAs(
@@ -198,6 +219,18 @@ async function handleContextMenuSelect(key: string) {
         authStore.token,
         authStore.user.username
       )
+      break
+
+    case 'openDownloadDir':
+      // 打开下载目录
+      try {
+        const result = await window.electronAPI?.downloadConfig.openDirectory()
+        if (!result?.success) {
+          message.error(result?.error || '无法打开目录')
+        }
+      } catch (error: any) {
+        message.error('打开目录失败: ' + error.message)
+      }
       break
 
     case 'delete':
@@ -239,6 +272,37 @@ async function confirmDelete() {
 function cancelDelete() {
   showDeleteConfirm.value = false
   selectedFileForContextMenu.value = null
+}
+
+// 处理下载到指定路径
+async function handleDownloadToPath(savePath: string) {
+  if (!fileForDownload.value) return
+
+  const file = fileForDownload.value
+  const currentPath = fileStore.currentPath === '/' ? '' : fileStore.currentPath
+  const remotePath = `${currentPath}/${file.name}`
+
+  try {
+    message.info(`正在下载到: ${savePath}`)
+    const result = await window.electronAPI.transfer.download(
+      remotePath,
+      file.name,
+      authStore.user.id,
+      authStore.token,
+      authStore.user.username,
+      savePath
+    )
+
+    if (result?.success) {
+      message.success(`已添加到下载队列: ${file.name}`)
+    } else {
+      message.error(result?.error || '下载失败')
+    }
+  } catch (error: any) {
+    message.error(error.message || '下载失败')
+  } finally {
+    fileForDownload.value = null
+  }
 }
 
 const rowProps = (row: FileItem) => ({
@@ -309,6 +373,13 @@ const rowProps = (row: FileItem) => ({
         :positive-button-props="{ type: 'error', loading: isDeleting }"
         @positive-click="confirmDelete"
         @negative-click="cancelDelete"
+      />
+
+      <!-- 下载对话框 -->
+      <DownloadDialog
+        v-model:visible="showDownloadDialog"
+        :file="fileForDownload"
+        @confirm="handleDownloadToPath"
       />
     </n-spin>
   </div>

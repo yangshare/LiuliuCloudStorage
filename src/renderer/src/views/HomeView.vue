@@ -14,6 +14,7 @@ import DownloadProgressPanel from '../components/transfer/DownloadProgressPanel.
 import DownloadQueuePanel from '../components/transfer/DownloadQueuePanel.vue'
 import CreateFolderModal from '../components/file/CreateFolderModal.vue'
 import QuotaDisplay from '../components/quota/QuotaDisplay.vue'
+import BatchActionToolbar from '../components/file/BatchActionToolbar.vue'
 import { useFileStore } from '../stores/fileStore'
 import { useTransferStore } from '../stores/transferStore'
 import { useAuthStore } from '../stores/authStore'
@@ -188,6 +189,7 @@ onUnmounted(() => {
           </template>
           <OfflineBanner />
           <DropZone />
+          <BatchActionToolbar />
           <FileList />
         </n-card>
       </n-layout-content>

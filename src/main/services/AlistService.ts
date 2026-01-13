@@ -342,6 +342,26 @@ class AlistService {
     }
   }
 
+  async renameFile(path: string, name: string): Promise<void> {
+    if (!this.client) {
+      throw { code: 'NOT_INITIALIZED', message: 'AlistService 未初始化' } as AppError
+    }
+
+    const fullPath = this.getFullPath(path)
+    const response = await this.client.post<AlistApiResponse<null>>(
+      '/api/fs/rename',
+      { path: fullPath, name },
+      { headers: this.getHeaders() }
+    )
+
+    if (response.data.code !== 200) {
+      throw {
+        code: `ALIST_${response.data.code}`,
+        message: response.data.message || '重命名失败'
+      } as AppError
+    }
+  }
+
   async getDownloadUrl(remotePath: string): Promise<DownloadUrlResult> {
     if (!this.client) {
       throw { code: 'NOT_INITIALIZED', message: 'AlistService 未初始化' } as AppError

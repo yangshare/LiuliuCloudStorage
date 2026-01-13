@@ -316,7 +316,15 @@ export class DownloadManager {
   }
 
   getDefaultDownloadPath(): string {
-    return app.getPath('downloads')
+    try {
+      // 读取用户配置的下载目录
+      const config = downloadConfigService.getConfig()
+      return config.defaultPath
+    } catch (error) {
+      // 如果配置不存在，回退到系统默认下载文件夹
+      console.warn('下载配置不存在，使用系统默认下载文件夹:', error)
+      return app.getPath('downloads')
+    }
   }
 
   /**

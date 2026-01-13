@@ -4,7 +4,7 @@ import { NTree } from 'naive-ui'
 import { useFileStore, type TreeNode } from '../../stores/fileStore'
 
 const fileStore = useFileStore()
-const expandedKeys = ref<string[]>([])
+const expandedKeys = ref<string[]>(['/'])
 
 // 监听 currentPath 变化，自动展开路径上的所有节点
 watch(() => fileStore.currentPath, async (newPath) => {
@@ -44,17 +44,45 @@ function updateTreeNode(nodes: TreeNode[], path: string, children: TreeNode[]) {
 
 async function handleLoad(node: TreeNode) {
   const children = await fileStore.loadTreeChildren(node.key)
+
   if (children.length === 0) {
     node.isLeaf = true
+    // 同步更新 treeData 中的节点
+    setTreeNodeLeaf(fileStore.treeData, node.key, true)
   } else {
     node.children = children
+    // 同步更新 treeData 中的节点
+    updateTreeNode(fileStore.treeData, node.key, children)
+
+    // 手动将节点添加到展开列表（修复下载后无法展开的问题）
+    if (!expandedKeys.value.includes(node.key)) {
+      expandedKeys.value = [...expandedKeys.value, node.key]
+    }
   }
+}
+
+// 递归设置树节点为叶子节点
+function setTreeNodeLeaf(nodes: TreeNode[], path: string, isLeaf: boolean): boolean {
+  for (const n of nodes) {
+    if (n.key === path) {
+      n.isLeaf = isLeaf
+      return true
+    }
+    if (n.children && setTreeNodeLeaf(n.children, path, isLeaf)) {
+      return true
+    }
+  }
+  return false
 }
 
 function handleSelect(keys: string[]) {
   if (keys.length > 0) {
     fileStore.navigateTo(keys[0])
   }
+}
+
+function handleExpandedKeysUpdate(keys: string[]) {
+  expandedKeys.value = keys
 }
 </script>
 
@@ -66,7 +94,7 @@ function handleSelect(keys: string[]) {
       :expanded-keys="expandedKeys"
       :on-load="handleLoad"
       @update:selected-keys="handleSelect"
-      @update:expanded-keys="(keys) => expandedKeys = keys"
+      @update:expanded-keys="handleExpandedKeysUpdate"
       selectable
       block-line
       expand-on-click

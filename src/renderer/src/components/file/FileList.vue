@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { NDataTable, NSpin, NAlert, NButton, NEmpty, NTag, NDropdown, NModal, useMessage } from 'naive-ui'
+import { NDataTable, NSpin, NAlert, NButton, NEmpty, NTag, NDropdown, NModal, NCheckbox, NInput, useMessage } from 'naive-ui'
 import { h, computed, ref } from 'vue'
 import { useFileStore } from '../../stores/fileStore'
 import { useTransferStore } from '../../stores/transferStore'
 import { useAuthStore } from '../../stores/authStore'
 import FileIcon from './FileIcon.vue'
 import DownloadDialog from '../download/DownloadDialog.vue'
+import ConfirmDeleteDialog from './ConfirmDeleteDialog.vue'
 import { formatFileSize, formatDate } from '../../utils/formatters'
 import type { FileItem } from '../../../../shared/types/electron'
 
@@ -24,6 +25,11 @@ const selectedFileForContextMenu = ref<FileItem | null>(null)
 const showDeleteConfirm = ref(false)
 const isDeleting = ref(false)
 
+// 重命名状态
+const editingFile = ref<FileItem | null>(null)
+const editingName = ref('')
+const isRenaming = ref(false)
+
 // 下载对话框状态
 const showDownloadDialog = ref(false)
 const fileForDownload = ref<FileItem | null>(null)
@@ -40,6 +46,30 @@ const offlineModeMessage = computed(() => {
 
 const columns = [
   {
+    title: () => h(NCheckbox, {
+      checked: fileStore.isAllSelected,
+      indeterminate: fileStore.isPartialSelected && !fileStore.isAllSelected,
+      onUpdateChecked: (checked: boolean) => {
+        if (checked) {
+          fileStore.selectAll()
+        } else {
+          fileStore.deselectAll()
+        }
+      }
+    }),
+    key: 'checkbox',
+    width: 40,
+    render: (row: FileItem) => h(NCheckbox, {
+      checked: fileStore.isSelected(row),
+      onUpdateChecked: (checked: boolean) => {
+        fileStore.toggleSelect(row)
+      },
+      onClick: (e: Event) => {
+        e.stopPropagation() // 阻止事件冒泡，避免触发行点击
+      }
+    })
+  },
+  {
     title: '',
     key: 'icon',
     width: 40,
@@ -48,7 +78,29 @@ const columns = [
   {
     title: '名称',
     key: 'name',
-    sorter: 'default'
+    sorter: 'default',
+    render: (row: FileItem) => {
+      // 如果正在编辑此文件,显示输入框
+      if (editingFile.value && editingFile.value.name === row.name) {
+        return h(NInput, {
+          value: editingName.value,
+          size: 'small',
+          autofocus: true,
+          loading: isRenaming.value,
+          onUpdateValue: (value: string) => { editingName.value = value },
+          onKeyup: (e: KeyboardEvent) => {
+            if (e.key === 'Enter') {
+              confirmRename()
+            } else if (e.key === 'Escape') {
+              cancelRename()
+            }
+          },
+          onBlur: cancelRename
+        })
+      }
+      // 否则显示文件名
+      return row.name
+    }
   },
   {
     title: '大小',
@@ -91,7 +143,24 @@ function handleRetry() {
   fileStore.refresh()
 }
 
-function handleRowClick(row: FileItem) {
+function handleRowClick(row: FileItem, index: number, event?: MouseEvent) {
+  // 处理多选逻辑
+  if (event?.ctrlKey || event?.metaKey) {
+    // Ctrl/Cmd + 点击：切换选中状态
+    fileStore.toggleSelect(row)
+    fileStore.lastClickedIndex = index
+    return
+  }
+
+  if (event?.shiftKey && fileStore.lastClickedIndex >= 0) {
+    // Shift + 点击：范围选择
+    fileStore.selectRange(fileStore.lastClickedIndex, index)
+    return
+  }
+
+  // 普通点击 - 清空之前的选中状态
+  fileStore.clearSelection()
+
   if (row.isDir) {
     // 单击目录直接进入
     fileStore.enterFolder(row)
@@ -99,6 +168,8 @@ function handleRowClick(row: FileItem) {
     // 单击文件显示详情
     fileStore.selectFile(row)
   }
+
+  fileStore.lastClickedIndex = index
 }
 
 function handleRowDoubleClick(row: FileItem) {
@@ -171,6 +242,10 @@ const contextMenuOptions = computed(() => {
     },
     { type: 'divider', key: 'd2' },
     {
+      label: '重命名',
+      key: 'rename'
+    },
+    {
       label: '删除',
       key: 'delete'
     }
@@ -233,6 +308,11 @@ async function handleContextMenuSelect(key: string) {
       }
       break
 
+    case 'rename':
+      // 开始重命名
+      startRename(file)
+      return // 不清空 selectedFileForContextMenu
+
     case 'delete':
       // 显示删除确认对话框
       showDeleteConfirm.value = true
@@ -255,7 +335,36 @@ async function confirmDelete() {
 
     if (result.success) {
       message.success('删除成功')
+
+      // 如果删除的是文件夹,从目录树中移除并刷新父节点
+      if (selectedFileForContextMenu.value.isDir) {
+        const deletedFolderPath = fileStore.currentPath === '/'
+          ? `/${selectedFileForContextMenu.value.name}`
+          : `${fileStore.currentPath}/${selectedFileForContextMenu.value.name}`
+
+        fileStore.removeTreeNode(deletedFolderPath)
+        await fileStore.refreshTreeNode(fileStore.currentPath)
+
+        // Task 4.2: 如果当前路径是被删除文件夹的子路径,导航到父级
+        if (fileStore.currentPath.startsWith(deletedFolderPath)) {
+          const parentPath = fileStore.currentPath === '/' ? '/' :
+            fileStore.currentPath.split('/').slice(0, -1).join('/') || '/'
+          fileStore.navigateTo(parentPath)
+          return // 导航会触发刷新,不需要继续执行
+        }
+      }
+
+      // 刷新文件列表
       fileStore.refresh()
+
+      // 如果返回需要刷新配额标志,触发配额重新计算
+      if (result.shouldRefreshQuota) {
+        try {
+          await window.electronAPI.quota.calculate()
+        } catch (quotaError) {
+          console.warn('配额刷新失败:', quotaError)
+        }
+      }
     } else {
       message.error(result.error || '删除失败')
     }
@@ -271,6 +380,78 @@ async function confirmDelete() {
 // 取消删除
 function cancelDelete() {
   showDeleteConfirm.value = false
+  selectedFileForContextMenu.value = null
+}
+
+// 开始重命名
+function startRename(file: FileItem) {
+  editingFile.value = file
+  editingName.value = file.name
+  showContextMenu.value = false
+}
+
+// 确认重命名
+async function confirmRename() {
+  if (!editingFile.value || !editingName.value.trim()) {
+    cancelRename()
+    return
+  }
+
+  // 名称未改变
+  if (editingName.value === editingFile.value.name) {
+    cancelRename()
+    return
+  }
+
+  isRenaming.value = true
+  try {
+    const filePath = fileStore.currentPath === '/'
+      ? `/${editingFile.value.name}`
+      : `${fileStore.currentPath}/${editingFile.value.name}`
+
+    const result = await window.electronAPI.file.rename(filePath, editingName.value)
+
+    if (result.success) {
+      message.success('重命名成功')
+
+      // 如果重命名的是文件夹,需要处理目录树和路径更新
+      if (editingFile.value.isDir) {
+        const oldFolderPath = filePath
+        const newFolderPath = fileStore.currentPath === '/'
+          ? `/${editingName.value}`
+          : `${fileStore.currentPath}/${editingName.value}`
+
+        // 更新目录树节点的label
+        fileStore.updateTreeNodeLabel(oldFolderPath, editingName.value)
+
+        // Task 3.2: 如果当前路径包含被重命名的文件夹,更新当前路径
+        if (fileStore.currentPath.startsWith(oldFolderPath)) {
+          const newPath = fileStore.currentPath.replace(oldFolderPath, newFolderPath)
+          fileStore.navigateTo(newPath)
+          return // 导航会触发刷新,不需要继续执行
+        }
+
+        // 刷新父节点以更新目录树
+        await fileStore.refreshTreeNode(fileStore.currentPath)
+      }
+
+      // 刷新文件列表
+      fileStore.refresh()
+    } else {
+      message.error(result.error || '重命名失败')
+    }
+  } catch (error: any) {
+    message.error(error.message || '重命名失败')
+  } finally {
+    isRenaming.value = false
+    cancelRename()
+  }
+}
+
+// 取消重命名
+function cancelRename() {
+  editingFile.value = null
+  editingName.value = ''
   selectedFileForContextMenu.value = null
 }
 
@@ -305,9 +486,9 @@ async function handleDownloadToPath(savePath: string) {
   }
 }
 
-const rowProps = (row: FileItem) => ({
-  style: 'cursor: pointer',
-  onClick: () => handleRowClick(row),
+const rowProps = (row: FileItem, index: number) => ({
+  style: fileStore.isSelected(row) ? 'cursor: pointer; background-color: var(--n-color-hover);' : 'cursor: pointer',
+  onClick: (e: MouseEvent) => handleRowClick(row, index, e),
   onDblclick: () => handleRowDoubleClick(row),
   onKeydown: (e: KeyboardEvent) => handleRowKeydown(row, e),
   onContextmenu: (e: MouseEvent) => handleContextMenu(row, e)
@@ -363,16 +544,11 @@ const rowProps = (row: FileItem) => ({
       />
 
       <!-- 删除确认对话框 -->
-      <n-modal
-        v-model:show="showDeleteConfirm"
-        preset="dialog"
-        title="确认删除"
-        :content="`确定要删除「${selectedFileForContextMenu?.name}」吗？${selectedFileForContextMenu?.isDir ? '\\n\\n⚠️ 这是一个文件夹，删除后其中所有内容都将被删除！' : ''}`"
-        positive-text="删除"
-        negative-text="取消"
-        :positive-button-props="{ type: 'error', loading: isDeleting }"
-        @positive-click="confirmDelete"
-        @negative-click="cancelDelete"
+      <ConfirmDeleteDialog
+        v-model:visible="showDeleteConfirm"
+        :file="selectedFileForContextMenu"
+        :loading="isDeleting"
+        @confirm="confirmDelete"
       />
 
       <!-- 下载对话框 -->

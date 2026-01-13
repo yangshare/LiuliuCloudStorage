@@ -11,6 +11,7 @@ export enum ActionType {
   UPLOAD = 'upload',
   DOWNLOAD = 'download',
   DELETE = 'delete',
+  RENAME = 'rename',
   FOLDER_CREATE = 'folder_create',
   LOGIN = 'login',
   LOGOUT = 'logout'

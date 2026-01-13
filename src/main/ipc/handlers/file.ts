@@ -138,12 +138,66 @@ export function registerFileHandlers(): void {
         })
       }
 
-      return { success: true }
+      return { success: true, shouldRefreshQuota: true }
     } catch (error) {
       const appError = error as AppError
       return {
         success: false,
         error: appError.message || '删除文件失败'
+      }
+    }
+  })
+
+  ipcMain.handle('file:batchDelete', async (_event, dir: string, fileNames: string[]): Promise<MkdirResult> => {
+    try {
+      await alistService.removeFile(dir, fileNames)
+
+      // 记录批量删除操作日志
+      const userId = alistService.getCurrentUserId()
+      if (userId) {
+        activityService.logActivity({
+          userId,
+          actionType: ActionType.DELETE,
+          fileCount: fileNames.length,
+          details: { dir, fileNames }
+        }).catch(err => {
+          console.warn('[file:batchDelete] 日志记录失败:', err)
+        })
+      }
+
+      return { success: true }
+    } catch (error) {
+      const appError = error as AppError
+      return {
+        success: false,
+        error: appError.message || '批量删除文件失败'
+      }
+    }
+  })
+
+  ipcMain.handle('file:rename', async (_event, path: string, newName: string): Promise<MkdirResult> => {
+    try {
+      await alistService.renameFile(path, newName)
+
+      // 记录重命名操作日志
+      const userId = alistService.getCurrentUserId()
+      if (userId) {
+        activityService.logActivity({
+          userId,
+          actionType: ActionType.RENAME,
+          fileCount: 1,
+          details: { path, newName }
+        }).catch(err => {
+          console.warn('[file:rename] 日志记录失败:', err)
+        })
+      }
+
+      return { success: true }
+    } catch (error) {
+      const appError = error as AppError
+      return {
+        success: false,
+        error: appError.message || '重命名失败'
       }
     }
   })

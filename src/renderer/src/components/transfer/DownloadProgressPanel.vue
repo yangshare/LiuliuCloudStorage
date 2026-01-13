@@ -23,8 +23,8 @@
             style="padding: 4px"
           >
             <n-icon size="18">
-              <ChevronUpIcon v-if="!transferStore.isProgressPanelCollapsed" />
-              <ChevronDownIcon v-else />
+              <ChevronDownIcon v-if="!transferStore.isProgressPanelCollapsed" />
+              <ChevronUpIcon v-else />
             </n-icon>
           </n-button>
         </n-space>

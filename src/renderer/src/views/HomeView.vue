@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { NLayout, NLayoutSider, NLayoutContent, NCard, NButton, NSpace, NIcon, NText, NDrawer } from 'naive-ui'
-import { CloudUploadOutline, FolderOutline, ListOutline } from '@vicons/ionicons5'
+import { CloudUploadOutline, FolderOutline, ListOutline, SettingsOutline } from '@vicons/ionicons5'
 import FileList from '../components/file/FileList.vue'
 import DirectoryTree from '../components/file/DirectoryTree.vue'
 import Breadcrumb from '../components/file/Breadcrumb.vue'
@@ -17,6 +18,7 @@ import { useFileStore } from '../stores/fileStore'
 import { useTransferStore } from '../stores/transferStore'
 import { useAuthStore } from '../stores/authStore'
 
+const router = useRouter()
 const fileStore = useFileStore()
 const transferStore = useTransferStore()
 const authStore = useAuthStore()
@@ -161,6 +163,12 @@ onUnmounted(() => {
             <n-space justify="space-between" align="center">
               <Breadcrumb />
               <n-space>
+                <n-button size="small" @click="router.push('/settings')">
+                  <template #icon>
+                    <n-icon><SettingsOutline /></n-icon>
+                  </template>
+                  设置
+                </n-button>
                 <n-button size="small" @click="showQueueDrawer = true">
                   <template #icon>
                     <n-icon><ListOutline /></n-icon>
@@ -262,6 +270,11 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 0;
+  pointer-events: none;
+}
+
+.transfer-panels > * {
+  pointer-events: auto;
 }
 
 .transfer-panel {
@@ -270,6 +283,16 @@ onUnmounted(() => {
 
 .download-panel {
   width: 100%;
+  transition: all 0.3s ease-in-out;
+}
+
+.download-panel:has(.collapsed) {
+  width: 260px;
+  margin-left: 0;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .quota-section {

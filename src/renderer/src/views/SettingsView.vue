@@ -1,6 +1,14 @@
 <template>
   <div class="settings-container">
     <n-card title="设置" :bordered="false">
+      <template #header-extra>
+        <n-button text @click="router.push('/')">
+          <template #icon>
+            <n-icon><ArrowBackOutline /></n-icon>
+          </template>
+          返回主页
+        </n-button>
+      </template>
       <n-space vertical size="large">
         <!-- 开机自启动 -->
         <n-form-item label="开机自启动">
@@ -92,8 +100,11 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { NCard, NSpace, NFormItem, NSwitch, NText, NDivider, NInput, NInputGroup, NButton, NCheckbox, useMessage, useDialog } from 'naive-ui'
+import { useRouter } from 'vue-router'
+import { NCard, NSpace, NFormItem, NSwitch, NText, NDivider, NInput, NInputGroup, NButton, NCheckbox, NIcon, useMessage, useDialog } from 'naive-ui'
+import { ArrowBackOutline } from '@vicons/ionicons5'
 
+const router = useRouter()
 const message = useMessage()
 const dialog = useDialog()
 

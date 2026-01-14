@@ -29,9 +29,8 @@ export default defineConfig({
     }
   },
   renderer: {
-    root: 'src/renderer',
     build: {
-      outDir: '../../dist-electron/renderer',
+      outDir: 'dist-electron/renderer',
       rollupOptions: {
         input: 'src/renderer/index.html'
       }

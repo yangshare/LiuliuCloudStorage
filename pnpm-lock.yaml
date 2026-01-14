@@ -14,9 +14,6 @@ importers:
       better-sqlite3:
         specifier: ^11.0.0
         version: 11.10.0
-      electron:
-        specifier: ^30.0.0
-        version: 30.5.1
       lodash-es:
         specifier: ^4.17.22
         version: 4.17.22
@@ -57,6 +54,9 @@ importers:
       drizzle-orm:
         specifier: ^0.45.1
         version: 0.45.1(@types/better-sqlite3@7.6.13)(better-sqlite3@11.10.0)(gel@2.2.0)(sql.js@1.13.0)
+      electron:
+        specifier: ^30.0.0
+        version: 30.5.1
       electron-builder:
         specifier: ^26.4.0
         version: 26.4.0(electron-builder-squirrel-windows@26.4.0)

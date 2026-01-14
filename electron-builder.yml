@@ -39,5 +39,9 @@ nsis:
   deleteAppDataOnUninstall: true
   # NSIS安装程序也需要签名
   warningsAsErrors: false
+  artifactName: 安装版-${version}.${ext}
+
+portable:
+  artifactName: 便携版-${version}.${ext}
 
 publish: null

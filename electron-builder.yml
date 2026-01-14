@@ -1,0 +1,43 @@
+appId: com.liuliu.cloudstorage
+productName: 溜溜网盘
+copyright: Copyright © 2026 ${author}
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - dist-electron
+  - dist
+  - package.json
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    # 便携版（绿色版）- 无需安装，无签名警告
+    - target: portable
+      arch:
+        - x64
+    # 压缩包版本
+    - target: zip
+      arch:
+        - x64
+  # 代码签名配置（可选，如果没有证书可以注释掉）
+  # 如果需要签名，取消下面的注释并配置 .env.local 文件
+  # certificateFile: ${env.WIN_CSC_LINK}
+  # certificatePassword: ${env.WIN_CSC_KEY_PASSWORD}
+  # signingHashAlgorithms:
+  #   - sha256
+  # rfc3161TimeStampServer: http://timestamp.digicert.com
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: true
+  deleteAppDataOnUninstall: true
+  # NSIS安装程序也需要签名
+  warningsAsErrors: false
+
+publish: null

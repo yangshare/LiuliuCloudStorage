@@ -1,0 +1,94 @@
+import { app, BrowserWindow } from 'electron'
+import { join } from 'path'
+
+// 修复缓存权限问题：必须在 app.ready 之前设置
+const userDataPath = join(app.getPath('appData'), 'liuliu-cloud-storage')
+app.setPath('userData', userDataPath)
+app.setPath('cache', join(userDataPath, 'Cache'))
+app.setPath('crashDumps', join(userDataPath, 'Crashpad'))
+
+// 禁用 GPU 缓存以避免权限问题
+app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
+
+import { initDatabase, closeDatabase } from './database'
+import { registerAllHandlers } from './ipc'
+import { cryptoService } from './services/CryptoService'
+import { alistService } from './services/AlistService'
+import { orchestrationService } from './services/OrchestrationService'
+import { preferencesService } from './services/PreferencesService'
+import { trayService } from './services/TrayService'
+import { notificationService } from './services/NotificationService'
+
+// Alist 服务器地址，可通过环境变量配置
+const ALIST_BASE_URL = process.env.ALIST_BASE_URL || 'http://10.2.3.7:5244'
+const N8N_BASE_URL = process.env.N8N_BASE_URL || 'http://10.2.3.7:5678'
+
+let mainWindow: BrowserWindow | null = null
+
+function createWindow(): void {
+  mainWindow = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  })
+
+  // 设置托盘服务的主窗口引用
+  trayService.setMainWindow(mainWindow)
+
+  // 设置通知服务的主窗口引用
+  notificationService.setMainWindow(mainWindow)
+
+  // 监听窗口关闭事件，最小化到托盘而不是直接关闭
+  mainWindow.on('close', (event) => {
+    if (!app.isQuitting) {
+      event.preventDefault()
+      mainWindow?.hide()
+    }
+  })
+
+  if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
+    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    mainWindow.webContents.openDevTools()
+  } else {
+    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+  }
+}
+
+app.whenReady().then(async () => {
+  initDatabase()
+  await cryptoService.initialize()
+  alistService.initialize(ALIST_BASE_URL)
+  orchestrationService.initialize(N8N_BASE_URL)
+  registerAllHandlers()
+  createWindow()
+
+  // 初始化系统托盘
+  trayService.initialize()
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow()
+    }
+  })
+})
+
+app.on('window-all-closed', () => {
+  // Windows/Linux: 不退出应用，保持在托盘运行
+  // macOS: 即使所有窗口关闭也保持应用运行
+  // 不做任何操作，让应用在后台运行
+})
+
+app.on('before-quit', () => {
+  // 设置退出标志，允许窗口真正关闭
+  app.isQuitting = true
+})
+
+app.on('quit', () => {
+  closeDatabase()
+  preferencesService.close()
+  trayService.destroy()
+})

@@ -26,6 +26,13 @@ jobs:
           node-version: '22'
           cache: 'pnpm'
 
+      - name: Update version from tag
+        run: |
+          $TAG = "${{ github.ref_name }}"
+          $VERSION = $TAG -replace '^v', ''
+          npm version $VERSION --no-git-tag-version
+        shell: pwsh
+
       - name: Install dependencies
         run: pnpm install
 

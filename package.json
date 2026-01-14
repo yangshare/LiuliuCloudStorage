@@ -38,7 +38,6 @@
   "dependencies": {
     "@vicons/ionicons5": "^0.13.0",
     "better-sqlite3": "^11.0.0",
-    "electron": "^30.0.0",
     "lodash-es": "^4.17.22"
   },
   "devDependencies": {

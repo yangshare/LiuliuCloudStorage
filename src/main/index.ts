@@ -20,8 +20,8 @@ import { trayService } from './services/TrayService'
 import { notificationService } from './services/NotificationService'
 
 // Alist 服务器地址，可通过环境变量配置
-const ALIST_BASE_URL = process.env.ALIST_BASE_URL || 'http://192.168.6.3:5244'
-const N8N_BASE_URL = process.env.N8N_BASE_URL || 'http://192.168.6.3:5678'
+const ALIST_BASE_URL = process.env.ALIST_BASE_URL || 'http://10.2.3.7:5244'
+const N8N_BASE_URL = process.env.N8N_BASE_URL || 'http://10.2.3.7:5678'
 
 let mainWindow: BrowserWindow | null = null
 

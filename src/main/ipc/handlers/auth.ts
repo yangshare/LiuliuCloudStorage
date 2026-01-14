@@ -5,7 +5,7 @@ import { alistService } from '../../services/AlistService'
 import { activityService, ActionType } from '../../services/ActivityService'
 import { DEFAULT_QUOTA } from '../../../shared/constants'
 
-const N8N_WEBHOOK_URL = 'http://192.168.6.3:5678/webhook/liuliu'
+const N8N_WEBHOOK_URL = 'http://10.2.3.7:5678/webhook/liuliu'
 
 let currentSession: { userId: number; username: string; token: string } | null = null
 

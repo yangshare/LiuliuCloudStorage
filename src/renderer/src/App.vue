@@ -1,5 +1,13 @@
 <script setup lang="ts">
 import { NConfigProvider, NMessageProvider, NNotificationProvider, NDialogProvider, zhCN, dateZhCN } from 'naive-ui'
+import { onMounted } from 'vue'
+import { useUpdateStore } from '@/stores/updateStore'
+
+const updateStore = useUpdateStore()
+
+onMounted(() => {
+  updateStore.init()
+})
 </script>
 
 <template>

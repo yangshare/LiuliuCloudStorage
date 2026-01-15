@@ -19,7 +19,9 @@ const validChannels = [
   'tray:update-transfer-status', 'tray:update-transfer-counts', 'tray:show-window', 'tray:hide-window', 'tray-quick-upload',
   'notification:show', 'app:getVersion', 'app:set-login-item-settings', 'app:get-login-item-settings',
   'activity:log', 'activity:get-user-logs', 'activity:get-all-logs', 'activity:get-dau', 'activity:get-user-stats',
-  'downloadConfig:selectDirectory', 'downloadConfig:get', 'downloadConfig:update', 'downloadConfig:openDirectory', 'downloadConfig:openFileDirectory', 'downloadConfig:reset', 'downloadConfig:createDirectory'
+  'downloadConfig:selectDirectory', 'downloadConfig:get', 'downloadConfig:update', 'downloadConfig:openDirectory', 'downloadConfig:openFileDirectory', 'downloadConfig:reset', 'downloadConfig:createDirectory',
+  'update:check', 'update:install-now', 'update:install-on-quit',
+  'update:available', 'update:not-available', 'update:download-progress', 'update:downloaded', 'update:error'
 ]
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -188,6 +190,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     openFileDirectory: (filePath: string) => ipcRenderer.invoke('downloadConfig:openFileDirectory', filePath),
     reset: () => ipcRenderer.invoke('downloadConfig:reset'),
     createDirectory: (dirPath: string) => ipcRenderer.invoke('downloadConfig:createDirectory', dirPath)
+  },
+
+  updateAPI: {
+    check: () => ipcRenderer.invoke('update:check'),
+    installNow: () => ipcRenderer.invoke('update:install-now'),
+    installOnQuit: () => ipcRenderer.invoke('update:install-on-quit'),
+    onAvailable: (callback: (info: any) => void) =>
+      ipcRenderer.on('update:available', (_, info) => callback(info)),
+    onNotAvailable: (callback: () => void) =>
+      ipcRenderer.on('update:not-available', () => callback()),
+    onDownloadProgress: (callback: (progress: any) => void) =>
+      ipcRenderer.on('update:download-progress', (_, progress) => callback(progress)),
+    onDownloaded: (callback: () => void) =>
+      ipcRenderer.on('update:downloaded', () => callback()),
+    onError: (callback: (message: string) => void) =>
+      ipcRenderer.on('update:error', (_, message) => callback(message))
   }
 })
 

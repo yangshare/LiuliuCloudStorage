@@ -18,6 +18,8 @@ import { orchestrationService } from './services/OrchestrationService'
 import { preferencesService } from './services/PreferencesService'
 import { trayService } from './services/TrayService'
 import { notificationService } from './services/NotificationService'
+import { updateService } from './services/UpdateService'
+import { registerUpdateHandlers } from './ipc/handlers/update'
 
 // Alist 服务器地址，可通过环境变量配置
 const ALIST_BASE_URL = process.env.ALIST_BASE_URL || 'http://10.2.3.7:5244'
@@ -64,7 +66,13 @@ app.whenReady().then(async () => {
   alistService.initialize(ALIST_BASE_URL)
   orchestrationService.initialize(N8N_BASE_URL)
   registerAllHandlers()
+  registerUpdateHandlers()
   createWindow()
+
+  // 初始化更新服务
+  if (mainWindow) {
+    updateService.init(mainWindow)
+  }
 
   // 初始化系统托盘
   trayService.initialize()
@@ -85,6 +93,8 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   // 设置退出标志，允许窗口真正关闭
   app.isQuitting = true
+  // 应用关闭时自动安装更新
+  updateService.installOnQuit()
 })
 
 app.on('quit', () => {

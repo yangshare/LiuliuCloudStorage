@@ -15,6 +15,7 @@ import DownloadQueuePanel from '../components/transfer/DownloadQueuePanel.vue'
 import CreateFolderModal from '../components/file/CreateFolderModal.vue'
 import QuotaDisplay from '../components/quota/QuotaDisplay.vue'
 import BatchActionToolbar from '../components/file/BatchActionToolbar.vue'
+import UpdateButton from '../components/common/UpdateButton.vue'
 import { useFileStore } from '../stores/fileStore'
 import { useTransferStore } from '../stores/transferStore'
 import { useAuthStore } from '../stores/authStore'
@@ -164,6 +165,7 @@ onUnmounted(() => {
             <n-space justify="space-between" align="center">
               <Breadcrumb />
               <n-space>
+                <UpdateButton />
                 <n-button size="small" @click="router.push('/settings')">
                   <template #icon>
                     <n-icon><SettingsOutline /></n-icon>

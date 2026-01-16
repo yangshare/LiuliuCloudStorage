@@ -44,4 +44,8 @@ nsis:
 portable:
   artifactName: LiuliuCloudStorage-Portable-${version}.${ext}
 
-publish: null
+publish:
+  provider: github
+  owner: yangc91
+  repo: liuliu-cloud-storage
+  releaseType: release

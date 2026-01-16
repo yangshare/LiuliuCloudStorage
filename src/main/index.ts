@@ -19,7 +19,6 @@ import { preferencesService } from './services/PreferencesService'
 import { trayService } from './services/TrayService'
 import { notificationService } from './services/NotificationService'
 import { updateService } from './services/UpdateService'
-import { registerUpdateHandlers } from './ipc/handlers/update'
 
 // Alist 服务器地址，可通过环境变量配置
 const ALIST_BASE_URL = process.env.ALIST_BASE_URL || 'http://10.2.3.7:5244'
@@ -66,7 +65,6 @@ app.whenReady().then(async () => {
   alistService.initialize(ALIST_BASE_URL)
   orchestrationService.initialize(N8N_BASE_URL)
   registerAllHandlers()
-  registerUpdateHandlers()
   createWindow()
 
   // 初始化更新服务

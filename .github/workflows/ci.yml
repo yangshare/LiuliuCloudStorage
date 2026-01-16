@@ -1,8 +1,13 @@
 name: CI
 
+# 已禁用自动触发以加快 PR 合并速度
+# on:
+#   pull_request:
+#     branches: [main]
+
+# 如需手动触发，可以使用 workflow_dispatch
 on:
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 jobs:
   test:

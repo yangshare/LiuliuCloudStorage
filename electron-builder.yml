@@ -44,8 +44,9 @@ nsis:
 portable:
   artifactName: LiuliuCloudStorage-Portable-${version}.${ext}
 
-publish:
-  provider: github
-  owner: yangc91
-  repo: liuliu-cloud-storage
-  releaseType: release
+# 禁用自动发布，使用 GitHub Actions 的 softprops/action-gh-release 来上传
+# publish:
+#   provider: github
+#   owner: yangc91
+#   repo: liuliu-cloud-storage
+#   releaseType: release

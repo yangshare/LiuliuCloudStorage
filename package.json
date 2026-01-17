@@ -39,7 +39,9 @@
     "@vicons/ionicons5": "^0.13.0",
     "better-sqlite3": "^11.0.0",
     "electron-updater": "^6.7.3",
-    "lodash-es": "^4.17.22"
+    "lodash-es": "^4.17.22",
+    "winston": "^3.19.0",
+    "winston-daily-rotate-file": "^5.0.0"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.0",

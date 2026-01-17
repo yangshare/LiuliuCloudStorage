@@ -20,6 +20,7 @@ import { preferencesService } from './services/PreferencesService'
 import { trayService } from './services/TrayService'
 import { notificationService } from './services/NotificationService'
 import { updateService } from './services/UpdateService'
+import { loggerService } from './services/LoggerService'
 
 // Alist 服务器地址，可通过环境变量配置
 const ALIST_BASE_URL = process.env.ALIST_BASE_URL || 'http://10.2.3.7:5244'
@@ -34,21 +35,22 @@ function getWindowIcon(): string {
     join(process.resourcesPath, 'icon.ico'),
   ]
 
-  console.log('[getWindowIcon] 尝试查找图标文件...')
-  console.log('[getWindowIcon] process.cwd():', process.cwd())
-  console.log('[getWindowIcon] __dirname:', __dirname)
-  console.log('[getWindowIcon] process.resourcesPath:', process.resourcesPath)
+  loggerService.debug('Main', '尝试查找图标文件...')
+  loggerService.debug('Main', `process.cwd(): ${process.cwd()}`)
+  loggerService.debug('Main', `__dirname: ${__dirname}`)
+  loggerService.debug('Main', `process.resourcesPath: ${process.resourcesPath}`)
 
   for (const iconPath of possiblePaths) {
-    console.log('[getWindowIcon] 检查路径:', iconPath, '存在:', existsSync(iconPath))
-    if (existsSync(iconPath)) {
-      console.log('[getWindowIcon] ✓ 使用图标:', iconPath)
+    const exists = existsSync(iconPath)
+    loggerService.debug('Main', `检查路径: ${iconPath}, 存在: ${exists}`)
+    if (exists) {
+      loggerService.info('Main', `✓ 使用图标: ${iconPath}`)
       return iconPath
     }
   }
 
   const fallback = join(__dirname, '../../build/icon.ico')
-  console.log('[getWindowIcon] ⚠ 未找到图标，使用回退路径:', fallback)
+  loggerService.warn('Main', `⚠ 未找到图标，使用回退路径: ${fallback}`)
   return fallback
 }
 
@@ -87,20 +89,35 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
+  loggerService.info('Main', '应用程序启动中...')
+
   initDatabase()
+  loggerService.info('Main', '数据库初始化完成')
+
   await cryptoService.initialize()
+  loggerService.info('Main', '加密服务初始化完成')
+
   alistService.initialize(ALIST_BASE_URL)
+  loggerService.info('Main', `Alist服务初始化完成: ${ALIST_BASE_URL}`)
+
   orchestrationService.initialize(N8N_BASE_URL)
+  loggerService.info('Main', `Orchestration服务初始化完成: ${N8N_BASE_URL}`)
+
   registerAllHandlers()
+  loggerService.info('Main', 'IPC处理器注册完成')
+
   createWindow()
+  loggerService.info('Main', '主窗口创建完成')
 
   // 初始化更新服务
   if (mainWindow) {
     updateService.init(mainWindow)
+    loggerService.info('Main', '更新服务初始化完成')
   }
 
   // 初始化系统托盘
   trayService.initialize()
+  loggerService.info('Main', '系统托盘初始化完成')
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -110,12 +127,14 @@ app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => {
+  loggerService.info('Main', '所有窗口已关闭，应用保持后台运行')
   // Windows/Linux: 不退出应用，保持在托盘运行
   // macOS: 即使所有窗口关闭也保持应用运行
   // 不做任何操作，让应用在后台运行
 })
 
 app.on('before-quit', () => {
+  loggerService.info('Main', '应用程序准备退出...')
   // 设置退出标志，允许窗口真正关闭
   app.isQuitting = true
   // 应用关闭时自动安装更新
@@ -123,6 +142,7 @@ app.on('before-quit', () => {
 })
 
 app.on('quit', () => {
+  loggerService.info('Main', '应用程序已退出')
   closeDatabase()
   preferencesService.close()
   trayService.destroy()

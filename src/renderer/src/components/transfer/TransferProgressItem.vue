@@ -30,7 +30,7 @@
         :loading="isResuming"
       >
         恢复上传
-      </el-button>>
+      </el-button>
     </div>
 
     <!-- 取消按钮（只对 pending 和 in_progress 状态显示） -->
@@ -42,7 +42,7 @@
         :loading="isCancelling"
       >
         取消
-      </el-button>>
+      </el-button>
     </div>
 
     <!-- 状态提示 -->

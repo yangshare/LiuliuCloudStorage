@@ -393,9 +393,7 @@ const tableRef = ref<InstanceType<typeof ElTable>>()
       :closable="true"
       style="margin-bottom: 12px"
     >
-      <template #default>
-        <el-button size="small" @click="handleRetry">重试</el-button>
-      </template>
+      <el-button size="small" @click="handleRetry">重试</el-button>
     </el-alert>
 
     <el-empty v-if="fileStore.sortedFiles.length === 0 && !fileStore.isLoadingFiles" description="暂无文件" />
@@ -532,7 +530,14 @@ const tableRef = ref<InstanceType<typeof ElTable>>()
 
 <style scoped>
 .file-list {
-  min-height: 200px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.file-list > :deep(.el-table) {
+  flex: 1;
 }
 
 :deep(.selected-row) {

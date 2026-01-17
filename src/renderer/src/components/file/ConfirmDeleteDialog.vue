@@ -41,7 +41,7 @@ function handleCancel() {
       <p>确定要删除「{{ file.name }}」吗？</p>
       <el-alert v-if="file.isDir" type="warning" style="margin-top: 12px">
         这是一个文件夹，删除后其中所有内容都将被删除！
-      </el-alert>>
+      </el-alert>
     </div>
-  </el-dialog>>
+  </el-dialog>
 </template>

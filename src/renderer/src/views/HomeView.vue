@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { NLayout, NLayoutSider, NLayoutContent, NCard, NButton, NSpace, NIcon, NText, NDrawer } from 'naive-ui'
-import { CloudUploadOutline, FolderOutline, ListOutline, SettingsOutline } from '@vicons/ionicons5'
+import { ElContainer, ElMain, ElCard, ElButton, ElIcon, ElText, ElDrawer } from 'element-plus'
+import { Upload, Folder, List, Setting } from '@element-plus/icons-vue'
 import FileList from '../components/file/FileList.vue'
-import DirectoryTree from '../components/file/DirectoryTree.vue'
 import Breadcrumb from '../components/file/Breadcrumb.vue'
 import FileDetail from '../components/file/FileDetail.vue'
 import OfflineBanner from '../components/common/OfflineBanner.vue'
@@ -13,7 +12,6 @@ import TransferProgressList from '../components/transfer/TransferProgressList.vu
 import DownloadProgressPanel from '../components/transfer/DownloadProgressPanel.vue'
 import DownloadQueuePanel from '../components/transfer/DownloadQueuePanel.vue'
 import CreateFolderModal from '../components/file/CreateFolderModal.vue'
-import QuotaDisplay from '../components/quota/QuotaDisplay.vue'
 import BatchActionToolbar from '../components/file/BatchActionToolbar.vue'
 import UpdateButton from '../components/common/UpdateButton.vue'
 import { useFileStore } from '../stores/fileStore'
@@ -152,50 +150,38 @@ onUnmounted(() => {
 
 <template>
   <div class="home">
-    <n-layout has-sider style="height: 100%">
-      <n-layout-sider bordered :width="260" content-style="padding: 0; overflow: auto;">
-        <div class="quota-section">
-          <QuotaDisplay />
-        </div>
-        <DirectoryTree />
-      </n-layout-sider>
-      <n-layout-content>
-        <n-card class="file-card">
+    <el-container style="height: 100%">
+      <el-main>
+        <el-card class="file-card">
           <template #header>
-            <n-space justify="space-between" align="center">
+            <div class="card-header">
               <Breadcrumb />
-              <n-space>
+              <div class="button-group">
                 <UpdateButton />
-                <n-button size="small" @click="router.push('/settings')">
-                  <template #icon>
-                    <n-icon><SettingsOutline /></n-icon>
-                  </template>
+                <el-button size="small" @click="router.push('/settings')">
+                  <el-icon class="el-icon--left"><Setting /></el-icon>
                   设置
-                </n-button>
-                <n-button size="small" @click="showQueueDrawer = true">
-                  <template #icon>
-                    <n-icon><ListOutline /></n-icon>
-                  </template>
+                </el-button>
+                <el-button size="small" @click="showQueueDrawer = true">
+                  <el-icon class="el-icon--left"><List /></el-icon>
                   队列管理
-                </n-button>
-                <n-button size="small" @click="showCreateFolderModal = true" :disabled="!fileStore.isOnline">
-                  <template #icon>
-                    <n-icon><FolderOutline /></n-icon>
-                  </template>
+                </el-button>
+                <el-button size="small" @click="showCreateFolderModal = true" :disabled="!fileStore.isOnline">
+                  <el-icon class="el-icon--left"><Folder /></el-icon>
                   新建文件夹
-                </n-button>
-                <n-button size="small" @click="fileStore.goUp" :disabled="fileStore.currentPath === '/'" title="返回上级 (Backspace / Alt+←)">返回上级</n-button>
-                <n-button size="small" @click="fileStore.refresh" :loading="fileStore.isLoadingFiles" :disabled="!fileStore.isOnline">刷新</n-button>
-              </n-space>
-            </n-space>
+                </el-button>
+                <el-button size="small" @click="fileStore.goUp" :disabled="fileStore.currentPath === '/'" title="返回上级 (Backspace / Alt+←)">返回上级</el-button>
+                <el-button size="small" @click="fileStore.refresh" :loading="fileStore.isLoadingFiles" :disabled="!fileStore.isOnline">刷新</el-button>
+              </div>
+            </div>
           </template>
           <OfflineBanner />
           <DropZone />
           <BatchActionToolbar />
           <FileList />
-        </n-card>
-      </n-layout-content>
-    </n-layout>
+        </el-card>
+      </el-main>
+    </el-container>
     <FileDetail />
     <CreateFolderModal v-model:show="showCreateFolderModal" />
     <!-- 传输进度面板（固定在底部） -->
@@ -206,12 +192,12 @@ onUnmounted(() => {
     <!-- 全窗口拖拽覆盖层 -->
     <div v-if="showOverlay" class="drag-overlay">
       <div class="drag-overlay-content">
-        <n-icon size="64" color="#1890ff">
-          <CloudUploadOutline />
-        </n-icon>
-        <n-text style="font-size: 18px; color: #1890ff;">
+        <el-icon :size="64" color="#1890ff">
+          <Upload />
+        </el-icon>
+        <el-text style="font-size: 18px; color: #1890ff;">
           释放文件即可上传 {{ dragCount > 0 ? `(${dragCount} 个文件)` : '' }}
-        </n-text>
+        </el-text>
       </div>
     </div>
     <!-- Story 8.3: 隐藏的文件输入（用于托盘快速上传） -->
@@ -223,11 +209,12 @@ onUnmounted(() => {
       @change="handleFileSelect"
     />
     <!-- 下载队列管理抽屉 -->
-    <n-drawer v-model:show="showQueueDrawer" :width="700" placement="right">
-      <n-drawer-content title="下载队列管理" closable>
-        <DownloadQueuePanel />
-      </n-drawer-content>
-    </n-drawer>
+    <el-drawer v-model="showQueueDrawer" :width="700" placement="right">
+      <template #header>
+        <span>下载队列管理</span>
+      </template>
+      <DownloadQueuePanel />
+    </el-drawer>
   </div>
 </template>
 
@@ -241,6 +228,17 @@ onUnmounted(() => {
 .file-card {
   height: 100%;
   margin: 12px;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.button-group {
+  display: flex;
+  gap: 8px;
 }
 
 .drag-overlay {
@@ -297,10 +295,5 @@ onUnmounted(() => {
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.quota-section {
-  padding: 12px;
-  border-bottom: 1px solid var(--n-border-color);
 }
 </style>

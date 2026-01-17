@@ -1,15 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { NIcon } from 'naive-ui'
-import {
-  FolderOutline,
-  ImageOutline,
-  VideocamOutline,
-  MusicalNotesOutline,
-  DocumentOutline,
-  ArchiveOutline,
-  CodeSlashOutline
-} from '@vicons/ionicons5'
+import { ElIcon } from 'element-plus'
+import { Folder,
+  Picture,
+  VideoCamera,
+  Microphone,
+  Document,
+  FolderOpened,
+  Tickets
+} from '@element-plus/icons-vue'
 
 const props = defineProps<{
   isDir: boolean
@@ -17,7 +16,7 @@ const props = defineProps<{
 }>()
 
 const iconComponent = computed(() => {
-  if (props.isDir) return FolderOutline
+  if (props.isDir) return Folder
 
   const ext = props.name.split('.').pop()?.toLowerCase() || ''
 
@@ -27,13 +26,13 @@ const iconComponent = computed(() => {
   const archiveExts = ['zip', 'rar', '7z', 'tar', 'gz']
   const codeExts = ['js', 'ts', 'py', 'java', 'cpp', 'c', 'go', 'rs', 'vue', 'jsx', 'tsx']
 
-  if (imageExts.includes(ext)) return ImageOutline
-  if (videoExts.includes(ext)) return VideocamOutline
-  if (audioExts.includes(ext)) return MusicalNotesOutline
-  if (archiveExts.includes(ext)) return ArchiveOutline
-  if (codeExts.includes(ext)) return CodeSlashOutline
+  if (imageExts.includes(ext)) return Picture
+  if (videoExts.includes(ext)) return VideoCamera
+  if (audioExts.includes(ext)) return Microphone
+  if (archiveExts.includes(ext)) return FolderOpened
+  if (codeExts.includes(ext)) return Tickets
 
-  return DocumentOutline
+  return Document
 })
 
 const iconColor = computed(() => {
@@ -43,7 +42,7 @@ const iconColor = computed(() => {
 </script>
 
 <template>
-  <n-icon :size="20" :color="iconColor">
+  <el-icon :size="20" :color="iconColor">
     <component :is="iconComponent" />
-  </n-icon>
+  </el-icon>
 </template>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NDrawer, NDrawerContent, NDescriptions, NDescriptionsItem } from 'naive-ui'
+import { ElDrawer, ElDescriptions, ElDescriptionsItem } from 'element-plus'
 import { useFileStore } from '../../stores/fileStore'
 import { formatFileSize, formatDate } from '../../utils/formatters'
 
@@ -23,20 +23,19 @@ function getFileType(name: string, isDir: boolean): string {
 </script>
 
 <template>
-  <n-drawer
-    :show="!!fileStore.selectedFile"
+  <el-drawer
+    :model-value="!!fileStore.selectedFile"
     :width="320"
-    placement="right"
-    @update:show="(v) => !v && fileStore.selectFile(null)"
+    direction="rtl"
+    @update:model-value="(v) => !v && fileStore.selectFile(null)"
+    title="文件详情"
   >
-    <n-drawer-content title="文件详情" closable>
-      <n-descriptions v-if="fileStore.selectedFile" :column="1" label-placement="left">
-        <n-descriptions-item label="名称">{{ fileStore.selectedFile.name }}</n-descriptions-item>
-        <n-descriptions-item label="类型">{{ getFileType(fileStore.selectedFile.name, fileStore.selectedFile.isDir) }}</n-descriptions-item>
-        <n-descriptions-item label="大小">{{ fileStore.selectedFile.isDir ? '-' : formatFileSize(fileStore.selectedFile.size) }}</n-descriptions-item>
-        <n-descriptions-item label="修改时间">{{ formatDate(fileStore.selectedFile.modified) }}</n-descriptions-item>
-        <n-descriptions-item label="创建时间">{{ formatDate(fileStore.selectedFile.created) }}</n-descriptions-item>
-      </n-descriptions>
-    </n-drawer-content>
-  </n-drawer>
+    <el-descriptions v-if="fileStore.selectedFile" :column="1" label-placement="left" border>
+      <el-descriptions-item label="名称">{{ fileStore.selectedFile.name }}</el-descriptions-item>
+      <el-descriptions-item label="类型">{{ getFileType(fileStore.selectedFile.name, fileStore.selectedFile.isDir) }}</el-descriptions-item>
+      <el-descriptions-item label="大小">{{ fileStore.selectedFile.isDir ? '-' : formatFileSize(fileStore.selectedFile.size) }}</el-descriptions-item>
+      <el-descriptions-item label="修改时间">{{ formatDate(fileStore.selectedFile.modified) }}</el-descriptions-item>
+      <el-descriptions-item label="创建时间">{{ formatDate(fileStore.selectedFile.created) }}</el-descriptions-item>
+    </el-descriptions>
+  </el-drawer>
 </template>

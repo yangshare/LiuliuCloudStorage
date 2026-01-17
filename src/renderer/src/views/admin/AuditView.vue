@@ -1,79 +1,108 @@
 <template>
   <div class="audit-view">
-    <n-card title="操作审计" :bordered="false">
-      <template #header-extra>
-        <n-space>
-          <n-button type="primary" @click="exportLogs">导出日志</n-button>
-        </n-space>
+    <el-card title="操作审计">
+      <template #extra>
+        <el-button type="primary" @click="exportLogs">导出日志</el-button>
       </template>
 
       <!-- 筛选器 -->
-      <n-space vertical size="large">
-        <n-space>
-          <n-select
-            v-model:value="filters.userId"
-            label="用户"
-            :options="userOptions"
+      <el-space direction="vertical" :size="16" style="width: 100%">
+        <el-space wrap>
+          <el-select
+            v-model="filters.userId"
             placeholder="全部用户"
             clearable
             style="width: 200px"
-            @update:value="loadLogs"
-          />
-          <n-select
-            v-model:value="filters.actionType"
-            label="操作类型"
-            :options="actionTypeOptions"
+            @change="loadLogs"
+          >
+            <el-option
+              v-for="option in userOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+          <el-select
+            v-model="filters.actionType"
             placeholder="全部类型"
             clearable
             style="width: 150px"
-            @update:value="loadLogs"
-          />
-          <n-date-picker
-            v-model:value="dateRange"
+            @change="loadLogs"
+          >
+            <el-option
+              v-for="option in actionTypeOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+          <el-date-picker
+            v-model="dateRange"
             type="daterange"
             clearable
-            @update:value="handleDateChange"
+            @change="handleDateChange"
           />
-          <n-button @click="resetFilters">重置</n-button>
-        </n-space>
+          <el-button @click="resetFilters">重置</el-button>
+        </el-space>
 
         <!-- 统计信息 -->
-        <n-space size="large">
-          <n-statistic label="总记录数" :value="totalLogs" />
-          <n-statistic label="今日活跃用户" :value="dau" />
-        </n-space>
+        <el-space :size="16">
+          <el-statistic title="总记录数" :value="totalLogs" />
+          <el-statistic title="今日活跃用户" :value="dau" />
+        </el-space>
 
         <!-- 日志表格 -->
-        <n-data-table
-          :columns="columns"
+        <el-table
           :data="logs"
           :loading="loading"
-          :pagination="pagination"
-          :row-key="(row: any) => row.id"
+          style="width: 100%"
+        >
+          <el-table-column prop="id" label="ID" width="80" />
+          <el-table-column prop="userId" label="用户ID" width="100" />
+          <el-table-column prop="actionType" label="操作类型" width="120">
+            <template #default="{ row }">
+              <el-tag
+                :type="getActionTypeConfig(row.actionType).type"
+                size="small"
+              >
+                {{ getActionTypeConfig(row.actionType).text }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="fileCount" label="文件数量" width="100" />
+          <el-table-column prop="fileSize" label="文件大小" width="120">
+            <template #default="{ row }">{{ formatFileSize(row.fileSize) }}</template>
+          </el-table-column>
+          <el-table-column prop="createdAt" label="时间" width="180">
+            <template #default="{ row }">{{ new Date(row.createdAt).toLocaleString('zh-CN') }}</template>
+          </el-table-column>
+          <el-table-column prop="details" label="详情" show-overflow-tooltip>
+            <template #default="{ row }">{{ formatDetails(row.details) }}</template>
+          </el-table-column>
+        </el-table>
+
+        <!-- 分页 -->
+        <el-pagination
+          v-model:current-page="pagination.page"
+          v-model:page-size="pagination.pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="totalLogs"
+          layout="total, sizes, prev, pager, next"
+          @current-change="pagination.onChange"
+          @size-change="pagination.onUpdatePageSize"
         />
-      </n-space>
-    </n-card>
+      </el-space>
+    </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, h } from 'vue'
-import {
-  NCard,
-  NSpace,
-  NButton,
-  NSelect,
-  NDatePicker,
-  NDataTable,
-  NStatistic,
-  NTag,
-  useMessage,
-  type DataTableColumns
-} from 'naive-ui'
+import { ref, onMounted } from 'vue'
+import { ElCard, ElButton, ElSelect, ElOption, ElDatePicker, ElStatistic, ElTag, ElSpace, ElTable, ElTableColumn, ElPagination, ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/authStore'
 import { formatFileSize } from '@/utils/formatters'
 
-const message = useMessage()
+const message = ElMessage
 const authStore = useAuthStore()
 
 // 状态
@@ -82,7 +111,7 @@ const logs = ref<any[]>([])
 const totalLogs = ref(0)
 const dau = ref(0)
 const userOptions = ref<Array<{ label: string; value: number }>>([])
-const dateRange = ref<[number, number] | null>(null)
+const dateRange = ref<[Date, Date] | null>(null)
 
 // 筛选器
 const filters = ref({
@@ -102,12 +131,33 @@ const actionTypeOptions = [
   { label: '登出', value: 'logout' }
 ]
 
+// 获取操作类型配置
+const getActionTypeConfig = (actionType: string) => {
+  const typeMap: Record<string, { text: string; type: 'success' | 'info' | 'warning' | 'danger' | 'default' }> = {
+    upload: { text: '上传', type: 'success' },
+    download: { text: '下载', type: 'info' },
+    delete: { text: '删除', type: 'danger' },
+    folder_create: { text: '创建文件夹', type: 'warning' },
+    login: { text: '登录', type: 'default' },
+    logout: { text: '登出', type: 'default' }
+  }
+  return typeMap[actionType] || { text: actionType, type: 'default' }
+}
+
+// 格式化详情
+const formatDetails = (details: string) => {
+  try {
+    const parsed = details ? JSON.parse(details) : null
+    return parsed ? JSON.stringify(parsed, null, 2) : '-'
+  } catch {
+    return details || '-'
+  }
+}
+
 // 分页
 const pagination = ref({
   page: 1,
   pageSize: 20,
-  showSizePicker: true,
-  pageSizes: [10, 20, 50, 100],
   onChange: (page: number) => {
     pagination.value.page = page
     loadLogs()
@@ -118,69 +168,6 @@ const pagination = ref({
     loadLogs()
   }
 })
-
-// 表格列
-const columns: DataTableColumns<any> = [
-  {
-    title: 'ID',
-    key: 'id',
-    width: 80
-  },
-  {
-    title: '用户ID',
-    key: 'userId',
-    width: 100
-  },
-  {
-    title: '操作类型',
-    key: 'actionType',
-    width: 120,
-    render: (row) => {
-      const typeMap: Record<string, { text: string; type: 'success' | 'info' | 'warning' | 'error' | 'default' }> = {
-        upload: { text: '上传', type: 'success' },
-        download: { text: '下载', type: 'info' },
-        delete: { text: '删除', type: 'error' },
-        folder_create: { text: '创建文件夹', type: 'warning' },
-        login: { text: '登录', type: 'default' },
-        logout: { text: '登出', type: 'default' }
-      }
-      const config = typeMap[row.actionType] || { text: row.actionType, type: 'default' }
-      return h(NTag, { type: config.type }, { default: () => config.text })
-    }
-  },
-  {
-    title: '文件数量',
-    key: 'fileCount',
-    width: 100
-  },
-  {
-    title: '文件大小',
-    key: 'fileSize',
-    width: 120,
-    render: (row) => formatFileSize(row.fileSize)
-  },
-  {
-    title: '时间',
-    key: 'createdAt',
-    width: 180,
-    render: (row) => new Date(row.createdAt).toLocaleString('zh-CN')
-  },
-  {
-    title: '详情',
-    key: 'details',
-    ellipsis: {
-      tooltip: true
-    },
-    render: (row) => {
-      try {
-        const details = row.details ? JSON.parse(row.details) : null
-        return details ? JSON.stringify(details, null, 2) : '-'
-      } catch {
-        return row.details || '-'
-      }
-    }
-  }
-]
 
 /**
  * 加载用户列表
@@ -243,10 +230,10 @@ async function loadDAU(): Promise<void> {
 /**
  * 处理日期范围变化
  */
-function handleDateChange(value: [number, number] | null): void {
+function handleDateChange(value: [Date, Date] | null): void {
   if (value) {
-    filters.value.startDate = new Date(value[0]).toISOString().split('T')[0]
-    filters.value.endDate = new Date(value[1]).toISOString().split('T')[0]
+    filters.value.startDate = value[0].toISOString().split('T')[0]
+    filters.value.endDate = value[1].toISOString().split('T')[0]
   } else {
     filters.value.startDate = undefined
     filters.value.endDate = undefined

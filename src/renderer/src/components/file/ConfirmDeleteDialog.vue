@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NModal, NAlert } from 'naive-ui'
+import { ElDialog, ElAlert } from 'element-plus'
 import type { FileItem } from '../../../../shared/types/electron'
 
 interface Props {
@@ -26,7 +26,7 @@ function handleCancel() {
 </script>
 
 <template>
-  <n-modal
+  <el-dialog
     :show="visible"
     preset="dialog"
     title="确认删除"
@@ -39,9 +39,9 @@ function handleCancel() {
   >
     <div v-if="file">
       <p>确定要删除「{{ file.name }}」吗？</p>
-      <n-alert v-if="file.isDir" type="warning" style="margin-top: 12px">
+      <el-alert v-if="file.isDir" type="warning" style="margin-top: 12px">
         这是一个文件夹，删除后其中所有内容都将被删除！
-      </n-alert>
+      </el-alert>>
     </div>
-  </n-modal>
+  </el-dialog>>
 </template>

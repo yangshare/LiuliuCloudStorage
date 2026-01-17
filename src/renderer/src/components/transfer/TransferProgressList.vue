@@ -2,7 +2,7 @@
   <div class="transfer-list" :class="{ collapsed: isCollapsed }">
     <div class="list-header" @click="toggleCollapse">
       <span>传输列表 ({{ activeCount }}/{{ totalCount }})</span>
-      <n-icon :component="isCollapsed ? ChevronUpIcon : ChevronDownIcon" />
+      <el-icon :component="isCollapsed ? ChevronUpIcon : ChevronDownIcon" />
     </div>
 
     <div v-if="!isCollapsed" class="list-content">
@@ -22,8 +22,8 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { NIcon } from 'naive-ui'
-import { ChevronUpOutline as ChevronUpIcon, ChevronDownOutline as ChevronDownIcon } from '@vicons/ionicons5'
+import { ElIcon } from 'element-plus'
+import { ArrowUp as ChevronUpIcon, ArrowDown as ChevronDownIcon  } from '@element-plus/icons-vue'
 import { useTransferStore } from '@/stores/transferStore'
 import TransferProgressItem from './TransferProgressItem.vue'
 

@@ -1,148 +1,127 @@
 <template>
-  <n-modal
-    :show="show"
-    @update:show="$emit('update:show', $event)"
+  <el-dialog
+    :model-value="show"
+    @update:model-value="$emit('update:show', $event)"
+    title="调整用户配额"
+    width="550px"
   >
-    <n-card
-      style="width: 550px"
-      title="调整用户配额"
-      :bordered="false"
-      size="huge"
-      role="dialog"
-      aria-modal="true"
-    >
-      <n-form v-if="user" ref="formRef" :model="formData" :rules="rules">
-        <n-form-item label="用户名">
-          <n-input :value="user.username" disabled />
-        </n-form-item>
+    <el-form v-if="user" ref="formRef" :model="formData" :rules="rules">
+      <el-form-item label="用户名">
+        <el-input :model-value="user.username" disabled />
+      </el-form-item>
 
-        <n-form-item label="当前配额总量">
-          <n-input :value="formatBytes(user.quotaTotal)" disabled />
-        </n-form-item>
+      <el-form-item label="当前配额总量">
+        <el-input :model-value="formatBytes(user.quotaTotal)" disabled />
+      </el-form-item>
 
-        <n-form-item label="当前已使用">
-          <n-input :value="formatBytes(user.quotaUsed)" disabled />
-        </n-form-item>
+      <el-form-item label="当前已使用">
+        <el-input :model-value="formatBytes(user.quotaUsed)" disabled />
+      </el-form-item>
 
-        <n-form-item label="当前使用率">
-          <n-progress
-            type="line"
-            :percentage="user.usageRate"
-            :processing="user.usageRate > 90"
-            :color="user.usageRate > 90 ? '#f56c6c' : user.usageRate > 70 ? '#e6a23c' : '#67c23a'"
+      <el-form-item label="当前使用率">
+        <el-progress
+          :percentage="user.usageRate"
+          :color="getProgressColor(user.usageRate)"
+        />
+      </el-form-item>
+
+      <el-divider />
+
+      <!-- Story 7.5 MEDIUM FIX: 添加 GB 输入模式，提升用户体验 -->
+      <el-form-item label="输入模式">
+        <el-radio-group v-model="inputMode">
+          <el-radio-button value="gb">
+            GB (推荐)
+          </el-radio-button>
+          <el-radio-button value="bytes">
+            字节
+          </el-radio-button>
+        </el-radio-group>
+      </el-form-item>
+
+      <!-- GB 输入模式 -->
+      <template v-if="inputMode === 'gb'">
+        <el-form-item label="新配额总量 (GB)" prop="quotaTotalGB">
+          <el-input-number
+            v-model="formData.quotaTotalGB"
+            :min="Math.ceil(user.quotaUsed / (1024 * 1024 * 1024))"
+            :max="1000"
+            :precision="2"
+            :step="1"
+            placeholder="输入新的配额总量(GB)"
+            style="width: 100%"
+            controls-position="right"
           />
-        </n-form-item>
+        </el-form-item>
 
-        <n-divider />
-
-        <!-- Story 7.5 MEDIUM FIX: 添加 GB 输入模式，提升用户体验 -->
-        <n-form-item label="输入模式">
-          <n-radio-group v-model:value="inputMode">
-            <n-radio-button value="gb">
-              GB (推荐)
-            </n-radio-button>
-            <n-radio-button value="bytes">
-              字节
-            </n-radio-button>
-          </n-radio-group>
-        </n-form-item>
-
-        <!-- GB 输入模式 -->
-        <template v-if="inputMode === 'gb'">
-          <n-form-item label="新配额总量 (GB)" path="quotaTotalGB">
-            <n-input-number
-              v-model:value="formData.quotaTotalGB"
-              :min="Math.ceil(user.quotaUsed / (1024 * 1024 * 1024))"
-              :max="1000"
-              :precision="2"
-              :step="1"
-              placeholder="输入新的配额总量(GB)"
-              style="width: 100%"
-            >
-              <template #suffix>
-                <span>GB</span>
-              </template>
-            </n-input-number>
-          </n-form-item>
-
-          <n-form-item>
-            <template #label>
-              <n-space align="center">
-                <span>配额预览</span>
-                <n-tag size="small" :type="quotaPreviewType">
-                  {{ formatBytes(formData.quotaTotal) }}
-                </n-tag>
-              </n-space>
-            </template>
-            <n-space vertical>
-              <n-text>{{ formData.quotaTotalGB }} GB = {{ formatBytes(formData.quotaTotal) }}</n-text>
-              <n-text v-if="formData.quotaTotal < user.quotaTotal" type="warning">
+        <el-form-item label="配额预览">
+          <div class="quota-preview">
+            <el-space align="center" :size="8">
+              <span>{{ formData.quotaTotalGB }} GB = {{ formatBytes(formData.quotaTotal) }}</span>
+              <el-tag size="small" :type="quotaPreviewType">
+                {{ formatBytes(formData.quotaTotal) }}
+              </el-tag>
+            </el-space>
+            <div v-if="formData.quotaTotal < user.quotaTotal" class="warning-text">
+              <el-text type="warning">
                 ⚠️ 新配额小于当前已使用量
-              </n-text>
-            </n-space>
-          </n-form-item>
-        </template>
-
-        <!-- 字节输入模式 (原有方式) -->
-        <template v-else>
-          <n-form-item label="新配额总量 (字节)" path="quotaTotal">
-            <n-input-number
-              v-model:value="formData.quotaTotal"
-              :min="user.quotaUsed"
-              :max="107374182400"
-              :precision="0"
-              placeholder="输入新的配额总量(字节)"
-              style="width: 100%"
-            >
-              <template #suffix>
-                <span>B</span>
-              </template>
-            </n-input-number>
-          </n-form-item>
-
-          <n-form-item>
-            <template #label>
-              <n-space align="center">
-                <span>配额预览</span>
-                <n-tag size="small" :type="quotaPreviewType">
-                  {{ formatBytes(formData.quotaTotal) }} ({{ (formData.quotaTotal / (1024 * 1024 * 1024)).toFixed(2) }} GB)
-                </n-tag>
-              </n-space>
-            </template>
-            <n-input :value="formatBytes(formData.quotaTotal)" disabled />
-          </n-form-item>
-        </template>
-
-        <n-alert v-if="formData.quotaTotal < user.quotaTotal" type="warning" title="警告">
-          新配额小于当前已使用量 ({{ formatBytes(user.quotaUsed) }}),用户可能无法继续上传文件
-        </n-alert>
-      </n-form>
-
-      <template #footer>
-        <n-space justify="end">
-          <n-button @click="$emit('update:show', false)">
-            取消
-          </n-button>
-          <n-button
-            type="primary"
-            :loading="submitting"
-            @click="handleSubmit"
-          >
-            确认调整
-          </n-button>
-        </n-space>
+              </el-text>
+            </div>
+          </div>
+        </el-form-item>
       </template>
-    </n-card>
-  </n-modal>
+
+      <!-- 字节输入模式 (原有方式) -->
+      <template v-else>
+        <el-form-item label="新配额总量 (字节)" prop="quotaTotal">
+          <el-input-number
+            v-model="formData.quotaTotal"
+            :min="user.quotaUsed"
+            :max="107374182400"
+            :precision="0"
+            placeholder="输入新的配额总量(字节)"
+            style="width: 100%"
+            controls-position="right"
+          />
+        </el-form-item>
+
+        <el-form-item label="配额预览">
+          <div class="quota-preview">
+            <el-space align="center" :size="8">
+              <span>{{ formatBytes(formData.quotaTotal) }} ({{ (formData.quotaTotal / (1024 * 1024 * 1024)).toFixed(2) }} GB)</span>
+              <el-tag size="small" :type="quotaPreviewType">
+                {{ formatBytes(formData.quotaTotal) }}
+              </el-tag>
+            </el-space>
+          </div>
+        </el-form-item>
+      </template>
+
+      <el-alert v-if="formData.quotaTotal < user.quotaTotal" type="warning" title="警告" :closable="false">
+        新配额小于当前已使用量 ({{ formatBytes(user.quotaUsed) }}),用户可能无法继续上传文件
+      </el-alert>
+    </el-form>
+
+    <template #footer>
+      <div class="dialog-footer">
+        <el-button @click="$emit('update:show', false)">
+          取消
+        </el-button>
+        <el-button
+          type="primary"
+          :loading="submitting"
+          @click="handleSubmit"
+        >
+          确认调整
+        </el-button>
+      </div>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import {
-  NModal, NCard, NForm, NFormItem, NInput, NInputNumber, NButton, NSpace,
-  NDivider, NProgress, NTag, NAlert, NText, NRadioGroup, NRadioButton,
-  type FormInst, type FormRules
-} from 'naive-ui'
+import { ElDialog, ElForm, ElFormItem, ElInput, ElInputNumber, ElButton, ElDivider, ElProgress, ElTag, ElAlert, ElText, ElRadioGroup, ElRadioButton, ElSpace, type FormInst, type FormRules } from 'element-plus'
 import { adminService, type UserListItem } from '../../services/AdminService'
 
 interface Props {
@@ -191,7 +170,7 @@ watch(() => formData.value.quotaTotal, (newBytes) => {
 const quotaPreviewType = computed(() => {
   if (!props.user) return 'info'
   const newUsageRate = (props.user.quotaUsed / formData.value.quotaTotal) * 100
-  if (newUsageRate > 90) return 'error'
+  if (newUsageRate > 90) return 'danger'
   if (newUsageRate > 70) return 'warning'
   return 'success'
 })
@@ -209,7 +188,7 @@ const rules = computed(() => {
         trigger: ['blur', 'change']
       },
       {
-        validator: (rule, value) => {
+        validator: (rule: any, value: number) => {
           if (!props.user) return true
           return value >= props.user.quotaUsed
         },
@@ -225,7 +204,7 @@ const rules = computed(() => {
         trigger: ['blur', 'change']
       },
       {
-        validator: (rule, value) => {
+        validator: (rule: any, value: number) => {
           if (!props.user) return true
           return value >= minGB
         },
@@ -245,6 +224,12 @@ const formatBytes = (bytes: number): string => {
   return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`
 }
 
+const getProgressColor = (percentage: number): string => {
+  if (percentage > 90) return '#f56c6c'
+  if (percentage > 70) return '#e6a23c'
+  return '#67c23a'
+}
+
 // 提交表单
 const handleSubmit = async () => {
   if (!formRef.value || !props.user) return
@@ -256,7 +241,7 @@ const handleSubmit = async () => {
     // 始终使用字节值提交
     await adminService.adjustUserQuota(props.user.id, formData.value.quotaTotal)
 
-    window.$message?.success('配额调整成功')
+    ElMessage.success('配额调整成功')
     emit('update:show', false)
     emit('success')
   } catch (error: any) {
@@ -264,9 +249,28 @@ const handleSubmit = async () => {
       // 表单验证错误
       return
     }
-    window.$message?.error(error.message || '配额调整失败')
+    ElMessage.error(error.message || '配额调整失败')
   } finally {
     submitting.value = false
   }
 }
 </script>
+
+<style scoped>
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.quota-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.warning-text {
+  margin-top: 4px;
+}
+</style>

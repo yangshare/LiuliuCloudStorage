@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { NCard, NButton, NSpace, NSteps, NStep } from 'naive-ui'
 
 const router = useRouter()
 const currentStep = ref(1)
@@ -29,23 +28,23 @@ function skip() {
 
 <template>
   <div class="onboarding-container">
-    <n-card title="欢迎使用溜溜网盘" style="width: 500px">
-      <n-steps :current="currentStep" style="margin-bottom: 24px">
-        <n-step v-for="(s, i) in steps" :key="i" :title="s.title" />
-      </n-steps>
+    <el-card title="欢迎使用溜溜网盘" style="width: 500px">
+      <el-steps :active="currentStep - 1" style="margin-bottom: 24px">
+        <el-step v-for="(s, i) in steps" :key="i" :title="s.title" />
+      </el-steps>
 
       <div class="step-content">
         <h3>{{ steps[currentStep - 1].title }}</h3>
         <p>{{ steps[currentStep - 1].desc }}</p>
       </div>
 
-      <n-space justify="space-between" style="margin-top: 24px">
-        <n-button text @click="skip">跳过引导</n-button>
-        <n-button type="primary" @click="next">
+      <div class="button-group" style="margin-top: 24px">
+        <el-button link @click="skip">跳过引导</el-button>
+        <el-button type="primary" @click="next">
           {{ currentStep < 3 ? '下一步' : '开始使用' }}
-        </n-button>
-      </n-space>
-    </n-card>
+        </el-button>
+      </div>
+    </el-card>
   </div>
 </template>
 
@@ -64,4 +63,8 @@ function skip() {
 }
 .step-content h3 { margin-bottom: 12px; }
 .step-content p { color: #666; }
+.button-group {
+  display: flex;
+  justify-content: space-between;
+}
 </style>

@@ -1,17 +1,16 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { NCard, NForm, NFormItem, NInput, NButton, NSpace, useMessage } from 'naive-ui'
+import { ElMessage } from 'element-plus'
 
 const router = useRouter()
-const message = useMessage()
 
 const formData = ref({ username: '', password: '' })
 const loading = ref(false)
 
 async function handleLogin() {
   if (!formData.value.username || !formData.value.password) {
-    message.error('请填写用户名和密码')
+    ElMessage.error('请填写用户名和密码')
     return
   }
 
@@ -22,13 +21,13 @@ async function handleLogin() {
       formData.value.password
     )
     if (result.success) {
-      message.success('登录成功')
+      ElMessage.success('登录成功')
       router.push('/')
     } else {
-      message.error(result.message || '登录失败')
+      ElMessage.error(result.message || '登录失败')
     }
   } catch (err) {
-    message.error('网络错误，请稍后重试')
+    ElMessage.error('网络错误，请稍后重试')
   } finally {
     loading.value = false
   }
@@ -37,20 +36,20 @@ async function handleLogin() {
 
 <template>
   <div class="login-container">
-    <n-card title="登录溜溜网盘" style="width: 400px">
-      <n-form>
-        <n-form-item label="用户名">
-          <n-input v-model:value="formData.username" placeholder="请输入用户名" />
-        </n-form-item>
-        <n-form-item label="密码">
-          <n-input v-model:value="formData.password" type="password" placeholder="请输入密码" />
-        </n-form-item>
-        <n-space vertical>
-          <n-button type="primary" block :loading="loading" @click="handleLogin">登录</n-button>
-          <n-button text @click="router.push('/register')">没有账号？去注册</n-button>
-        </n-space>
-      </n-form>
-    </n-card>
+    <el-card title="登录溜溜网盘" style="width: 400px">
+      <el-form>
+        <el-form-item label="用户名">
+          <el-input v-model="formData.username" placeholder="请输入用户名" />
+        </el-form-item>
+        <el-form-item label="密码">
+          <el-input v-model="formData.password" type="password" placeholder="请输入密码" />
+        </el-form-item>
+        <div class="button-group">
+          <el-button type="primary" style="width: 100%" :loading="loading" @click="handleLogin">登录</el-button>
+          <el-button link @click="router.push('/register')">没有账号？去注册</el-button>
+        </div>
+      </el-form>
+    </el-card>
   </div>
 </template>
 
@@ -61,5 +60,11 @@ async function handleLogin() {
   justify-content: center;
   align-items: center;
   background: #f5f5f5;
+}
+
+.button-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 </style>

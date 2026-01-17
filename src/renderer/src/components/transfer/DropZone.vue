@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { NIcon, NText, NButton, NSpace } from 'naive-ui'
-import { CloudUploadOutline, DocumentOutline, FolderOpenOutline } from '@vicons/ionicons5'
+import { ElIcon, ElText, ElButton, ElSpace } from 'element-plus'
+import { Upload, Document, FolderOpened } from '@element-plus/icons-vue'
 import { useTransferStore } from '../../stores/transferStore'
 import { useFileStore } from '../../stores/fileStore'
 
@@ -80,46 +80,48 @@ async function selectFolder() {
     @dragover="handleDragOver"
     @drop="handleDrop"
   >
-    <n-icon size="48" :depth="3">
-      <CloudUploadOutline />
-    </n-icon>
-    <n-text v-if="isDragging" depth="2">
+    <el-icon :size="48" color="var(--el-color-info)">
+      <Upload />
+    </el-icon>
+    <el-text v-if="isDragging" type="primary" size="large">
       释放即可上传 {{ dragCount > 0 ? `(${dragCount} 个文件)` : '' }}
-    </n-text>
-    <n-text v-else depth="3">
+    </el-text>
+    <el-text v-else type="info" size="default">
       拖拽文件到此处上传
-    </n-text>
-    <n-space v-if="!isDragging" style="margin-top: 12px">
-      <n-button size="small" :disabled="!fileStore.isOnline" @click.stop="selectFiles">
-        <template #icon><n-icon><DocumentOutline /></n-icon></template>
+    </el-text>
+    <el-space v-if="!isDragging" :size="12" style="margin-top: 12px">
+      <el-button size="small" :disabled="!fileStore.isOnline" @click.stop="selectFiles" :icon="Document">
         选择文件
-      </n-button>
-      <n-button size="small" :disabled="!fileStore.isOnline" @click.stop="selectFolder">
-        <template #icon><n-icon><FolderOpenOutline /></n-icon></template>
+      </el-button>
+      <el-button size="small" :disabled="!fileStore.isOnline" @click.stop="selectFolder" :icon="FolderOpened">
         选择文件夹
-      </n-button>
-    </n-space>
+      </el-button>
+    </el-space>
   </div>
 </template>
 
 <style scoped>
 .drop-zone {
-  border: 2px dashed #d9d9d9;
+  border: 2px dashed var(--el-border-color);
   border-radius: 8px;
   padding: 24px;
   text-align: center;
   transition: all 0.3s;
   cursor: pointer;
   margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
 }
 
 .drop-zone:hover {
-  border-color: #1890ff;
+  border-color: var(--el-color-primary);
 }
 
 .drop-zone.is-dragging {
-  border-color: #1890ff;
-  background-color: #e6f7ff;
+  border-color: var(--el-color-primary);
+  background-color: var(--el-color-primary-light-9);
 }
 
 .drop-zone.is-disabled {

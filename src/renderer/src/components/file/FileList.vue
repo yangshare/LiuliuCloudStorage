@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { NDataTable, NSpin, NAlert, NButton, NEmpty, NTag, NDropdown, NModal, NCheckbox, NInput, useMessage } from 'naive-ui'
-import { h, computed, ref } from 'vue'
+import { ref, computed, h, reactive } from 'vue'
+import { ElTable, ElTableColumn, ElCheckbox, ElButton, ElInput, ElTag, ElDropdown, ElMessage, ElLoading, ElAlert, ElEmpty } from 'element-plus'
 import { useFileStore } from '../../stores/fileStore'
 import { useTransferStore } from '../../stores/transferStore'
 import { useAuthStore } from '../../stores/authStore'
@@ -13,7 +13,6 @@ import type { FileItem } from '../../../../shared/types/electron'
 const fileStore = useFileStore()
 const transferStore = useTransferStore()
 const authStore = useAuthStore()
-const message = useMessage()
 
 // 右键菜单状态
 const showContextMenu = ref(false)
@@ -44,116 +43,21 @@ const offlineModeMessage = computed(() => {
   return null
 })
 
-const columns = [
-  {
-    title: () => h(NCheckbox, {
-      checked: fileStore.isAllSelected,
-      indeterminate: fileStore.isPartialSelected && !fileStore.isAllSelected,
-      onUpdateChecked: (checked: boolean) => {
-        if (checked) {
-          fileStore.selectAll()
-        } else {
-          fileStore.deselectAll()
-        }
-      }
-    }),
-    key: 'checkbox',
-    width: 40,
-    render: (row: FileItem) => h(NCheckbox, {
-      checked: fileStore.isSelected(row),
-      onUpdateChecked: (checked: boolean) => {
-        fileStore.toggleSelect(row)
-      },
-      onClick: (e: Event) => {
-        e.stopPropagation() // 阻止事件冒泡，避免触发行点击
-      }
-    })
-  },
-  {
-    title: '',
-    key: 'icon',
-    width: 40,
-    render: (row: FileItem) => h(FileIcon, { isDir: row.isDir, name: row.name })
-  },
-  {
-    title: '名称',
-    key: 'name',
-    sorter: 'default',
-    render: (row: FileItem) => {
-      // 如果正在编辑此文件,显示输入框
-      if (editingFile.value && editingFile.value.name === row.name) {
-        return h(NInput, {
-          value: editingName.value,
-          size: 'small',
-          autofocus: true,
-          loading: isRenaming.value,
-          onUpdateValue: (value: string) => { editingName.value = value },
-          onKeyup: (e: KeyboardEvent) => {
-            if (e.key === 'Enter') {
-              confirmRename()
-            } else if (e.key === 'Escape') {
-              cancelRename()
-            }
-          },
-          onBlur: cancelRename
-        })
-      }
-      // 否则显示文件名
-      return row.name
-    }
-  },
-  {
-    title: '大小',
-    key: 'size',
-    width: 100,
-    render: (row: FileItem) => row.isDir ? '-' : formatFileSize(row.size)
-  },
-  {
-    title: '修改日期',
-    key: 'modified',
-    width: 160,
-    render: (row: FileItem) => formatDate(row.modified)
-  },
-  {
-    title: '操作',
-    key: 'actions',
-    width: 100,
-    render: (row: FileItem) => {
-      // 文件显示下载按钮，目录不显示
-      if (row.isDir) {
-        return null
-      }
-      return h(
-        NButton,
-        {
-          size: 'small',
-          type: 'primary',
-          onClick: (e: Event) => {
-            e.stopPropagation()
-            handleDownload(row)
-          }
-        },
-        { default: () => '下载' }
-      )
-    }
-  }
-]
-
 function handleRetry() {
   fileStore.refresh()
 }
 
-function handleRowClick(row: FileItem, index: number, event?: MouseEvent) {
+function handleRowClick(row: FileItem, column: any, event: MouseEvent) {
   // 处理多选逻辑
   if (event?.ctrlKey || event?.metaKey) {
     // Ctrl/Cmd + 点击：切换选中状态
     fileStore.toggleSelect(row)
-    fileStore.lastClickedIndex = index
     return
   }
 
   if (event?.shiftKey && fileStore.lastClickedIndex >= 0) {
     // Shift + 点击：范围选择
+    const index = fileStore.sortedFiles.findIndex(f => f.name === row.name)
     fileStore.selectRange(fileStore.lastClickedIndex, index)
     return
   }
@@ -168,21 +72,11 @@ function handleRowClick(row: FileItem, index: number, event?: MouseEvent) {
     // 单击文件显示详情
     fileStore.selectFile(row)
   }
-
-  fileStore.lastClickedIndex = index
 }
 
 function handleRowDoubleClick(row: FileItem) {
   if (row.isDir) {
     // 双击目录进入（备用导航方式）
-    fileStore.enterFolder(row)
-  }
-}
-
-function handleRowKeydown(row: FileItem, e: KeyboardEvent) {
-  if (e.key === 'Enter' && row.isDir) {
-    // Enter 键进入文件夹
-    e.preventDefault()
     fileStore.enterFolder(row)
   }
 }
@@ -195,7 +89,7 @@ async function handleDownload(file: FileItem) {
   console.log('[FileList] 开始下载:', { remotePath, fileName: file.name })
 
   // 立即显示 toast 提示
-  message.info(`正在添加到下载队列: ${file.name}`)
+  ElMessage.info(`正在添加到下载队列: ${file.name}`)
 
   // 添加到下载队列
   try {
@@ -204,14 +98,14 @@ async function handleDownload(file: FileItem) {
     console.log('[FileList] queueDownload 返回值类型:', typeof result, '是否为null:', result === null, '值:', result)
     if (result?.success) {
       console.log('[FileList] 准备显示成功消息')
-      message.success(`已添加到下载队列: ${file.name}`)
+      ElMessage.success(`已添加到下载队列: ${file.name}`)
     } else {
       console.log('[FileList] 准备显示错误消息, error:', result?.error)
-      message.error(result?.error || '添加到下载队列失败')
+      ElMessage.error(result?.error || '添加到下载队列失败')
     }
   } catch (error: any) {
     console.error('[FileList] queueDownload 异常:', error)
-    message.error(error.message || '下载失败')
+    ElMessage.error(error.message || '下载失败')
   }
 }
 
@@ -235,12 +129,12 @@ const contextMenuOptions = computed(() => {
       key: 'saveAs',
       disabled: selectedFileForContextMenu.value.isDir
     },
-    { type: 'divider', key: 'd1' },
+    { label: 'divider', key: 'd1', divided: true },
     {
       label: '打开下载目录',
       key: 'openDownloadDir'
     },
-    { type: 'divider', key: 'd2' },
+    { label: 'divider', key: 'd2', divided: true },
     {
       label: '重命名',
       key: 'rename'
@@ -255,11 +149,11 @@ const contextMenuOptions = computed(() => {
 })
 
 // 显示右键菜单
-function handleContextMenu(row: FileItem, e: MouseEvent) {
-  e.preventDefault()
+function handleContextMenu(row: FileItem, column: any, event: MouseEvent) {
+  event.preventDefault()
   selectedFileForContextMenu.value = row
-  contextMenuX.value = e.clientX
-  contextMenuY.value = e.clientY
+  contextMenuX.value = event.clientX
+  contextMenuY.value = event.clientY
   showContextMenu.value = true
 }
 
@@ -301,10 +195,10 @@ async function handleContextMenuSelect(key: string) {
       try {
         const result = await window.electronAPI?.downloadConfig.openDirectory()
         if (!result?.success) {
-          message.error(result?.error || '无法打开目录')
+          ElMessage.error(result?.error || '无法打开目录')
         }
       } catch (error: any) {
-        message.error('打开目录失败: ' + error.message)
+        ElMessage.error('打开目录失败: ' + error.message)
       }
       break
 
@@ -334,16 +228,13 @@ async function confirmDelete() {
     )
 
     if (result.success) {
-      message.success('删除成功')
+      ElMessage.success('删除成功')
 
-      // 如果删除的是文件夹,从目录树中移除并刷新父节点
+      // 如果删除的是文件夹,检查是否需要导航到父级
       if (selectedFileForContextMenu.value.isDir) {
         const deletedFolderPath = fileStore.currentPath === '/'
           ? `/${selectedFileForContextMenu.value.name}`
           : `${fileStore.currentPath}/${selectedFileForContextMenu.value.name}`
-
-        fileStore.removeTreeNode(deletedFolderPath)
-        await fileStore.refreshTreeNode(fileStore.currentPath)
 
         // Task 4.2: 如果当前路径是被删除文件夹的子路径,导航到父级
         if (fileStore.currentPath.startsWith(deletedFolderPath)) {
@@ -366,10 +257,10 @@ async function confirmDelete() {
         }
       }
     } else {
-      message.error(result.error || '删除失败')
+      ElMessage.error(result.error || '删除失败')
     }
   } catch (error: any) {
-    message.error(error.message || '删除失败')
+    ElMessage.error(error.message || '删除失败')
   } finally {
     isDeleting.value = false
     showDeleteConfirm.value = false
@@ -412,17 +303,14 @@ async function confirmRename() {
     const result = await window.electronAPI.file.rename(filePath, editingName.value)
 
     if (result.success) {
-      message.success('重命名成功')
+      ElMessage.success('重命名成功')
 
-      // 如果重命名的是文件夹,需要处理目录树和路径更新
+      // 如果重命名的是文件夹,需要处理路径更新
       if (editingFile.value.isDir) {
         const oldFolderPath = filePath
         const newFolderPath = fileStore.currentPath === '/'
           ? `/${editingName.value}`
           : `${fileStore.currentPath}/${editingName.value}`
-
-        // 更新目录树节点的label
-        fileStore.updateTreeNodeLabel(oldFolderPath, editingName.value)
 
         // Task 3.2: 如果当前路径包含被重命名的文件夹,更新当前路径
         if (fileStore.currentPath.startsWith(oldFolderPath)) {
@@ -430,18 +318,15 @@ async function confirmRename() {
           fileStore.navigateTo(newPath)
           return // 导航会触发刷新,不需要继续执行
         }
-
-        // 刷新父节点以更新目录树
-        await fileStore.refreshTreeNode(fileStore.currentPath)
       }
 
       // 刷新文件列表
       fileStore.refresh()
     } else {
-      message.error(result.error || '重命名失败')
+      ElMessage.error(result.error || '重命名失败')
     }
   } catch (error: any) {
-    message.error(error.message || '重命名失败')
+    ElMessage.error(error.message || '重命名失败')
   } finally {
     isRenaming.value = false
     cancelRename()
@@ -464,7 +349,7 @@ async function handleDownloadToPath(savePath: string) {
   const remotePath = `${currentPath}/${file.name}`
 
   try {
-    message.info(`正在下载到: ${savePath}`)
+    ElMessage.info(`正在下载到: ${savePath}`)
     const result = await window.electronAPI.transfer.download(
       remotePath,
       file.name,
@@ -475,94 +360,190 @@ async function handleDownloadToPath(savePath: string) {
     )
 
     if (result?.success) {
-      message.success(`已添加到下载队列: ${file.name}`)
+      ElMessage.success(`已添加到下载队列: ${file.name}`)
     } else {
-      message.error(result?.error || '下载失败')
+      ElMessage.error(result?.error || '下载失败')
     }
   } catch (error: any) {
-    message.error(error.message || '下载失败')
+    ElMessage.error(error.message || '下载失败')
   } finally {
     fileForDownload.value = null
   }
 }
 
-const rowProps = (row: FileItem, index: number) => ({
-  style: fileStore.isSelected(row) ? 'cursor: pointer; background-color: var(--n-color-hover);' : 'cursor: pointer',
-  onClick: (e: MouseEvent) => handleRowClick(row, index, e),
-  onDblclick: () => handleRowDoubleClick(row),
-  onKeydown: (e: KeyboardEvent) => handleRowKeydown(row, e),
-  onContextmenu: (e: MouseEvent) => handleContextMenu(row, e)
-})
+const tableRef = ref<InstanceType<typeof ElTable>>()
 </script>
 
 <template>
-  <div class="file-list">
-    <n-spin :show="fileStore.isLoadingFiles">
-      <!-- 离线模式提示 -->
-      <n-alert
-        v-if="offlineModeMessage"
-        type="warning"
-        :title="offlineModeMessage"
-        closable
-        style="margin-bottom: 12px"
-      />
+  <div class="file-list" v-loading="fileStore.isLoadingFiles">
+    <!-- 离线模式提示 -->
+    <el-alert
+      v-if="offlineModeMessage"
+      type="warning"
+      :title="offlineModeMessage"
+      :closable="true"
+      style="margin-bottom: 12px"
+    />
 
-      <!-- 错误提示 -->
-      <n-alert
-        v-if="fileStore.filesError"
-        type="error"
-        :title="fileStore.filesError"
-        closable
-      >
-        <template #action>
-          <n-button size="small" @click="handleRetry">重试</n-button>
+    <!-- 错误提示 -->
+    <el-alert
+      v-if="fileStore.filesError"
+      type="error"
+      :title="fileStore.filesError"
+      :closable="true"
+      style="margin-bottom: 12px"
+    >
+      <template #default>
+        <el-button size="small" @click="handleRetry">重试</el-button>
+      </template>
+    </el-alert>
+
+    <el-empty v-if="fileStore.sortedFiles.length === 0 && !fileStore.isLoadingFiles" description="暂无文件" />
+
+    <el-table
+      v-else
+      ref="tableRef"
+      :data="fileStore.sortedFiles"
+      style="width: 100%"
+      :row-key="(row: FileItem) => row.name"
+      @row-click="handleRowClick"
+      @row-dblclick="handleRowDoubleClick"
+      @row-contextmenu="handleContextMenu"
+      :row-class-name="({ row }: { row: FileItem }) => fileStore.isSelected(row) ? 'selected-row' : ''"
+    >
+      <!-- 复选框列 -->
+      <el-table-column width="50" align="center">
+        <template #header>
+          <el-checkbox
+            :model-value="fileStore.isAllSelected"
+            :indeterminate="fileStore.isPartialSelected && !fileStore.isAllSelected"
+            @change="fileStore.selectAll"
+          />
         </template>
-      </n-alert>
+        <template #default="{ row }">
+          <el-checkbox
+            :model-value="fileStore.isSelected(row)"
+            @change="fileStore.toggleSelect(row)"
+            @click.stop
+          />
+        </template>
+      </el-table-column>
 
-      <n-empty v-else-if="fileStore.sortedFiles.length === 0 && !fileStore.isLoadingFiles" description="暂无文件" />
+      <!-- 图标列 -->
+      <el-table-column width="50" align="center">
+        <template #default="{ row }">
+          <FileIcon :is-dir="row.isDir" :name="row.name" />
+        </template>
+      </el-table-column>
 
-      <n-data-table
-        v-else
-        :columns="columns"
-        :data="fileStore.sortedFiles"
-        :bordered="false"
-        :single-line="false"
-        :row-key="(row: FileItem) => row.name"
-        :row-props="rowProps"
-      />
+      <!-- 名称列 -->
+      <el-table-column prop="name" label="名称" min-width="200">
+        <template #default="{ row }">
+          <!-- 如果正在编辑此文件，显示输入框 -->
+          <el-input
+            v-if="editingFile && editingFile.name === row.name"
+            :model-value="editingName"
+            size="small"
+            @update:model-value="editingName = $event"
+            @keyup.enter="confirmRename"
+            @keyup.esc="cancelRename"
+            @blur="cancelRename"
+            :loading="isRenaming"
+            autofocus
+            @click.stop
+          />
+          <!-- 否则显示文件名 -->
+          <span v-else>{{ row.name }}</span>
+        </template>
+      </el-table-column>
 
-      <!-- 右键菜单 -->
-      <n-dropdown
-        placement="bottom-start"
-        trigger="manual"
-        :show="showContextMenu"
-        :x="contextMenuX"
-        :y="contextMenuY"
-        :options="contextMenuOptions"
-        @select="handleContextMenuSelect"
-        @clickoutside="showContextMenu = false"
-      />
+      <!-- 大小列 -->
+      <el-table-column prop="size" label="大小" width="120">
+        <template #default="{ row }">
+          {{ row.isDir ? '-' : formatFileSize(row.size) }}
+        </template>
+      </el-table-column>
 
-      <!-- 删除确认对话框 -->
-      <ConfirmDeleteDialog
-        v-model:visible="showDeleteConfirm"
-        :file="selectedFileForContextMenu"
-        :loading="isDeleting"
-        @confirm="confirmDelete"
-      />
+      <!-- 修改日期列 -->
+      <el-table-column prop="modified" label="修改日期" width="180">
+        <template #default="{ row }">
+          {{ formatDate(row.modified) }}
+        </template>
+      </el-table-column>
 
-      <!-- 下载对话框 -->
-      <DownloadDialog
-        v-model:visible="showDownloadDialog"
-        :file="fileForDownload"
-        @confirm="handleDownloadToPath"
-      />
-    </n-spin>
+      <!-- 操作列 -->
+      <el-table-column label="操作" width="100" fixed="right">
+        <template #default="{ row }">
+          <!-- 文件显示下载按钮，目录不显示 -->
+          <el-button
+            v-if="!row.isDir"
+            type="primary"
+            size="small"
+            @click.stop="handleDownload(row)"
+          >
+            下载
+          </el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <!-- 右键菜单 -->
+    <el-dropdown
+      trigger="contextmenu"
+      :show="showContextMenu"
+      :x="contextMenuX"
+      :y="contextMenuY"
+      @command="handleContextMenuSelect"
+      @clickoutside="showContextMenu = false"
+      teleported
+    >
+      <span></span>
+      <template #dropdown>
+        <el-dropdown-menu>
+          <el-dropdown-item
+            v-for="option in contextMenuOptions"
+            :key="option.key"
+            :command="option.key"
+            :disabled="option.disabled"
+            :divided="option.divided"
+          >
+            {{ option.label }}
+          </el-dropdown-item>
+        </el-dropdown-menu>
+      </template>
+    </el-dropdown>
+
+    <!-- 删除确认对话框 -->
+    <ConfirmDeleteDialog
+      v-model:visible="showDeleteConfirm"
+      :file="selectedFileForContextMenu"
+      :loading="isDeleting"
+      @confirm="confirmDelete"
+    />
+
+    <!-- 下载对话框 -->
+    <DownloadDialog
+      v-model:visible="showDownloadDialog"
+      :file="fileForDownload"
+      @confirm="handleDownloadToPath"
+    />
   </div>
 </template>
 
 <style scoped>
 .file-list {
   min-height: 200px;
+}
+
+:deep(.selected-row) {
+  background-color: var(--el-fill-color-light) !important;
+}
+
+:deep(.el-table__row) {
+  cursor: pointer;
+}
+
+:deep(.el-table__row:hover) {
+  background-color: var(--el-fill-color-lighter);
 }
 </style>

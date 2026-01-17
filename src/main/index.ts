@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
+import { existsSync } from 'fs'
 
 // 修复缓存权限问题：必须在 app.ready 之前设置
 const userDataPath = join(app.getPath('appData'), 'liuliu-cloud-storage')
@@ -26,10 +27,36 @@ const N8N_BASE_URL = process.env.N8N_BASE_URL || 'http://10.2.3.7:5678'
 
 let mainWindow: BrowserWindow | null = null
 
+function getWindowIcon(): string {
+  const possiblePaths = [
+    join(process.cwd(), 'build', 'icon.ico'),
+    join(__dirname, '../../build/icon.ico'),
+    join(process.resourcesPath, 'icon.ico'),
+  ]
+
+  console.log('[getWindowIcon] 尝试查找图标文件...')
+  console.log('[getWindowIcon] process.cwd():', process.cwd())
+  console.log('[getWindowIcon] __dirname:', __dirname)
+  console.log('[getWindowIcon] process.resourcesPath:', process.resourcesPath)
+
+  for (const iconPath of possiblePaths) {
+    console.log('[getWindowIcon] 检查路径:', iconPath, '存在:', existsSync(iconPath))
+    if (existsSync(iconPath)) {
+      console.log('[getWindowIcon] ✓ 使用图标:', iconPath)
+      return iconPath
+    }
+  }
+
+  const fallback = join(__dirname, '../../build/icon.ico')
+  console.log('[getWindowIcon] ⚠ 未找到图标，使用回退路径:', fallback)
+  return fallback
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    icon: getWindowIcon(),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       nodeIntegration: false,

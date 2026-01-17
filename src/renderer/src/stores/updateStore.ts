@@ -15,40 +15,40 @@ export const useUpdateStore = defineStore('update', () => {
         }
         initialized = true
 
-        if (!window.updateAPI) {
-            console.warn('[updateStore] window.updateAPI 不存在，跳过更新检查')
+        if (!window.electronAPI?.updateAPI) {
+            console.warn('[updateStore] window.electronAPI.updateAPI 不存在，跳过更新检查')
             return
         }
 
-        window.updateAPI.onAvailable(() => {
+        window.electronAPI.updateAPI.onAvailable(() => {
             updateAvailable.value = true
         })
 
-        window.updateAPI.onNotAvailable(() => {
+        window.electronAPI.updateAPI.onNotAvailable(() => {
             console.log('[updateStore] 当前已是最新版本')
         })
 
-        window.updateAPI.onDownloadProgress((progress) => {
+        window.electronAPI.updateAPI.onDownloadProgress((progress) => {
             downloadProgress.value = progress.percent
         })
 
-        window.updateAPI.onDownloaded(() => {
+        window.electronAPI.updateAPI.onDownloaded(() => {
             updateDownloaded.value = true
         })
 
-        window.updateAPI.onError((message) => {
+        window.electronAPI.updateAPI.onError((message) => {
             errorMessage.value = message
         })
 
-        window.updateAPI.check()
+        window.electronAPI.updateAPI.check()
     }
 
     function installNow() {
-        window.updateAPI.installNow()
+        window.electronAPI.updateAPI.installNow()
     }
 
     function installOnQuit() {
-        window.updateAPI.installOnQuit()
+        window.electronAPI.updateAPI.installOnQuit()
     }
 
     function clearError() {

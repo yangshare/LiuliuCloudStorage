@@ -6,12 +6,27 @@ directories:
   output: dist
   buildResources: build
 
+extraResources:
+  - from: build/icon.ico
+    to: icon.ico
+  - from: src/assets/icons
+    to: assets/icons
+
 files:
   - dist-electron
   - dist
   - package.json
+  - "!dist/*.exe"
+  - "!dist/*.zip"
+  - "!dist/*.7z"
+  - "!dist/*.blockmap"
+  - "!dist/*.yml"
+  - "!dist/win-unpacked"
+  - "!dist/builder-*.yml"
+  - "!dist/builder-*.yaml"
 
 win:
+  icon: build/icon.ico
   target:
     - target: nsis
       arch:

@@ -85,6 +85,16 @@ export interface ElectronAPI {
   dialog: {
     openFile: (options?: { directory?: boolean }) => Promise<string[]>
   }
+  updateAPI: {
+    check: () => Promise<void>
+    installNow: () => Promise<void>
+    installOnQuit: () => Promise<void>
+    onAvailable: (callback: (info: any) => void) => void
+    onNotAvailable: (callback: () => void) => void
+    onDownloadProgress: (callback: (progress: any) => void) => void
+    onDownloaded: (callback: () => void) => void
+    onError: (callback: (message: string) => void) => void
+  }
 }
 
 declare global {

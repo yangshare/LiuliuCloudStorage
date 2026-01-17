@@ -1,39 +1,78 @@
 <template>
-  <n-space vertical size="large">
+  <el-space direction="vertical" :size="16" style="width: 100%">
     <!-- 搜索栏 -->
-    <n-card>
-      <n-space align="center">
-        <n-input
-          v-model:value="searchText"
+    <el-card>
+      <el-space align="center">
+        <el-input
+          v-model="searchText"
           placeholder="搜索用户名"
           clearable
           style="width: 300px"
           @input="handleSearch"
         >
           <template #prefix>
-            <n-icon><search-icon /></n-icon>
+            <el-icon><Search /></el-icon>
           </template>
-        </n-input>
-        <n-text depth="3">共 {{ total }} 个用户</n-text>
-        <n-text v-if="searchText" depth="3">
+        </el-input>
+        <el-text type="info">共 {{ total }} 个用户</el-text>
+        <el-text v-if="searchText" type="info">
           搜索结果: {{ total }} 条
-        </n-text>
-      </n-space>
-    </n-card>
+        </el-text>
+      </el-space>
+    </el-card>
 
     <!-- 用户列表表格 -->
-    <n-card>
-      <n-data-table
-        :columns="columns"
+    <el-card>
+      <el-table
         :data="userList"
         :loading="loading"
-        :pagination="paginationConfig"
-        :row-key="(row: UserListItem) => row.id"
-        @update:page="handlePageChange"
+        style="width: 100%"
         @row-click="handleRowClick"
+      >
+        <el-table-column prop="username" label="用户名" width="180">
+          <template #default="{ row }">
+            <el-space align="center" :size="8">
+              <span class="font-medium">{{ row.username }}</span>
+              <el-tag v-if="row.isAdmin" type="warning" size="small">管理员</el-tag>
+            </el-space>
+          </template>
+        </el-table-column>
+        <el-table-column prop="quotaTotal" label="配额总量" width="150">
+          <template #default="{ row }">{{ formatBytes(row.quotaTotal) }}</template>
+        </el-table-column>
+        <el-table-column prop="quotaUsed" label="配额使用量" width="150">
+          <template #default="{ row }">{{ formatBytes(row.quotaUsed) }}</template>
+        </el-table-column>
+        <el-table-column prop="usageRate" label="使用率" width="200">
+          <template #default="{ row }">
+            <el-progress
+              :percentage="row.usageRate"
+              :color="row.usageRate > 90 ? '#f56c6c' : row.usageRate > 70 ? '#e6a23c' : '#67c23a'"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column prop="createdAt" label="注册时间" width="180">
+          <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
+        </el-table-column>
+        <el-table-column prop="status" label="状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="row.isAdmin ? 'warning' : 'success'" size="small">
+              {{ row.isAdmin ? '管理员' : '正常' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-pagination
+        v-if="total > pageSize"
+        v-model:current-page="currentPage"
+        :page-size="pageSize"
+        :total="total"
+        layout="total, prev, pager, next"
+        @current-change="handlePageChange"
+        style="margin-top: 16px; justify-content: center"
       />
-    </n-card>
-  </n-space>
+    </el-card>
+  </el-space>
 
   <!-- 用户详情对话框 -->
   <user-detail-dialog
@@ -51,9 +90,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, h } from 'vue'
-import { NDataTable, NCard, NSpace, NInput, NText, NIcon, NProgress, NTag, type DataTableColumns } from 'naive-ui'
-import { SearchOutline as SearchIcon } from '@vicons/ionicons5'
+import { ref, onMounted } from 'vue'
+import { ElCard, ElInput, ElText, ElIcon, ElProgress, ElTag, ElSpace, ElTable, ElTableColumn, ElPagination } from 'element-plus'
+import { Search } from '@element-plus/icons-vue'
 import { adminService, type UserListItem } from '../../services/AdminService'
 import UserDetailDialog from '../../components/admin/UserDetailDialog.vue'
 import QuotaAdjustDialog from '../../components/admin/QuotaAdjustDialog.vue'
@@ -141,72 +180,6 @@ const formatDate = (dateString: string): string => {
     minute: '2-digit'
   })
 }
-
-// 表格列配置
-const columns = computed(() => {
-  const cols: DataTableColumns<UserListItem> = [
-    {
-      title: '用户名',
-      key: 'username',
-      render: (row: UserListItem) => {
-        return h('div', { class: 'flex items-center gap-2' }, [
-          h('span', { class: 'font-medium' }, row.username),
-          row.isAdmin ? h(NTag, { type: 'warning', size: 'small' }, { default: () => '管理员' }) : null
-        ])
-      }
-    },
-    {
-      title: '配额总量',
-      key: 'quotaTotal',
-      render: (row: UserListItem) => formatBytes(row.quotaTotal)
-    },
-    {
-      title: '配额使用量',
-      key: 'quotaUsed',
-      render: (row: UserListItem) => formatBytes(row.quotaUsed)
-    },
-    {
-      title: '使用率',
-      key: 'usageRate',
-      render: (row: UserListItem) => {
-        return h(NProgress, {
-          type: 'line',
-          percentage: row.usageRate,
-          indicatorPlacement: 'inside',
-          processing: row.usageRate > 90,
-          color: row.usageRate > 90 ? '#f56c6c' : row.usageRate > 70 ? '#e6a23c' : '#67c23a'
-        })
-      }
-    },
-    {
-      title: '注册时间',
-      key: 'createdAt',
-      render: (row: UserListItem) => formatDate(row.createdAt)
-    },
-    {
-      title: '状态',
-      key: 'status',
-      render: (row: UserListItem) => {
-        return h(NTag, {
-          type: row.isAdmin ? 'warning' : 'success',
-          size: 'small'
-        }, {
-          default: () => row.isAdmin ? '管理员' : '正常'
-        })
-      }
-    }
-  ]
-  return cols
-})
-
-// 分页配置
-const paginationConfig = computed(() => ({
-  page: currentPage.value,
-  pageSize: pageSize,
-  pageCount: Math.ceil(total.value / pageSize),
-  showSizePicker: false,
-  prefix: ({ itemCount }: { itemCount: number }) => `共 ${itemCount} 条`
-}))
 
 onMounted(() => {
   loadUsers()

@@ -1,55 +1,64 @@
 <template>
-  <n-layout has-sider style="height: 100vh">
-    <n-layout-sider
-      bordered
-      show-trigger
-      collapse-mode="width"
-      :collapsed-width="64"
-      :width="240"
-      :collapsed="collapsed"
-      @collapse="collapsed = true"
-      @expand="collapsed = false"
-    >
+  <el-container style="height: 100vh">
+    <el-aside :width="collapsed ? '64px' : '240px'" class="admin-aside">
       <div class="admin-logo">
-        <n-text strong>溜溜网盘</n-text>
+        <el-text v-if="!collapsed" tag="b" size="large">溜溜网盘</el-text>
+        <el-text v-else tag="b" size="large">LL</el-text>
       </div>
 
-      <n-menu
-        :collapsed="collapsed"
-        :collapsed-width="64"
-        :collapsed-icon-size="22"
-        :options="menuOptions"
-        :value="activeKey"
-        @update:value="handleMenuSelect"
-      />
-    </n-layout-sider>
+      <el-menu
+        :default-active="activeKey"
+        :collapse="collapsed"
+        :collapse-transition="false"
+        @select="handleMenuSelect"
+      >
+        <el-menu-item index="dashboard">
+          <el-icon><span class="menu-icon">📊</span></el-icon>
+          <template #title>控制台</template>
+        </el-menu-item>
+        <el-menu-item index="users">
+          <el-icon><span class="menu-icon">👥</span></el-icon>
+          <template #title>用户管理</template>
+        </el-menu-item>
+        <el-menu-item index="storage">
+          <el-icon><span class="menu-icon">💾</span></el-icon>
+          <template #title>存储监控</template>
+        </el-menu-item>
+        <el-menu-item index="quota">
+          <el-icon><span class="menu-icon">📈</span></el-icon>
+          <template #title>配额管理</template>
+        </el-menu-item>
+      </el-menu>
+    </el-aside>
 
-    <n-layout>
-      <n-layout-header bordered style="height: 64px; padding: 0 24px; display: flex; align-items: center; justify-content: space-between">
-        <n-space align="center">
-          <n-text strong>{{ currentPageTitle }}</n-text>
-        </n-space>
+    <el-container>
+      <el-header style="height: 64px; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--el-border-color-light)">
+        <div class="header-left">
+          <el-text tag="b" size="large">{{ currentPageTitle }}</el-text>
+        </div>
 
-        <n-space align="center">
-          <n-text>管理员: {{ authStore.user?.username }}</n-text>
-          <n-button text @click="handleLogout">
-            退出
-          </n-button>
-        </n-space>
-      </n-layout-header>
+        <div class="header-right">
+          <el-space align="center" :size="12">
+            <el-text>管理员: {{ authStore.user?.username }}</el-text>
+            <el-button link @click="handleLogout">
+              退出
+            </el-button>
+          </el-space>
+        </div>
+      </el-header>
 
-      <n-layout-content content-style="padding: 24px">
+      <el-main style="padding: 24px">
         <slot />
-      </n-layout-content>
-    </n-layout>
-  </n-layout>
+      </el-main>
+    </el-container>
+  </el-container>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
-import { NLayout, NLayoutSider, NLayoutHeader, NLayoutContent, NMenu, NText, NButton, NSpace } from 'naive-ui'
+import { ElContainer, ElAside, ElHeader, ElMain, ElMenu, ElMenuItem, ElText, ElButton, ElSpace, ElIcon } from 'element-plus'
 
 const router = useRouter()
 const route = useRoute()
@@ -74,32 +83,6 @@ const currentPageTitle = computed(() => {
   return titles[activeKey.value] || '控制台'
 })
 
-const menuOptions = computed(() => [
-  {
-    label: '控制台',
-    key: 'dashboard',
-    icon: () => h('span', '📊')
-  },
-  {
-    label: '用户管理',
-    key: 'users',
-    icon: () => h('span', '👥'),
-    disabled: false
-  },
-  {
-    label: '存储监控',
-    key: 'storage',
-    icon: () => h('span', '💾'),
-    disabled: false
-  },
-  {
-    label: '配额管理',
-    key: 'quota',
-    icon: () => h('span', '📈'),
-    disabled: false
-  }
-])
-
 const handleMenuSelect = (key: string) => {
   router.push({ name: `admin-${key}` })
 }
@@ -111,13 +94,34 @@ const handleLogout = async () => {
 </script>
 
 <style scoped>
+.admin-aside {
+  border-right: 1px solid var(--el-border-color-light);
+  transition: width 0.3s;
+  overflow: hidden;
+}
+
 .admin-logo {
   height: 64px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--el-border-color-light);
   font-size: 18px;
   font-weight: bold;
+  padding: 0 16px;
+}
+
+.el-menu {
+  border-right: none;
+}
+
+.menu-icon {
+  font-size: 18px;
+}
+
+.header-left,
+.header-right {
+  display: flex;
+  align-items: center;
 }
 </style>

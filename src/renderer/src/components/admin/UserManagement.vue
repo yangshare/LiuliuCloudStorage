@@ -1,21 +1,55 @@
 <template>
   <div class="user-management">
-    <n-card title="用户管理" :bordered="false">
-      <n-space vertical size="large">
-        <n-space justify="space-between">
-          <n-text>管理所有用户的配额</n-text>
-          <n-button type="primary" @click="loadUsers" :loading="isLoading">
+    <el-card title="用户管理">
+      <el-space direction="vertical" :size="16" style="width: 100%">
+        <el-space justify="space-between" style="width: 100%">
+          <el-text>管理所有用户的配额</el-text>
+          <el-button type="primary" @click="loadUsers" :loading="isLoading">
             刷新
-          </n-button>
-        </n-space>
+          </el-button>
+        </el-space>
 
-        <n-data-table
-          :columns="columns"
+        <el-table
           :data="users"
           :loading="isLoading"
-          :pagination="pagination"
-          :bordered="false"
-        />
+          style="width: 100%"
+        >
+          <el-table-column prop="id" label="ID" width="80" />
+          <el-table-column prop="username" label="用户名" width="150" />
+          <el-table-column prop="isAdmin" label="角色" width="100">
+            <template #default="{ row }">
+              <el-tag :type="row.isAdmin === 1 ? 'warning' : 'info'">
+                {{ row.isAdmin === 1 ? '管理员' : '普通用户' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="quotaTotal" label="总配额" width="120">
+            <template #default="{ row }">
+              {{ (row.quotaTotal / (1024 * 1024 * 1024)).toFixed(2) }} GB
+            </template>
+          </el-table-column>
+          <el-table-column prop="quotaUsed" label="已使用" width="120">
+            <template #default="{ row }">
+              {{ (row.quotaUsed / (1024 * 1024 * 1024)).toFixed(2) }} GB
+            </template>
+          </el-table-column>
+          <el-table-column label="使用率" width="120">
+            <template #default="{ row }">
+              {{ row.quotaTotal > 0 ? ((row.quotaUsed / row.quotaTotal) * 100).toFixed(1) : '0.0' }}%
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="150">
+            <template #default="{ row }">
+              <el-button
+                size="small"
+                type="primary"
+                @click="openQuotaDialog(row)"
+              >
+                调整配额
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
 
         <!-- 配额调整对话框 -->
         <quota-adjust-dialog
@@ -25,14 +59,14 @@
           :username="selectedUser?.username || ''"
           @success="handleQuotaUpdated"
         />
-      </n-space>
-    </n-card>
+      </el-space>
+    </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, h, onMounted } from 'vue'
-import { NCard, NSpace, NText, NButton, NDataTable, NTag, useMessage, type DataTableColumns } from 'naive-ui'
+import { ref, onMounted } from 'vue'
+import { ElCard, ElText, ElButton, ElTag, ElSpace, ElTable, ElTableColumn, ElMessage } from 'element-plus'
 import QuotaAdjustDialog from '../quota/QuotaAdjustDialog.vue'
 
 interface User {
@@ -44,79 +78,11 @@ interface User {
   createdAt: number
 }
 
-const message = useMessage()
+const message = ElMessage
 const isLoading = ref(false)
 const users = ref<User[]>([])
 const showQuotaDialog = ref(false)
 const selectedUser = ref<User | null>(null)
-
-const pagination = {
-  pageSize: 10
-}
-
-const columns: DataTableColumns<User> = [
-  {
-    title: 'ID',
-    key: 'id',
-    width: 80
-  },
-  {
-    title: '用户名',
-    key: 'username',
-    width: 150
-  },
-  {
-    title: '角色',
-    key: 'isAdmin',
-    width: 100,
-    render: (row) => {
-      return row.isAdmin === 1
-        ? h(NTag, { type: 'warning' }, { default: () => '管理员' })
-        : h(NTag, { type: 'default' }, { default: () => '普通用户' })
-    }
-  },
-  {
-    title: '总配额',
-    key: 'quotaTotal',
-    width: 120,
-    render: (row) => {
-      const gb = (row.quotaTotal / (1024 * 1024 * 1024)).toFixed(2)
-      return `${gb} GB`
-    }
-  },
-  {
-    title: '已使用',
-    key: 'quotaUsed',
-    width: 120,
-    render: (row) => {
-      const gb = (row.quotaUsed / (1024 * 1024 * 1024)).toFixed(2)
-      return `${gb} GB`
-    }
-  },
-  {
-    title: '使用率',
-    key: 'usage',
-    width: 120,
-    render: (row) => {
-      const percentage = row.quotaTotal > 0
-        ? ((row.quotaUsed / row.quotaTotal) * 100).toFixed(1)
-        : '0.0'
-      return `${percentage}%`
-    }
-  },
-  {
-    title: '操作',
-    key: 'actions',
-    width: 150,
-    render: (row) => {
-      return h(NButton, {
-        size: 'small',
-        type: 'primary',
-        onClick: () => openQuotaDialog(row)
-      }, { default: () => '调整配额' })
-    }
-  }
-]
 
 const loadUsers = async () => {
   try {

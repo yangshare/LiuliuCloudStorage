@@ -1,68 +1,65 @@
 <template>
   <div class="download-progress-panel">
-    <n-card
-      :title="transferStore.isProgressPanelCollapsed ? '' : '下载进度'"
-      size="small"
-      :bordered="false"
+    <el-card
+      shadow="never"
       :class="{ 'collapsed': transferStore.isProgressPanelCollapsed }"
-      style="margin-bottom: 16px"
     >
-      <template #header-extra>
-        <n-space align="center">
-          <n-badge :value="activeCount" :max="99">
-            <n-icon size="20" color="#18a058">
-              <DownloadIcon />
-            </n-icon>
-          </n-badge>
-          <n-text depth="3" style="font-size: 12px">
-            {{ formatSpeed(totalSpeed) }}
-          </n-text>
-          <n-button
-            text
+      <template #header>
+        <div class="card-header">
+          <el-space :size="12">
+            <el-badge :value="activeCount" :max="99" type="primary">
+              <el-icon :size="20" color="#67c23a">
+                <Download />
+              </el-icon>
+            </el-badge>
+            <el-text v-if="!transferStore.isProgressPanelCollapsed" type="info" size="small">
+              {{ formatSpeed(totalSpeed) }}
+            </el-text>
+          </el-space>
+          <el-button
+            link
             @click="transferStore.toggleProgressPanel"
             style="padding: 4px"
           >
-            <n-icon size="18">
-              <ChevronDownIcon v-if="!transferStore.isProgressPanelCollapsed" />
-              <ChevronUpIcon v-else />
-            </n-icon>
-          </n-button>
-        </n-space>
+            <el-icon :size="18">
+              <ArrowDown v-if="!transferStore.isProgressPanelCollapsed" />
+              <ArrowUp v-else />
+            </el-icon>
+          </el-button>
+        </div>
       </template>
 
       <!-- 折叠状态：紧凑摘要 -->
       <div v-if="transferStore.isProgressPanelCollapsed" class="collapsed-summary" @click="transferStore.toggleProgressPanel">
-        <n-text v-if="activeCount === 0" depth="3" style="font-size: 13px">
+        <el-text v-if="activeCount === 0" type="info" size="small">
           暂无下载任务
-        </n-text>
-        <n-space v-else align="center" :size="12">
-          <n-text style="font-size: 13px">
+        </el-text>
+        <el-space v-else align="center" :size="12">
+          <el-text size="small">
             {{ activeCount }} 个任务下载中
-          </n-text>
-          <n-divider vertical />
-          <n-text depth="3" style="font-size: 13px">
+          </el-text>
+          <el-divider direction="vertical" />
+          <el-text type="info" size="small">
             总速度 {{ formatSpeed(totalSpeed) }}
-          </n-text>
-          <n-divider vertical />
-          <n-progress
-            type="line"
+          </el-text>
+          <el-divider direction="vertical" />
+          <el-progress
             :percentage="totalProgress"
-            :show-indicator="false"
-            :height="6"
-            color="#2080f0"
+            :show-text="false"
+            :stroke-width="6"
+            color="#409eff"
             style="flex: 1; min-width: 100px"
           />
-        </n-space>
+        </el-space>
       </div>
 
       <!-- 展开状态：完整内容 -->
       <template v-else>
         <!-- 空状态 -->
-        <n-empty
+        <el-empty
           v-if="activeCount === 0"
           description="暂无下载任务"
-          size="small"
-          style="padding: 40px 0"
+          :image-size="80"
         />
 
         <!-- 进度列表 -->
@@ -76,33 +73,30 @@
 
         <!-- 总进度（多个任务时显示） -->
         <div v-if="activeCount > 1" class="total-progress">
-          <n-divider />
-          <n-space vertical :size="8">
-            <n-text depth="3" style="font-size: 12px">
+          <el-divider />
+          <el-space direction="vertical" :size="8" style="width: 100%">
+            <el-text type="info" size="small">
               总进度
-            </n-text>
-            <n-progress
-              type="line"
+            </el-text>
+            <el-progress
               :percentage="totalProgress"
-              :indicator-placement="'inside'"
-              :height="20"
-              :border-radius="4"
-              color="#2080f0"
+              :stroke-width="20"
+              color="#409eff"
             />
-            <n-text depth="3" style="font-size: 12px">
+            <el-text type="info" size="small">
               {{ activeCount }} 个任务下载中 · 总速度 {{ formatSpeed(totalSpeed) }}
-            </n-text>
-          </n-space>
+            </el-text>
+          </el-space>
         </div>
       </template>
-    </n-card>
+    </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { NCard, NProgress, NEmpty, NSpace, NText, NBadge, NIcon, NDivider, NButton } from 'naive-ui'
-import { Download as DownloadIcon, ChevronUp as ChevronUpIcon, ChevronDown as ChevronDownIcon } from '@vicons/ionicons5'
+import { ElCard, ElProgress, ElEmpty, ElText, ElBadge, ElIcon, ElDivider, ElButton, ElSpace } from 'element-plus'
+import { Download, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 import { useTransferStore } from '@/stores/transferStore'
 import { formatSpeed } from '@/utils/formatters'
 import DownloadProgressItem from './DownloadProgressItem.vue'
@@ -174,6 +168,12 @@ function calculateETA(downloadedBytes: number, totalBytes: number, speed: number
   width: 100%;
 }
 
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .progress-list {
   max-height: 400px;
   overflow-y: auto;
@@ -185,7 +185,7 @@ function calculateETA(downloadedBytes: number, totalBytes: number, speed: number
 }
 
 .progress-list::-webkit-scrollbar-thumb {
-  background-color: var(--n-scrollbar-color);
+  background-color: var(--el-border-color-darker);
   border-radius: 3px;
 }
 
@@ -198,19 +198,24 @@ function calculateETA(downloadedBytes: number, totalBytes: number, speed: number
   padding: 8px 0;
   cursor: pointer;
   transition: background-color 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .collapsed-summary:hover {
-  background-color: var(--n-color-hover);
+  background-color: var(--el-fill-color-light);
   border-radius: 4px;
+  padding: 8px 12px;
+  margin: -8px -12px;
 }
 
 /* 卡片过渡动画 */
-.n-card {
+.el-card {
   transition: all 0.3s ease-in-out;
 }
 
-.n-card.collapsed :deep(.n-card__content) {
+.el-card.collapsed :deep(.el-card__body) {
   padding: 8px 20px;
 }
 </style>

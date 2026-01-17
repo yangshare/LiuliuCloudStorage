@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { NSpace, NText, NButton, NIcon, NModal, useMessage } from 'naive-ui'
-import { DownloadOutline as DownloadIcon, TrashOutline as DeleteIcon, RefreshOutline as InvertIcon } from '@vicons/ionicons5'
+import { ElText, ElButton, ElIcon, ElDialog, ElSpace, ElMessage } from 'element-plus'
+import { Download, Delete, Refresh } from '@element-plus/icons-vue'
 import { useFileStore } from '../../stores/fileStore'
 import { useTransferStore } from '../../stores/transferStore'
 
 const fileStore = useFileStore()
 const transferStore = useTransferStore()
-const message = useMessage()
 
 // 删除确认对话框状态
 const showDeleteConfirm = ref(false)
@@ -18,11 +17,11 @@ async function handleBatchDownload() {
   const filesToDownload = fileStore.selectedFiles.filter(f => !f.isDir)
 
   if (filesToDownload.length === 0) {
-    message.warning('没有可下载的文件')
+    ElMessage.warning('没有可下载的文件')
     return
   }
 
-  message.info(`正在添加 ${filesToDownload.length} 个文件到下载队列...`)
+  ElMessage.info(`正在添加 ${filesToDownload.length} 个文件到下载队列...`)
 
   // 批量添加到下载队列并统计结果
   const currentPath = fileStore.currentPath === '/' ? '' : fileStore.currentPath
@@ -50,11 +49,11 @@ async function handleBatchDownload() {
 
   // 显示结果
   if (failedFiles.length === 0) {
-    message.success(`已添加 ${successCount} 个文件到下载队列`)
+    ElMessage.success(`已添加 ${successCount} 个文件到下载队列`)
   } else if (successCount === 0) {
-    message.error(`添加失败: ${failedFiles.join(', ')}`)
+    ElMessage.error(`添加失败: ${failedFiles.join(', ')}`)
   } else {
-    message.warning(`成功添加 ${successCount} 个文件，失败 ${failedFiles.length} 个: ${failedFiles.join(', ')}`)
+    ElMessage.warning(`成功添加 ${successCount} 个文件，失败 ${failedFiles.length} 个: ${failedFiles.join(', ')}`)
   }
 }
 
@@ -73,16 +72,16 @@ async function confirmBatchDelete() {
     const result = await window.electronAPI.file.batchDelete(dir, names)
 
     if (result.success) {
-      message.success(`成功删除 ${names.length} 个文件`)
+      ElMessage.success(`成功删除 ${names.length} 个文件`)
     } else {
-      message.error(`删除失败: ${result.error}`)
+      ElMessage.error(`删除失败: ${result.error}`)
     }
 
     // 清空选中状态并刷新文件列表
     fileStore.clearSelection()
     fileStore.refresh()
   } catch (error: any) {
-    message.error(error.message || '批量删除失败')
+    ElMessage.error(error.message || '批量删除失败')
   } finally {
     isDeleting.value = false
     showDeleteConfirm.value = false
@@ -117,47 +116,39 @@ function getDeleteConfirmContent() {
 </script>
 
 <template>
-  <n-space v-if="fileStore.selectedFiles.length > 0" align="center" class="batch-toolbar">
-    <n-text>已选择 {{ fileStore.selectedFiles.length }} 项</n-text>
-    <n-button @click="handleBatchDownload">
-      <template #icon>
-        <n-icon :component="DownloadIcon" />
-      </template>
+  <el-space v-if="fileStore.selectedFiles.length > 0" align="center" class="batch-toolbar" :size="8">
+    <el-text>已选择 {{ fileStore.selectedFiles.length }} 项</el-text>
+    <el-button @click="handleBatchDownload" :icon="Download">
       批量下载
-    </n-button>
-    <n-button type="error" @click="handleBatchDelete">
-      <template #icon>
-        <n-icon :component="DeleteIcon" />
-      </template>
+    </el-button>
+    <el-button type="danger" @click="handleBatchDelete" :icon="Delete">
       批量删除
-    </n-button>
-    <n-button @click="handleInvertSelection">
-      <template #icon>
-        <n-icon :component="InvertIcon" />
-      </template>
+    </el-button>
+    <el-button @click="handleInvertSelection" :icon="Refresh">
       反选
-    </n-button>
-    <n-button @click="handleCancelSelection">取消选择</n-button>
-  </n-space>
+    </el-button>
+    <el-button @click="handleCancelSelection">取消选择</el-button>
+  </el-space>
 
   <!-- 批量删除确认对话框 -->
-  <n-modal
-    v-model:show="showDeleteConfirm"
-    preset="dialog"
+  <el-dialog
+    v-model="showDeleteConfirm"
     title="确认批量删除"
-    :content="getDeleteConfirmContent()"
-    positive-text="删除"
-    negative-text="取消"
-    :positive-button-props="{ type: 'error', loading: isDeleting }"
-    @positive-click="confirmBatchDelete"
-    @negative-click="cancelDelete"
-  />
+    width="500px"
+    :close-on-click-modal="false"
+  >
+    <span>{{ getDeleteConfirmContent() }}</span>
+    <template #footer>
+      <el-button @click="cancelDelete">取消</el-button>
+      <el-button type="danger" @click="confirmBatchDelete" :loading="isDeleting">删除</el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <style scoped>
 .batch-toolbar {
   padding: 8px 16px;
-  background-color: var(--n-color-hover);
+  background-color: var(--el-fill-color-light);
   border-radius: 4px;
   margin-bottom: 8px;
 }

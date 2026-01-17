@@ -8,13 +8,6 @@ const PATH_SEPARATOR = '/'
 const ROOT_PATH = '/'
 const ROOT_LABEL = '根目录'
 
-export interface TreeNode {
-  key: string
-  label: string
-  isLeaf: boolean
-  children?: TreeNode[]
-}
-
 export const useFileStore = defineStore('file', () => {
   const router = useRouter()
 
@@ -26,7 +19,6 @@ export const useFileStore = defineStore('file', () => {
   const selectedFile = ref<FileItem | null>(null)
   const isOnline = ref<boolean>(navigator.onLine)
   const cacheTime = ref<string | null>(null)
-  const treeData = ref<TreeNode[]>([{ key: ROOT_PATH, label: ROOT_LABEL, isLeaf: false }])
   const isNavigating = ref<boolean>(false)
   const isCreatingFolder = ref<boolean>(false) // 防止快速点击重复导航
   const selectedFiles = ref<FileItem[]>([]) // 多选文件列表
@@ -158,27 +150,6 @@ export const useFileStore = defineStore('file', () => {
     selectedFile.value = file
   }
 
-  // 懒加载目录树子节点
-  async function loadTreeChildren(path: string): Promise<TreeNode[]> {
-    try {
-      const result = await window.electronAPI.file.list(path)
-      if (result.success && result.data) {
-        return result.data.content
-          .filter((f: FileItem) => f.isDir)
-          .map((f: FileItem) => ({
-            key: path === ROOT_PATH ? `${PATH_SEPARATOR}${f.name}` : `${path}${PATH_SEPARATOR}${f.name}`,
-            label: f.name,
-            isLeaf: false
-          }))
-      } else if (result.error) {
-        console.warn(`加载目录树子节点失败 [${path}]:`, result.error)
-      }
-    } catch (error) {
-      console.error(`加载目录树子节点异常 [${path}]:`, error)
-    }
-    return []
-  }
-
   // 创建新文件夹
   async function createFolder(folderName: string): Promise<boolean> {
     try {
@@ -262,64 +233,6 @@ export const useFileStore = defineStore('file', () => {
     selectedFiles.value = files.value.filter(f => !currentSelected.has(f.name))
   }
 
-  // 刷新目录树
-  async function refreshTreeNode(path: string) {
-    const children = await loadTreeChildren(path)
-    updateTreeNodeChildren(treeData.value, path, children)
-  }
-
-  // 递归更新树节点的子节点
-  function updateTreeNodeChildren(nodes: TreeNode[], path: string, children: TreeNode[]) {
-    for (const node of nodes) {
-      if (node.key === path) {
-        node.children = children
-        return true
-      }
-      if (node.children && updateTreeNodeChildren(node.children, path, children)) {
-        return true
-      }
-    }
-    return false
-  }
-
-  // 从目录树中移除指定节点
-  function removeTreeNode(path: string) {
-    removeNodeFromTree(treeData.value, path)
-  }
-
-  // 递归从树中移除节点
-  function removeNodeFromTree(nodes: TreeNode[], path: string): boolean {
-    for (let i = 0; i < nodes.length; i++) {
-      if (nodes[i].key === path) {
-        nodes.splice(i, 1)
-        return true
-      }
-      if (nodes[i].children && removeNodeFromTree(nodes[i].children, path)) {
-        return true
-      }
-    }
-    return false
-  }
-
-  // 更新目录树节点的label
-  function updateTreeNodeLabel(oldPath: string, newLabel: string) {
-    updateNodeLabel(treeData.value, oldPath, newLabel)
-  }
-
-  // 递归更新树节点的label
-  function updateNodeLabel(nodes: TreeNode[], path: string, newLabel: string): boolean {
-    for (const node of nodes) {
-      if (node.key === path) {
-        node.label = newLabel
-        return true
-      }
-      if (node.children && updateNodeLabel(node.children, path, newLabel)) {
-        return true
-      }
-    }
-    return false
-  }
-
   return {
     files,
     currentPath,
@@ -329,7 +242,6 @@ export const useFileStore = defineStore('file', () => {
     selectedFile,
     isOnline,
     cacheTime,
-    treeData,
     breadcrumbs,
     isNavigating,
     isCreatingFolder,
@@ -343,7 +255,6 @@ export const useFileStore = defineStore('file', () => {
     goUp,
     refresh,
     selectFile,
-    loadTreeChildren,
     createFolder,
     toggleSelect,
     selectRange,
@@ -351,9 +262,6 @@ export const useFileStore = defineStore('file', () => {
     isSelected,
     selectAll,
     deselectAll,
-    invertSelection,
-    refreshTreeNode,
-    removeTreeNode,
-    updateTreeNodeLabel
+    invertSelection
   }
 })

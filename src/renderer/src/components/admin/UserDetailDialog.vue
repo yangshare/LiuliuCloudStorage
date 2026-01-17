@@ -1,71 +1,62 @@
 <template>
-  <n-modal
-    :show="show"
-    @update:show="$emit('update:show', $event)"
+  <el-dialog
+    :model-value="show"
+    @update:model-value="$emit('update:show', $event)"
+    title="用户详情"
+    width="600px"
   >
-    <n-card
-      style="width: 600px; max-height: 80vh; overflow: auto;"
-      title="用户详情"
-      :bordered="false"
-      size="huge"
-      role="dialog"
-      aria-modal="true"
-    >
-      <n-descriptions v-if="user" :column="2" bordered>
-        <n-descriptions-item label="用户名">
-          {{ user.username }}
-        </n-descriptions-item>
-        <n-descriptions-item label="角色">
-          <n-tag :type="user.isAdmin ? 'warning' : 'success'">
-            {{ user.isAdmin ? '管理员' : '普通用户' }}
-          </n-tag>
-        </n-descriptions-item>
-        <n-descriptions-item label="配额总量">
-          {{ formatBytes(user.quotaTotal) }}
-        </n-descriptions-item>
-        <n-descriptions-item label="已使用">
-          {{ formatBytes(user.quotaUsed) }}
-        </n-descriptions-item>
-        <n-descriptions-item label="使用率" :span="2">
-          <n-progress
-            type="line"
-            :percentage="user.usageRate"
-            :processing="user.usageRate > 90"
-            :color="user.usageRate > 90 ? '#f56c6c' : user.usageRate > 70 ? '#e6a23c' : '#67c23a'"
-          />
-        </n-descriptions-item>
-        <n-descriptions-item label="注册时间" :span="2">
-          {{ formatDate(user.createdAt) }}
-        </n-descriptions-item>
-        <n-descriptions-item label="状态" :span="2">
-          <n-tag :type="user.isAdmin ? 'warning' : 'success'">
-            {{ user.isAdmin ? '管理员' : '正常' }}
-          </n-tag>
-        </n-descriptions-item>
-      </n-descriptions>
+    <el-descriptions v-if="user" :column="2" bordered>
+      <el-descriptions-item label="用户名">
+        {{ user.username }}
+      </el-descriptions-item>
+      <el-descriptions-item label="角色">
+        <el-tag :type="user.isAdmin ? 'warning' : 'success'">
+          {{ user.isAdmin ? '管理员' : '普通用户' }}
+        </el-tag>
+      </el-descriptions-item>
+      <el-descriptions-item label="配额总量">
+        {{ formatBytes(user.quotaTotal) }}
+      </el-descriptions-item>
+      <el-descriptions-item label="已使用">
+        {{ formatBytes(user.quotaUsed) }}
+      </el-descriptions-item>
+      <el-descriptions-item label="使用率" :span="2">
+        <el-progress
+          :percentage="user.usageRate"
+          :color="getProgressColor(user.usageRate)"
+        />
+      </el-descriptions-item>
+      <el-descriptions-item label="注册时间" :span="2">
+        {{ formatDate(user.createdAt) }}
+      </el-descriptions-item>
+      <el-descriptions-item label="状态" :span="2">
+        <el-tag :type="user.isAdmin ? 'warning' : 'success'">
+          {{ user.isAdmin ? '管理员' : '正常' }}
+        </el-tag>
+      </el-descriptions-item>
+    </el-descriptions>
 
-      <n-divider />
+    <el-divider />
 
-      <n-alert type="info" title="操作历史" style="margin-bottom: 16px;">
-        用户操作历史记录功能将在 Story 9.4 中实现
-      </n-alert>
+    <el-alert type="info" title="操作历史" style="margin-bottom: 16px;" :closable="false">
+      用户操作历史记录功能将在 Story 9.4 中实现
+    </el-alert>
 
-      <template #footer>
-        <n-space justify="end">
-          <n-button @click="$emit('update:show', false)">
-            关闭
-          </n-button>
-          <n-button type="primary" @click="handleAdjustQuota">
-            调整配额
-          </n-button>
-        </n-space>
-      </template>
-    </n-card>
-  </n-modal>
+    <template #footer>
+      <div class="dialog-footer">
+        <el-button @click="$emit('update:show', false)">
+          关闭
+        </el-button>
+        <el-button type="primary" @click="handleAdjustQuota">
+          调整配额
+        </el-button>
+      </div>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { NModal, NCard, NDescriptions, NDescriptionsItem, NTag, NProgress, NButton, NSpace, NDivider, NAlert } from 'naive-ui'
+import { ElDialog, ElDescriptions, ElDescriptionsItem, ElTag, ElProgress, ElButton, ElDivider, ElAlert } from 'element-plus'
 import type { UserListItem } from '../../services/AdminService'
 
 interface Props {
@@ -75,10 +66,10 @@ interface Props {
 
 interface Emits {
   (e: 'update:show', value: boolean): void
-  (e: 'adjustQuota', user: UserListItem): void  // Story 7.1 CRITICAL FIX: 添加配额调整事件
+  (e: 'adjustQuota', user: UserListItem): void
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
 const formatBytes = (bytes: number): string => {
@@ -94,9 +85,22 @@ const formatDate = (dateString: string): string => {
   return date.toLocaleString('zh-CN')
 }
 
-// Story 7.1 CRITICAL FIX: 实现配额调整功能，触发事件让父组件打开配额调整对话框
+const getProgressColor = (percentage: number): string => {
+  if (percentage > 90) return '#f56c6c'
+  if (percentage > 70) return '#e6a23c'
+  return '#67c23a'
+}
+
 const handleAdjustQuota = () => {
-  if (!user) return
-  emit('adjustQuota', user)
+  if (!props.user) return
+  emit('adjustQuota', props.user)
 }
 </script>
+
+<style scoped>
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+</style>

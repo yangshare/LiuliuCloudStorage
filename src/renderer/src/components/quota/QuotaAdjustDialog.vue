@@ -1,49 +1,49 @@
 <template>
-  <n-modal
-    v-model:show="visible"
-    preset="dialog"
+  <el-dialog
+    v-model="visible"
     title="调整配额"
-    :style="{ width: '500px' }"
+    width="500px"
+    :before-close="handleCancel"
   >
-    <n-form ref="formRef" :model="formData" :rules="rules" label-placement="left" label-width="100px">
-      <n-form-item label="用户名">
-        <n-input :value="username" disabled />
-      </n-form-item>
+    <el-form ref="formRef" :model="formData" :rules="rules" label-position="left" label-width="100px">
+      <el-form-item label="用户名">
+        <el-input :value="username" disabled />
+      </el-form-item>
 
-      <n-form-item label="当前配额">
-        <n-input :value="`${currentQuotaGB} GB`" disabled />
-      </n-form-item>
+      <el-form-item label="当前配额">
+        <el-input :value="`${currentQuotaGB} GB`" disabled />
+      </el-form-item>
 
-      <n-form-item label="新配额（GB）" path="newQuota">
-        <n-input-number
-          v-model:value="formData.newQuota"
+      <el-form-item label="新配额（GB）" prop="newQuota">
+        <el-input-number
+          v-model="formData.newQuota"
           :min="1"
           :max="1000"
           :precision="2"
           placeholder="请输入新的配额值"
           style="width: 100%"
         />
-      </n-form-item>
+      </el-form-item>
 
-      <n-alert type="info" style="margin-bottom: 16px">
+      <el-alert type="info" :closable="false" style="margin-bottom: 16px">
         配额调整后立即生效，用户可用空间将更新。
-      </n-alert>
-    </n-form>
+      </el-alert>
+    </el-form>
 
-    <template #action>
-      <n-space>
-        <n-button @click="handleCancel">取消</n-button>
-        <n-button type="primary" @click="handleSubmit" :loading="isLoading">
+    <template #footer>
+      <el-space>
+        <el-button @click="handleCancel">取消</el-button>
+        <el-button type="primary" @click="handleSubmit" :loading="isLoading">
           确认调整
-        </n-button>
-      </n-space>
+        </el-button>
+      </el-space>
     </template>
-  </n-modal>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { NModal, NForm, NFormItem, NInput, NInputNumber, NButton, NAlert, NSpace, useMessage, type FormInst } from 'naive-ui'
+import { ElDialog, ElForm, ElFormItem, ElInput, ElInputNumber, ElButton, ElAlert, ElSpace, ElMessage, type FormInstance } from 'element-plus'
 
 interface Props {
   show: boolean
@@ -58,10 +58,10 @@ const emit = defineEmits<{
   success: [userId: number]
 }>()
 
-const message = useMessage()
+const message = ElMessage
 const visible = ref(false)
 const isLoading = ref(false)
-const formRef = ref<FormInst | null>(null)
+const formRef = ref<FormInstance | null>(null)
 
 const currentQuotaGB = computed(() =>
   (props.currentQuotaBytes / (1024 * 1024 * 1024)).toFixed(2)

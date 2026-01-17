@@ -1,35 +1,36 @@
 <template>
-  <n-modal v-model:show="visible" preset="dialog" title="下载到...">
-    <n-space vertical>
-      <n-text>文件名: {{ file?.name }}</n-text>
-      <n-text>大小: {{ formatFileSize(file?.size || 0) }}</n-text>
+  <el-dialog v-model="visible" title="下载到..." width="500px" :close-on-click-modal="false">
+    <el-space direction="vertical" :size="16" style="width: 100%">
+      <el-text>文件名: {{ file?.name }}</el-text>
+      <el-text>大小: {{ formatFileSize(file?.size || 0) }}</el-text>
 
-      <n-form-item label="保存位置">
-        <n-input-group>
-          <n-input
-            v-model:value="savePath"
-            readonly
-            placeholder="选择保存位置"
-          />
-          <n-button @click="selectPath">选择位置</n-button>
-        </n-input-group>
-      </n-form-item>
-    </n-space>
+      <el-form-item label="保存位置">
+        <el-input
+          v-model="savePath"
+          readonly
+          placeholder="选择保存位置"
+        >
+          <template #append>
+            <el-button @click="selectPath">选择位置</el-button>
+          </template>
+        </el-input>
+      </el-form-item>
+    </el-space>
 
-    <template #action>
-      <n-space>
-        <n-button @click="handleCancel">取消</n-button>
-        <n-button type="primary" @click="confirmDownload" :disabled="!savePath">
+    <template #footer>
+      <el-space :size="12">
+        <el-button @click="handleCancel">取消</el-button>
+        <el-button type="primary" @click="confirmDownload" :disabled="!savePath">
           确认下载
-        </n-button>
-      </n-space>
+        </el-button>
+      </el-space>
     </template>
-  </n-modal>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { NModal, NSpace, NText, NFormItem, NInputGroup, NInput, NButton, useMessage } from 'naive-ui'
+import { ElDialog, ElText, ElFormItem, ElInput, ElButton, ElSpace, ElMessage } from 'element-plus'
 import { formatFileSize } from '../../utils/formatters'
 import type { FileItem } from '../../../../shared/types/electron'
 
@@ -43,7 +44,6 @@ const emit = defineEmits<{
   'confirm': [savePath: string]
 }>()
 
-const message = useMessage()
 const savePath = ref('')
 const visible = ref(props.visible)
 
@@ -65,7 +65,7 @@ async function selectPath() {
       savePath.value = result.path
     }
   } catch (error: any) {
-    message.error('选择目录失败: ' + error.message)
+    ElMessage.error('选择目录失败: ' + error.message)
   }
 }
 

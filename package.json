@@ -33,13 +33,18 @@
     "package": "electron-builder --win",
     "build:win": "pnpm build && electron-builder --win",
     "build:mac": "pnpm build && electron-builder --mac",
-    "build:linux": "pnpm build && electron-builder --linux"
+    "build:linux": "pnpm build && electron-builder --linux",
+    "migrate:ui": "node scripts/migrate-to-element-plus.js"
   },
   "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
     "@vicons/ionicons5": "^0.13.0",
     "better-sqlite3": "^11.0.0",
     "electron-updater": "^6.7.3",
-    "lodash-es": "^4.17.22"
+    "element-plus": "^2.13.1",
+    "lodash-es": "^4.17.22",
+    "winston": "^3.19.0",
+    "winston-daily-rotate-file": "^5.0.0"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.0",
@@ -58,6 +63,7 @@
     "electron-builder": "^26.4.0",
     "electron-rebuild": "^3.2.9",
     "electron-vite": "^2.0.0",
+    "glob": "^10.5.0",
     "jsdom": "^27.4.0",
     "naive-ui": "^2.43.2",
     "pinia": "^2.1.0",

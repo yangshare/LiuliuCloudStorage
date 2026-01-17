@@ -5,7 +5,7 @@
       <span class="file-size">{{ formatSize(task.transferredSize) }} / {{ formatSize(task.fileSize) }}</span>
     </div>
 
-    <n-progress
+    <el-progress
       type="line"
       :percentage="task.progress"
       :status="getStatus(task.status)"
@@ -22,7 +22,7 @@
       <div v-if="task.error" class="error-message">
         {{ task.error }}
       </div>
-      <n-button
+      <el-button
         v-if="task.resumable"
         size="small"
         type="primary"
@@ -30,19 +30,19 @@
         :loading="isResuming"
       >
         恢复上传
-      </n-button>
+      </el-button>
     </div>
 
     <!-- 取消按钮（只对 pending 和 in_progress 状态显示） -->
     <div v-if="task.status === 'pending' || task.status === 'in_progress'" class="action-section">
-      <n-button
+      <el-button
         size="small"
         type="error"
         @click="handleCancel"
         :loading="isCancelling"
       >
         取消
-      </n-button>
+      </el-button>
     </div>
 
     <!-- 状态提示 -->
@@ -57,7 +57,8 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { NProgress, NButton, useDialog, useNotification } from 'naive-ui'
+import { ElProgress, ElButton } from 'element-plus'
+import { ElMessageBox, ElNotification } from 'element-plus'
 import type { UploadTask } from '@/stores/transferStore'
 
 interface Props {
@@ -73,8 +74,8 @@ const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 const isResuming = ref(false)
 const isCancelling = ref(false)
-const dialog = useDialog()
-const notification = useNotification()
+const dialog = ElMessageBox
+const notification = ElNotification
 
 async function handleResume() {
   isResuming.value = true

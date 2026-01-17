@@ -1,32 +1,32 @@
 <template>
-  <n-modal
-    v-model:show="showModal"
-    preset="dialog"
+  <el-dialog
+    v-model="showModal"
     title="新建文件夹"
-    positive-text="确定"
-    negative-text="取消"
-    :loading="isCreating"
-    @positive-click="handleCreate"
-    @negative-click="handleCancel"
+    width="500px"
+    :close-on-click-modal="false"
   >
-    <n-form ref="formRef" :model="formData" :rules="rules">
-      <n-form-item label="文件夹名称" path="folderName">
-        <n-input
-          v-model:value="formData.folderName"
+    <el-form ref="formRef" :model="formData" :rules="rules" label-width="120px">
+      <el-form-item label="文件夹名称" prop="folderName">
+        <el-input
+          v-model="formData.folderName"
           placeholder="请输入文件夹名称"
           :disabled="isCreating"
-          @keydown.enter="handleCreate"
-          @keydown.esc="handleCancel"
-          autofocus
+          @keyup.enter="handleCreate"
+          @keyup.esc="handleCancel"
+          clearable
         />
-      </n-form-item>
-    </n-form>
-  </n-modal>
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <el-button @click="handleCancel" :disabled="isCreating">取消</el-button>
+      <el-button type="primary" @click="handleCreate" :loading="isCreating">确定</el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
-import { NModal, NForm, NFormItem, NInput } from 'naive-ui'
+import { ElDialog, ElForm, ElFormItem, ElInput } from 'element-plus'
 import { useFileStore } from '../../stores/fileStore'
 
 const props = defineProps<{

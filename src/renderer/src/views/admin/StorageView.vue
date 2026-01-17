@@ -1,87 +1,94 @@
 <template>
-  <n-space vertical size="large">
+  <el-space direction="vertical" :size="16" style="width: 100%">
     <!-- 总体存储统计 -->
-    <n-card title="存储概览">
-      <n-space vertical size="large" v-if="!loading">
+    <el-card title="存储概览">
+      <el-space direction="vertical" :size="16" style="width: 100%" v-if="!loading">
         <!-- 总使用率进度条 -->
-        <n-space size="large">
-          <n-statistic label="总存储配额">
-            <n-number-animation :from="0" :to="stats.totalQuota" :precision="0" />
+        <el-space :size="16">
+          <el-statistic title="总存储配额" :value="stats.totalQuota" :precision="0">
             <template #suffix>
               <span class="text-sm">B ({{ formatBytes(stats.totalQuota) }})</span>
             </template>
-          </n-statistic>
-          <n-statistic label="已使用">
-            <n-number-animation :from="0" :to="stats.totalUsed" :precision="0" />
+          </el-statistic>
+          <el-statistic title="已使用" :value="stats.totalUsed" :precision="0">
             <template #suffix>
               <span class="text-sm">B ({{ formatBytes(stats.totalUsed) }})</span>
             </template>
-          </n-statistic>
-          <n-statistic label="剩余空间">
-            <n-number-animation :from="0" :to="stats.remaining" :precision="0" />
+          </el-statistic>
+          <el-statistic title="剩余空间" :value="stats.remaining" :precision="0">
             <template #suffix>
               <span class="text-sm">B ({{ formatBytes(stats.remaining) }})</span>
             </template>
-          </n-statistic>
-          <n-statistic label="用户数">
-            {{ stats.userCount }}
-          </n-statistic>
-        </n-space>
+          </el-statistic>
+          <el-statistic title="用户数" :value="stats.userCount" />
+        </el-space>
 
-        <n-divider />
+        <el-divider />
 
         <!-- 使用率可视化 -->
         <div>
-          <n-space justify="space-between" align="center" style="margin-bottom: 12px;">
-            <n-text strong>总使用率</n-text>
-            <n-text :type="stats.usageRate > 90 ? 'error' : stats.usageRate > 70 ? 'warning' : 'success'">
+          <el-space justify="space-between" align="center" style="margin-bottom: 12px; width: 100%">
+            <el-text tag="b">总使用率</el-text>
+            <el-text :type="stats.usageRate > 90 ? 'danger' : stats.usageRate > 70 ? 'warning' : 'success'">
               {{ stats.usageRate.toFixed(2) }}%
-            </n-text>
-          </n-space>
-          <n-progress
+            </el-text>
+          </el-space>
+          <el-progress
             type="line"
             :percentage="stats.usageRate"
-            :processing="stats.usageRate > 90"
+            :status="stats.usageRate > 90 ? 'exception' : stats.usageRate > 70 ? 'warning' : 'success'"
             :color="stats.usageRate > 90 ? '#f56c6c' : stats.usageRate > 70 ? '#e6a23c' : '#67c23a'"
-            indicator-placement="inside"
           />
         </div>
-      </n-space>
+      </el-space>
 
-      <n-spin :show="loading" description="加载中..." />
-    </n-card>
+      <el-skeleton v-if="loading" :rows="5" animated />
+    </el-card>
 
     <!-- 用户配额排行榜 Top 10 -->
-    <n-card title="用户配额使用排行 Top 10">
-      <n-data-table
-        :columns="topUserColumns"
+    <el-card title="用户配额使用排行 Top 10">
+      <el-table
         :data="stats.topUsers"
         :loading="loading"
-        :pagination="false"
-        :row-key="(row: any) => row.id"
-      />
-    </n-card>
+        style="width: 100%"
+      >
+        <el-table-column prop="rank" label="排名" width="80">
+          <template #default="{ $index }">{{ $index + 1 }}</template>
+        </el-table-column>
+        <el-table-column prop="username" label="用户名" />
+        <el-table-column prop="quotaTotal" label="配额总量">
+          <template #default="{ row }">{{ formatBytes(row.quotaTotal) }}</template>
+        </el-table-column>
+        <el-table-column prop="quotaUsed" label="已使用">
+          <template #default="{ row }">{{ formatBytes(row.quotaUsed) }}</template>
+        </el-table-column>
+        <el-table-column prop="usageRate" label="使用率" width="200">
+          <template #default="{ row }">
+            <el-progress
+              :percentage="row.usageRate"
+              :color="row.usageRate > 90 ? '#f56c6c' : row.usageRate > 70 ? '#e6a23c' : '#67c23a'"
+            />
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
 
     <!-- 自动刷新提示 -->
-    <n-alert type="info" :show-icon="false">
-      数据每 5 分钟自动刷新一次
-      <template #header>
-        <n-space align="center">
-          <n-icon><refresh-icon /></n-icon>
-          <span>自动刷新</span>
-        </n-space>
+    <el-alert type="info" :closable="false">
+      <template #title>
+        <el-space align="center">
+          <el-icon><Refresh /></el-icon>
+          <span>数据每 5 分钟自动刷新一次</span>
+        </el-space>
       </template>
-    </n-alert>
-  </n-space>
+    </el-alert>
+  </el-space>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, h } from 'vue'
-import {
-  NCard, NSpace, NStatistic, NNumberAnimation, NText, NDivider,
-  NProgress, NDataTable, NSpin, NAlert, NIcon, type DataTableColumns
-} from 'naive-ui'
-import { RefreshOutline as RefreshIcon } from '@vicons/ionicons5'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { ElCard, ElStatistic, ElText, ElDivider, ElProgress, ElAlert, ElIcon, ElSpace, ElTable, ElTableColumn, ElSkeleton } from 'element-plus'
+import { Refresh } from '@element-plus/icons-vue'
 import { adminService, type StorageStats } from '../../services/AdminService'
 
 const loading = ref(false)
@@ -117,49 +124,6 @@ const formatBytes = (bytes: number): string => {
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`
 }
-
-// Top用户表格列配置
-const topUserColumns = computed(() => {
-  const cols: DataTableColumns<any> = [
-    {
-      title: '排名',
-      key: 'rank',
-      render: (_row: any, index: number) => index + 1,
-      width: 80
-    },
-    {
-      title: '用户名',
-      key: 'username'
-    },
-    {
-      title: '配额总量',
-      key: 'quotaTotal',
-      render: (row: any) => formatBytes(row.quotaTotal)
-    },
-    {
-      title: '已使用',
-      key: 'quotaUsed',
-      render: (row: any) => formatBytes(row.quotaUsed)
-    },
-    {
-      title: '使用率',
-      key: 'usageRate',
-      render: (row: any) => {
-        return h('div', { class: 'w-full' }, [
-          h(NProgress, {
-            type: 'line',
-            percentage: row.usageRate,
-            processing: row.usageRate > 90,
-            color: row.usageRate > 90 ? '#f56c6c' : row.usageRate > 70 ? '#e6a23c' : '#67c23a',
-            indicatorPlacement: 'inside',
-            style: { width: '100%' }
-          })
-        ])
-      }
-    }
-  ]
-  return cols
-})
 
 // 组件挂载时加载数据并启动定时刷新
 onMounted(() => {

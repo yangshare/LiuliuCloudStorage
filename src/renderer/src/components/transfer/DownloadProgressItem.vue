@@ -1,102 +1,97 @@
 <template>
   <div class="download-progress-item">
-    <n-space vertical :size="8">
+    <el-space direction="vertical" :size="8" style="width: 100%">
       <!-- 文件名和操作按钮 -->
       <div class="progress-header">
-        <n-text strong>{{ progress.fileName }}</n-text>
-        <n-space align="center" :size="8">
-          <n-tag
+        <el-text tag="b" size="default">{{ progress.fileName }}</el-text>
+        <el-space align="center" :size="8">
+          <el-tag
             :type="getStatusType(progress.status)"
             size="small"
             round
           >
             {{ getStatusText(progress.status) }}
-          </n-tag>
+          </el-tag>
 
           <!-- 进行中：显示取消按钮 -->
-          <n-button
+          <el-button
             v-if="progress.status === 'in_progress'"
-            size="tiny"
-            type="error"
-            secondary
+            size="small"
+            type="danger"
+            plain
             @click="handleCancel"
           >
             取消
-          </n-button>
+          </el-button>
 
           <!-- 等待中：显示移除按钮 -->
-          <n-button
+          <el-button
             v-if="progress.status === 'pending'"
-            size="tiny"
+            size="small"
             @click="handleRemove"
           >
             移除
-          </n-button>
+          </el-button>
 
           <!-- 已失败：显示重试按钮 -->
-          <n-button
+          <el-button
             v-if="progress.status === 'failed'"
-            size="tiny"
+            size="small"
             type="primary"
             @click="handleResume"
           >
             重试
-          </n-button>
-        </n-space>
+          </el-button>
+        </el-space>
       </div>
 
       <!-- 进度条 -->
-      <n-progress
-        type="line"
+      <el-progress
         :percentage="progress.percentage || 0"
-        :indicator-placement="'inside'"
-        :processing="progress.status === 'in_progress'"
+        :status="progress.status === 'completed' ? 'success' : undefined"
+        :stroke-width="20"
         :color="getProgressColor(progress.status)"
-        :height="20"
-        :border-radius="4"
       >
-        <template #default>
-          <span class="progress-percentage">{{ progress.percentage || 0 }}%</span>
-        </template>
-      </n-progress>
+        <span class="progress-percentage">{{ progress.percentage || 0 }}%</span>
+      </el-progress>
 
       <!-- 详细信息 -->
-      <n-space :size="16" class="progress-details">
-        <n-text depth="3" style="font-size: 12px; min-width: 120px">
+      <el-space :size="16" class="progress-details" wrap>
+        <el-text type="info" size="small">
           {{ formatFileSize(progress.downloadedBytes || 0) }} / {{ formatFileSize(progress.totalBytes || 0) }}
-        </n-text>
-        <n-text depth="3" style="font-size: 12px; min-width: 80px">
+        </el-text>
+        <el-text type="info" size="small">
           {{ formatSpeed(progress.speed || 0) }}
-        </n-text>
-        <n-text v-if="progress.status === 'in_progress'" depth="3" style="font-size: 12px">
+        </el-text>
+        <el-text v-if="progress.status === 'in_progress'" type="info" size="small">
           剩余: {{ formatTime(progress.eta || 0) }}
-        </n-text>
-        <n-text v-else-if="progress.status === 'completed'" depth="3" type="success" style="font-size: 12px">
+        </el-text>
+        <el-text v-else-if="progress.status === 'completed'" type="success" size="small">
           完成
-        </n-text>
-        <n-text v-else-if="progress.status === 'failed'" depth="3" type="error" style="font-size: 12px">
+        </el-text>
+        <el-text v-else-if="progress.status === 'failed'" type="danger" size="small">
           {{ progress.errorMessage || '下载失败' }}
-        </n-text>
-      </n-space>
-    </n-space>
+        </el-text>
+      </el-space>
+    </el-space>
   </div>
 </template>
 
 <script setup lang="ts">
-import { NProgress, NSpace, NText, NTag, NButton } from 'naive-ui'
+import { ElProgress, ElText, ElTag, ElButton, ElSpace } from 'element-plus'
 import { formatFileSize, formatSpeed, formatTime } from '@/utils/formatters'
 import { useTransferStore } from '@/stores/transferStore'
 
 export interface DownloadProgressData {
-  taskId: string | number  // 支持 string 和 number 类型（与 transferStore 一致）
+  taskId: string | number
   fileName: string
   downloadedBytes: number
   totalBytes: number
   percentage: number
-  speed: number // bytes per second
-  eta: number // estimated time arrival (seconds)
+  speed: number
+  eta: number
   status: 'pending' | 'in_progress' | 'completed' | 'failed'
-  errorMessage?: string // 错误信息（失败时显示）
+  errorMessage?: string
 }
 
 const props = defineProps<{
@@ -105,9 +100,6 @@ const props = defineProps<{
 
 const transferStore = useTransferStore()
 
-/**
- * 取消下载（Story 4-6: 取消下载任务）
- */
 async function handleCancel() {
   try {
     await transferStore.cancelDownload(props.progress.taskId)
@@ -116,9 +108,6 @@ async function handleCancel() {
   }
 }
 
-/**
- * 移除等待中的任务
- */
 async function handleRemove() {
   try {
     await transferStore.cancelDownload(props.progress.taskId)
@@ -127,9 +116,6 @@ async function handleRemove() {
   }
 }
 
-/**
- * 重试/恢复下载（Story 4-5: 下载断点续传）
- */
 async function handleResume() {
   try {
     const taskId = typeof props.progress.taskId === 'string'
@@ -142,14 +128,14 @@ async function handleResume() {
   }
 }
 
-function getStatusType(status: string): 'default' | 'info' | 'success' | 'error' | 'warning' {
-  const types: Record<string, 'default' | 'info' | 'success' | 'error' | 'warning'> = {
-    pending: 'default',
-    in_progress: 'info',
+function getStatusType(status: string): 'info' | 'success' | 'danger' | 'warning' {
+  const types: Record<string, 'info' | 'success' | 'danger' | 'warning'> = {
+    pending: 'info',
+    in_progress: 'primary',
     completed: 'success',
-    failed: 'error'
+    failed: 'danger'
   }
-  return types[status] || 'default'
+  return types[status] || 'info'
 }
 
 function getStatusText(status: string): string {
@@ -164,12 +150,12 @@ function getStatusText(status: string): string {
 
 function getProgressColor(status: string): string {
   const colors: Record<string, string> = {
-    pending: '#909399',      // 灰色 - 等待中
-    in_progress: '#2080f0',  // 蓝色 - 下载中
-    completed: '#18a058',    // 绿色 - 完成
-    failed: '#f56c6c'        // 红色 - 失败
+    pending: '#909399',
+    in_progress: '#409eff',
+    completed: '#67c23a',
+    failed: '#f56c6c'
   }
-  return colors[status] || '#2080f0'
+  return colors[status] || '#409eff'
 }
 </script>
 
@@ -177,14 +163,14 @@ function getProgressColor(status: string): string {
 .download-progress-item {
   padding: 12px;
   border-radius: 8px;
-  background-color: var(--n-color-modal);
+  background-color: var(--el-fill-color-blank);
   margin-bottom: 8px;
-  border: 1px solid var(--n-border-color);
+  border: 1px solid var(--el-border-color-light);
   transition: all 0.3s ease;
 }
 
 .download-progress-item:hover {
-  border-color: var(--n-border-color-hover);
+  border-color: var(--el-color-primary);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
@@ -206,36 +192,5 @@ function getProgressColor(status: string): string {
   font-size: 12px;
   font-weight: 600;
   color: white;
-}
-
-/* 进度条流光动画 */
-.download-progress-item :deep(.n-progress-graph-line-fill) {
-  position: relative;
-  overflow: hidden;
-}
-
-.download-progress-item :deep(.n-progress-graph-line-fill::after) {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  right: 0;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.3) 50%,
-    transparent 100%
-  );
-  animation: progress-shimmer 2s ease-in-out infinite;
-}
-
-@keyframes progress-shimmer {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
-  }
 }
 </style>

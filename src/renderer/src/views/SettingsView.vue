@@ -103,7 +103,7 @@
               按日期自动分类
             </el-checkbox>
             <el-text type="info" size="small" style="font-size: 12px;" data-testid="auto-create-date-folder-help">
-              开启后,下载的文件将自动保存到按月份分类的子目录中(例如:2026-01)
+              开启后,下载的文件将自动保存到按日期分类的子目录中(例如:2026-01-18)
             </el-text>
           </div>
         </el-form-item>

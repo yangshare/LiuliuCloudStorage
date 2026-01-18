@@ -13,7 +13,10 @@ import { Folder,
 const props = defineProps<{
   isDir: boolean
   name: string
+  size?: number
 }>()
+
+const iconSize = computed(() => props.size || 20)
 
 const iconComponent = computed(() => {
   if (props.isDir) return Folder
@@ -42,7 +45,7 @@ const iconColor = computed(() => {
 </script>
 
 <template>
-  <el-icon :size="20" :color="iconColor">
+  <el-icon :size="iconSize" :color="iconColor">
     <component :is="iconComponent" />
   </el-icon>
 </template>

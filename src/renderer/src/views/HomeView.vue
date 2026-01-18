@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElContainer, ElMain, ElCard, ElButton, ElIcon, ElText, ElDrawer } from 'element-plus'
+import { ElContainer, ElMain, ElCard, ElButton, ElIcon, ElText, ElDrawer, ElDropdown, ElDropdownMenu, ElDropdownItem } from 'element-plus'
 import { Upload, Folder, List, Setting, Grid, Refresh, Document, FolderOpened, Memo } from '@element-plus/icons-vue'
 import FileList from '../components/file/FileList.vue'
 import Breadcrumb from '../components/file/Breadcrumb.vue'
@@ -24,9 +24,6 @@ const authStore = useAuthStore()
 const showCreateFolderModal = ref(false)
 const showFileInput = ref(false)
 const showQueueDrawer = ref(false)
-
-// 视图切换状态
-const viewMode = ref<'list' | 'grid'>('list')
 
 // 隐藏的文件输入元素
 const fileInputRef = ref<HTMLInputElement | null>(null)
@@ -133,6 +130,8 @@ function handleFileSelect(event: Event) {
 }
 
 onMounted(() => {
+  // 加载网格密度偏好
+  fileStore.loadGridDensityPreference()
   fileStore.fetchFiles('/')
 
   // 初始化下载队列
@@ -206,19 +205,48 @@ onUnmounted(() => {
               <div class="header-right">
                 <UpdateButton />
                 <el-button
-                  :class="['view-btn', { active: viewMode === 'list' }]"
-                  @click="viewMode = 'list'"
+                  :class="['view-btn', { active: fileStore.viewMode === 'list' }]"
+                  @click="fileStore.setViewMode('list')"
                   title="列表视图"
                 >
                   <el-icon><Memo /></el-icon>
                 </el-button>
                 <el-button
-                  :class="['view-btn', { active: viewMode === 'grid' }]"
-                  @click="viewMode = 'grid'"
+                  :class="['view-btn', { active: fileStore.viewMode === 'grid' }]"
+                  @click="fileStore.setViewMode('grid')"
                   title="网格视图"
                 >
                   <el-icon><Grid /></el-icon>
                 </el-button>
+                <!-- 网格密度切换器（仅网格视图时显示） -->
+                <el-dropdown
+                  v-if="fileStore.viewMode === 'grid'"
+                  trigger="click"
+                  @command="(cmd: 'compact' | 'comfortable' | 'spacious') => fileStore.setGridDensity(cmd)"
+                >
+                  <el-button
+                    class="view-btn"
+                    title="网格密度"
+                  >
+                    <el-icon><List /></el-icon>
+                  </el-button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="compact">
+                        <span>紧凑</span>
+                        <span style="margin-left: 8px; font-size: 11px; color: var(--el-text-color-secondary);">110px</span>
+                      </el-dropdown-item>
+                      <el-dropdown-item command="comfortable">
+                        <span>舒适</span>
+                        <span style="margin-left: 8px; font-size: 11px; color: var(--el-text-color-secondary);">150px</span>
+                      </el-dropdown-item>
+                      <el-dropdown-item command="spacious">
+                        <span>宽松</span>
+                        <span style="margin-left: 8px; font-size: 11px; color: var(--el-text-color-secondary);">190px</span>
+                      </el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
                 <el-button
                   class="refresh-btn"
                   @click="fileStore.refresh"

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, h, reactive } from 'vue'
-import { ElTable, ElTableColumn, ElCheckbox, ElButton, ElInput, ElTag, ElDropdown, ElMessage, ElLoading, ElAlert, ElEmpty } from 'element-plus'
+import { ref, computed } from 'vue'
+import { ElCheckbox, ElButton, ElInput, ElMessage, ElEmpty } from 'element-plus'
+import { Download } from '@element-plus/icons-vue'
 import { useFileStore } from '../../stores/fileStore'
 import { useTransferStore } from '../../stores/transferStore'
 import { useAuthStore } from '../../stores/authStore'
@@ -47,51 +48,49 @@ function handleRetry() {
   fileStore.refresh()
 }
 
-function handleRowClick(row: FileItem, column: any, event: MouseEvent) {
+// 处理文件/文件夹点击
+function handleItemClick(event: MouseEvent, file: FileItem, index: number) {
   // 处理多选逻辑
   if (event?.ctrlKey || event?.metaKey) {
-    // Ctrl/Cmd + 点击：切换选中状态
-    fileStore.toggleSelect(row)
+    fileStore.toggleSelect(file)
+    fileStore.lastClickedIndex = index
     return
   }
 
   if (event?.shiftKey && fileStore.lastClickedIndex >= 0) {
-    // Shift + 点击：范围选择
-    const index = fileStore.sortedFiles.findIndex(f => f.name === row.name)
     fileStore.selectRange(fileStore.lastClickedIndex, index)
     return
   }
 
   // 普通点击 - 清空之前的选中状态
   fileStore.clearSelection()
+  fileStore.lastClickedIndex = index
 
-  if (row.isDir) {
+  if (file.isDir) {
     // 单击目录直接进入
-    fileStore.enterFolder(row)
+    fileStore.enterFolder(file)
   } else {
-    // 单击文件显示详情
-    fileStore.selectFile(row)
+    // 单击文件选中
+    fileStore.selectFile(file)
   }
 }
 
-function handleRowDoubleClick(row: FileItem) {
-  if (row.isDir) {
+// 处理双击
+function handleItemDoubleClick(file: FileItem) {
+  if (file.isDir) {
     // 双击目录进入（备用导航方式）
-    fileStore.enterFolder(row)
+    fileStore.enterFolder(file)
   }
 }
 
 async function handleDownload(file: FileItem) {
-  // 获取当前路径（相对于用户根目录的路径）
   const currentPath = fileStore.currentPath === '/' ? '' : fileStore.currentPath
   const remotePath = `${currentPath}/${file.name}`
 
   console.log('[FileList] 开始下载:', { remotePath, fileName: file.name })
 
-  // 立即显示 toast 提示
   ElMessage.info(`正在添加到下载队列: ${file.name}`)
 
-  // 添加到下载队列
   try {
     console.log('[FileList] 调用 transferStore.queueDownload, remotePath:', remotePath, 'fileName:', file.name)
     const result = await transferStore.queueDownload(remotePath, file.name)
@@ -149,9 +148,9 @@ const contextMenuOptions = computed(() => {
 })
 
 // 显示右键菜单
-function handleContextMenu(row: FileItem, column: any, event: MouseEvent) {
+function handleContextMenu(file: FileItem, event: MouseEvent) {
   event.preventDefault()
-  selectedFileForContextMenu.value = row
+  selectedFileForContextMenu.value = file
   contextMenuX.value = event.clientX
   contextMenuY.value = event.clientY
   showContextMenu.value = true
@@ -169,18 +168,15 @@ async function handleContextMenuSelect(key: string) {
 
   switch (key) {
     case 'download':
-      // 直接下载
       await handleDownload(file)
       break
 
     case 'downloadTo':
-      // 下载到指定位置
       fileForDownload.value = file
       showDownloadDialog.value = true
       break
 
     case 'saveAs':
-      // 另存为
       await transferStore.downloadWithSaveAs(
         remotePath,
         file.name,
@@ -191,7 +187,6 @@ async function handleContextMenuSelect(key: string) {
       break
 
     case 'openDownloadDir':
-      // 打开下载目录
       try {
         const result = await window.electronAPI?.downloadConfig.openDirectory()
         if (!result?.success) {
@@ -203,14 +198,12 @@ async function handleContextMenuSelect(key: string) {
       break
 
     case 'rename':
-      // 开始重命名
       startRename(file)
-      return // 不清空 selectedFileForContextMenu
+      return
 
     case 'delete':
-      // 显示删除确认对话框
       showDeleteConfirm.value = true
-      return // 不清空 selectedFileForContextMenu，删除对话框需要用
+      return
   }
 
   selectedFileForContextMenu.value = null
@@ -230,25 +223,21 @@ async function confirmDelete() {
     if (result.success) {
       ElMessage.success('删除成功')
 
-      // 如果删除的是文件夹,检查是否需要导航到父级
       if (selectedFileForContextMenu.value.isDir) {
         const deletedFolderPath = fileStore.currentPath === '/'
           ? `/${selectedFileForContextMenu.value.name}`
           : `${fileStore.currentPath}/${selectedFileForContextMenu.value.name}`
 
-        // Task 4.2: 如果当前路径是被删除文件夹的子路径,导航到父级
         if (fileStore.currentPath.startsWith(deletedFolderPath)) {
           const parentPath = fileStore.currentPath === '/' ? '/' :
             fileStore.currentPath.split('/').slice(0, -1).join('/') || '/'
           fileStore.navigateTo(parentPath)
-          return // 导航会触发刷新,不需要继续执行
+          return
         }
       }
 
-      // 刷新文件列表
       fileStore.refresh()
 
-      // 如果返回需要刷新配额标志,触发配额重新计算
       if (result.shouldRefreshQuota) {
         try {
           await window.electronAPI.quota.calculate()
@@ -288,7 +277,6 @@ async function confirmRename() {
     return
   }
 
-  // 名称未改变
   if (editingName.value === editingFile.value.name) {
     cancelRename()
     return
@@ -305,22 +293,19 @@ async function confirmRename() {
     if (result.success) {
       ElMessage.success('重命名成功')
 
-      // 如果重命名的是文件夹,需要处理路径更新
       if (editingFile.value.isDir) {
         const oldFolderPath = filePath
         const newFolderPath = fileStore.currentPath === '/'
           ? `/${editingName.value}`
           : `${fileStore.currentPath}/${editingName.value}`
 
-        // Task 3.2: 如果当前路径包含被重命名的文件夹,更新当前路径
         if (fileStore.currentPath.startsWith(oldFolderPath)) {
           const newPath = fileStore.currentPath.replace(oldFolderPath, newFolderPath)
           fileStore.navigateTo(newPath)
-          return // 导航会触发刷新,不需要继续执行
+          return
         }
       }
 
-      // 刷新文件列表
       fileStore.refresh()
     } else {
       ElMessage.error(result.error || '重命名失败')
@@ -370,8 +355,6 @@ async function handleDownloadToPath(savePath: string) {
     fileForDownload.value = null
   }
 }
-
-const tableRef = ref<InstanceType<typeof ElTable>>()
 </script>
 
 <template>
@@ -398,48 +381,52 @@ const tableRef = ref<InstanceType<typeof ElTable>>()
 
     <el-empty v-if="fileStore.sortedFiles.length === 0 && !fileStore.isLoadingFiles" description="暂无文件" />
 
-    <el-table
-      v-else
-      ref="tableRef"
-      :data="fileStore.sortedFiles"
-      style="width: 100%"
-      :row-key="(row: FileItem) => row.name"
-      @row-click="handleRowClick"
-      @row-dblclick="handleRowDoubleClick"
-      @row-contextmenu="handleContextMenu"
-      :row-class-name="({ row }: { row: FileItem }) => fileStore.isSelected(row) ? 'selected-row' : ''"
-    >
-      <!-- 复选框列 -->
-      <el-table-column width="50" align="center">
-        <template #header>
+    <!-- 列表视图 -->
+    <div v-else-if="fileStore.viewMode === 'list'" class="list-view">
+      <!-- 列表视图表头 -->
+      <div class="list-header">
+        <div class="header-checkbox">
           <el-checkbox
             :model-value="fileStore.isAllSelected"
             :indeterminate="fileStore.isPartialSelected && !fileStore.isAllSelected"
-            @change="fileStore.selectAll"
+            @change="fileStore.isAllSelected ? fileStore.deselectAll() : fileStore.selectAll()"
           />
-        </template>
-        <template #default="{ row }">
+        </div>
+        <div class="header-icon"></div>
+        <div class="header-name">名称</div>
+        <div class="header-size">大小</div>
+        <div class="header-date">修改日期</div>
+        <div class="header-actions">操作</div>
+      </div>
+
+      <div
+        v-for="(file, index) in fileStore.sortedFiles"
+        :key="file.name"
+        class="list-item"
+        :class="{ 'selected': fileStore.isSelected(file), 'is-dir': file.isDir }"
+        @click="handleItemClick($event, file, index)"
+        @dblclick="handleItemDoubleClick(file)"
+        @contextmenu="handleContextMenu(file, $event)"
+      >
+        <!-- 复选框 -->
+        <div class="item-checkbox">
           <el-checkbox
-            :model-value="fileStore.isSelected(row)"
-            @change="fileStore.toggleSelect(row)"
+            :model-value="fileStore.isSelected(file)"
+            @update:model-value="() => fileStore.toggleSelect(file)"
             @click.stop
           />
-        </template>
-      </el-table-column>
+        </div>
 
-      <!-- 图标列 -->
-      <el-table-column width="50" align="center">
-        <template #default="{ row }">
-          <FileIcon :is-dir="row.isDir" :name="row.name" />
-        </template>
-      </el-table-column>
+        <!-- 图标 -->
+        <div class="item-icon">
+          <FileIcon :is-dir="file.isDir" :name="file.name" />
+        </div>
 
-      <!-- 名称列 -->
-      <el-table-column prop="name" label="名称" min-width="200">
-        <template #default="{ row }">
+        <!-- 名称 -->
+        <div class="item-name">
           <!-- 如果正在编辑此文件，显示输入框 -->
           <el-input
-            v-if="editingFile && editingFile.name === row.name"
+            v-if="editingFile && editingFile.name === file.name"
             :model-value="editingName"
             size="small"
             @update:model-value="editingName = $event"
@@ -450,40 +437,105 @@ const tableRef = ref<InstanceType<typeof ElTable>>()
             autofocus
             @click.stop
           />
-          <!-- 否则显示文件名 -->
-          <span v-else>{{ row.name }}</span>
-        </template>
-      </el-table-column>
+          <span v-else class="name-text" :title="file.name">{{ file.name }}</span>
+        </div>
 
-      <!-- 大小列 -->
-      <el-table-column prop="size" label="大小" width="120">
-        <template #default="{ row }">
-          {{ row.isDir ? '-' : formatFileSize(row.size) }}
-        </template>
-      </el-table-column>
+        <!-- 大小 -->
+        <div class="item-size">
+          {{ file.isDir ? '-' : formatFileSize(file.size) }}
+        </div>
 
-      <!-- 修改日期列 -->
-      <el-table-column prop="modified" label="修改日期" width="180">
-        <template #default="{ row }">
-          {{ formatDate(row.modified) }}
-        </template>
-      </el-table-column>
+        <!-- 修改日期 -->
+        <div class="item-date">
+          {{ formatDate(file.modified) }}
+        </div>
 
-      <!-- 操作列 -->
-      <el-table-column label="操作" width="100" fixed="right">
-        <template #default="{ row }">
-          <!-- 文件显示下载按钮，目录不显示 -->
+        <!-- 操作 -->
+        <div class="item-actions">
           <el-button
-            v-if="!row.isDir"
+            v-if="!file.isDir"
             type="primary"
             size="small"
-            @click.stop="handleDownload(row)"
+            @click.stop="handleDownload(file)"
           >
             下载
           </el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 网格视图 -->
+    <div v-else class="grid-view" :class="`density-${fileStore.gridDensity}`" :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(${fileStore.gridMinWidth}, 1fr))`, columnGap: fileStore.gridGap, rowGap: fileStore.gridRowGap, padding: fileStore.gridPadding }">
+      <!-- 全选复选框 -->
+      <div class="grid-header">
+        <el-checkbox
+          :model-value="fileStore.isAllSelected"
+          :indeterminate="fileStore.isPartialSelected && !fileStore.isAllSelected"
+          @change="fileStore.isAllSelected ? fileStore.deselectAll() : fileStore.selectAll()"
+        >
+          全选
+        </el-checkbox>
+      </div>
+
+      <div
+        v-for="(file, index) in fileStore.sortedFiles"
+        :key="file.name"
+        class="grid-item"
+        :class="{ 'selected': fileStore.isSelected(file), 'is-dir': file.isDir }"
+        @click="handleItemClick($event, file, index)"
+        @dblclick="handleItemDoubleClick(file)"
+        @contextmenu="handleContextMenu(file, $event)"
+      >
+        <!-- 复选框 -->
+        <div class="grid-item-checkbox">
+          <el-checkbox
+            :model-value="fileStore.isSelected(file)"
+            @update:model-value="() => fileStore.toggleSelect(file)"
+            @click.stop
+          />
+        </div>
+
+        <!-- 图标 -->
+        <div class="grid-item-icon">
+          <FileIcon :is-dir="file.isDir" :name="file.name" :size="fileStore.gridIconSize" />
+        </div>
+
+        <!-- 名称 -->
+        <div class="grid-item-name" :title="file.name">
+          <!-- 如果正在编辑此文件，显示输入框 -->
+          <el-input
+            v-if="editingFile && editingFile.name === file.name"
+            :model-value="editingName"
+            size="small"
+            @update:model-value="editingName = $event"
+            @keyup.enter="confirmRename"
+            @keyup.esc="cancelRename"
+            @blur="cancelRename"
+            :loading="isRenaming"
+            autofocus
+            @click.stop
+          />
+          <span v-else class="name-text">{{ file.name }}</span>
+        </div>
+
+        <!-- 文件信息（紧凑显示） -->
+        <div class="grid-item-info" v-if="!file.isDir">
+          <span class="info-size">{{ formatFileSize(file.size) }}</span>
+        </div>
+
+        <!-- 快捷操作按钮（紧凑版） -->
+        <div class="grid-item-actions" v-if="!file.isDir">
+          <el-button
+            size="small"
+            @click.stop="handleDownload(file)"
+            class="compact-action-btn"
+            title="下载"
+          >
+            <el-icon><Download /></el-icon>
+          </el-button>
+        </div>
+      </div>
+    </div>
 
     <!-- 右键菜单 -->
     <el-dropdown
@@ -536,19 +588,321 @@ const tableRef = ref<InstanceType<typeof ElTable>>()
   overflow: hidden;
 }
 
-.file-list > :deep(.el-table) {
+/* ========== 列表视图样式 ========== */
+.list-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.list-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  background-color: var(--el-fill-color-light);
+  border-bottom: 1px solid var(--el-border-color);
+  font-weight: 600;
+  font-size: 13px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.header-checkbox {
+  width: 50px;
+  text-align: center;
+}
+
+.header-icon {
+  width: 50px;
+  text-align: center;
+}
+
+.header-name {
+  flex: 1;
+  min-width: 200px;
+}
+
+.header-size {
+  width: 120px;
+}
+
+.header-date {
+  width: 180px;
+}
+
+.header-actions {
+  width: 100px;
+  text-align: center;
+}
+
+.list-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.list-item:hover {
+  background-color: var(--el-fill-color-lighter);
+}
+
+.list-item.selected {
+  background-color: var(--el-fill-color-light);
+}
+
+.list-item.is-dir {
+  font-weight: 500;
+}
+
+.item-checkbox {
+  width: 50px;
+  text-align: center;
+}
+
+.item-icon {
+  width: 50px;
+  text-align: center;
+}
+
+.item-name {
+  flex: 1;
+  min-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.name-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item-size {
+  width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item-date {
+  width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item-actions {
+  width: 100px;
+  text-align: center;
+}
+
+/* ========== 网格视图样式 ========== */
+.grid-view {
+  display: grid;
+  /* grid-template-columns, gap, padding 由动态样式绑定控制 */
+  overflow-y: auto;
+  flex: 1;
+  /* 确保内容从顶部开始，不居中 */
+  align-content: start;
+  /* 确保网格项从顶部对齐 */
+  align-items: start;
+  transition: all 0.3s ease;
+  /* 防止内容少时垂直居中 */
+  min-height: 0;
+}
+
+/* 响应式断点优化 */
+/* 🖥️ 大屏幕 (≥1920px) - 稍微增大间距 */
+@media (min-width: 1920px) {
+  .grid-view.density-compact {
+    --grid-gap: 10px;
+    --grid-padding: 10px;
+  }
+  .grid-view.density-comfortable {
+    --grid-gap: 14px;
+    --grid-padding: 14px;
+  }
+  .grid-view.density-spacious {
+    --grid-gap: 20px;
+    --grid-padding: 20px;
+  }
+}
+
+/* 💻 小屏幕 (≤1279px) - 减小间距 */
+@media (max-width: 1279px) {
+  .grid-view.density-compact {
+    --grid-padding: 6px;
+  }
+  .grid-view.density-comfortable {
+    --grid-padding: 10px;
+  }
+  .grid-view.density-spacious {
+    --grid-padding: 14px;
+  }
+}
+
+/* 📱 超小屏幕 (≤768px) - 进一步减小间距 */
+@media (max-width: 768px) {
+  .grid-view.density-compact {
+    --grid-padding: 4px;
+  }
+  .grid-view.density-comfortable {
+    --grid-padding: 8px;
+  }
+  .grid-view.density-spacious {
+    --grid-padding: 10px;
+  }
+}
+
+.grid-header {
+  grid-column: 1 / -1;
+  padding: 4px 4px 8px 4px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  height: auto;
+  align-self: start;
+  margin-bottom: 0;
+}
+
+.grid-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background-color: var(--el-bg-color);
+  position: relative;
+  min-height: 110px;
+  justify-content: space-between;
+  /* 紧凑高效风格 - 轻微边框 */
+  overflow: hidden;
+}
+
+/* 密度特定样式 */
+.grid-view.density-compact .grid-item {
+  padding: 8px;
+  min-height: 100px;
+}
+
+.grid-view.density-comfortable .grid-item {
+  padding: 12px;
+  min-height: 120px;
+}
+
+.grid-view.density-spacious .grid-item {
+  padding: 14px;
+  min-height: 140px;
+}
+
+.grid-item:hover {
+  border-color: var(--el-color-primary);
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.15);
+  transform: translateY(-2px);
+}
+
+.grid-item.selected {
+  border-color: var(--el-color-primary);
+  background-color: var(--el-color-primary-light-9);
+  box-shadow: 0 0 0 1px var(--el-color-primary-light-5);
+}
+
+.grid-item.is-dir {
+  border-color: var(--el-color-warning-light-7);
+  background-color: #fffbf0;
+}
+
+.grid-item.is-dir:hover {
+  border-color: var(--el-color-warning);
+  background-color: #fff7e6;
+}
+
+.grid-item-checkbox {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 2;
+}
+
+.grid-item-icon {
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 48px;
+  height: 48px;
+}
+
+.grid-item-name {
+  width: 100%;
+  text-align: center;
+  font-size: 12px;
+  margin-bottom: 4px;
+  padding: 0 4px;
+  line-height: 1.3;
+  /* 紧凑显示 - 最多2行 */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
   flex: 1;
 }
 
-:deep(.selected-row) {
-  background-color: var(--el-fill-color-light) !important;
+.grid-item-name .name-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
 }
 
-:deep(.el-table__row) {
-  cursor: pointer;
+/* 文件信息 - 紧凑显示 */
+.grid-item-info {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--el-text-color-secondary);
+  margin-bottom: 4px;
 }
 
-:deep(.el-table__row:hover) {
-  background-color: var(--el-fill-color-lighter);
+.info-size {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* 紧凑操作按钮 */
+.grid-item-actions {
+  margin-top: auto;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.compact-action-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 4px;
+  font-size: 12px;
+  border: 1px solid var(--el-border-color-light);
+  background-color: var(--el-fill-color-light);
+  transition: all 0.2s;
+}
+
+.compact-action-btn:hover {
+  border-color: var(--el-color-primary);
+  background-color: var(--el-color-primary);
+  color: white;
 }
 </style>

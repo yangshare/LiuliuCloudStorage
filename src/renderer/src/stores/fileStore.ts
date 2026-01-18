@@ -8,6 +8,19 @@ const PATH_SEPARATOR = '/'
 const ROOT_PATH = '/'
 const ROOT_LABEL = '根目录'
 
+// 网格密度类型
+export type GridDensity = 'compact' | 'comfortable' | 'spacious'
+
+// 网格密度配置 - 紧凑高效风格
+const GRID_DENSITY_CONFIG: Record<GridDensity, { minWidth: string; gap: string; padding: string; iconSize: number }> = {
+  compact: { minWidth: '100px', gap: '10px', padding: '10px', iconSize: 40 },
+  comfortable: { minWidth: '130px', gap: '12px', padding: '12px', iconSize: 48 },
+  spacious: { minWidth: '160px', gap: '14px', padding: '14px', iconSize: 56 }
+}
+
+// LocalStorage 键
+const STORAGE_KEY_GRID_DENSITY = 'liuliu-grid-density'
+
 export const useFileStore = defineStore('file', () => {
   const router = useRouter()
 
@@ -23,6 +36,8 @@ export const useFileStore = defineStore('file', () => {
   const isCreatingFolder = ref<boolean>(false) // 防止快速点击重复导航
   const selectedFiles = ref<FileItem[]>([]) // 多选文件列表
   const lastClickedIndex = ref<number>(-1) // 最后点击的文件索引，用于范围选择
+  const viewMode = ref<'list' | 'grid'>('list') // 视图模式
+  const gridDensity = ref<GridDensity>('comfortable') // 网格密度
 
   // 网络状态监听
   function handleOnline() { isOnline.value = true }
@@ -49,6 +64,17 @@ export const useFileStore = defineStore('file', () => {
 
   const isPartialSelected = computed(() => {
     return selectedFiles.value.length > 0 && selectedFiles.value.length < files.value.length
+  })
+
+  // 网格密度相关计算属性
+  const gridMinWidth = computed(() => GRID_DENSITY_CONFIG[gridDensity.value].minWidth)
+  const gridGap = computed(() => GRID_DENSITY_CONFIG[gridDensity.value].gap)
+  const gridPadding = computed(() => GRID_DENSITY_CONFIG[gridDensity.value].padding)
+  const gridIconSize = computed(() => GRID_DENSITY_CONFIG[gridDensity.value].iconSize)
+  // 行间距是列间距的 1.5 倍，让上下行之间更明显
+  const gridRowGap = computed(() => {
+    const gapValue = parseInt(GRID_DENSITY_CONFIG[gridDensity.value].gap)
+    return `${Math.round(gapValue * 1.5)}px`
   })
 
   // Actions
@@ -233,6 +259,34 @@ export const useFileStore = defineStore('file', () => {
     selectedFiles.value = files.value.filter(f => !currentSelected.has(f.name))
   }
 
+  // 切换视图模式
+  function setViewMode(mode: 'list' | 'grid') {
+    viewMode.value = mode
+  }
+
+  // 设置网格密度
+  function setGridDensity(density: GridDensity) {
+    gridDensity.value = density
+    // 持久化到 localStorage
+    try {
+      localStorage.setItem(STORAGE_KEY_GRID_DENSITY, density)
+    } catch (error) {
+      console.warn('无法保存网格密度偏好:', error)
+    }
+  }
+
+  // 从 localStorage 加载网格密度偏好
+  function loadGridDensityPreference() {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_GRID_DENSITY)
+      if (saved && ['compact', 'comfortable', 'spacious'].includes(saved)) {
+        gridDensity.value = saved as GridDensity
+      }
+    } catch (error) {
+      console.warn('无法加载网格密度偏好:', error)
+    }
+  }
+
   return {
     files,
     currentPath,
@@ -249,6 +303,13 @@ export const useFileStore = defineStore('file', () => {
     lastClickedIndex,
     isAllSelected,
     isPartialSelected,
+    viewMode,
+    gridDensity,
+    gridMinWidth,
+    gridGap,
+    gridRowGap,
+    gridPadding,
+    gridIconSize,
     fetchFiles,
     navigateTo,
     enterFolder,
@@ -262,6 +323,9 @@ export const useFileStore = defineStore('file', () => {
     isSelected,
     selectAll,
     deselectAll,
-    invertSelection
+    invertSelection,
+    setViewMode,
+    setGridDensity,
+    loadGridDensityPreference
   }
 })

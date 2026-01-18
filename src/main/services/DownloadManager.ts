@@ -329,16 +329,16 @@ export class DownloadManager {
 
   /**
    * 应用日期子目录逻辑
-   * 如果配置开启,则在保存路径中添加 YYYY-MM 格式的子目录
+   * 如果配置开启,则在保存路径中添加 YYYY-MM-DD 格式的子目录
    */
   private async applyDateFolderLogic(basePath: string, fileName: string): Promise<string> {
     try {
       const config = downloadConfigService.getConfig()
 
       if (config.autoCreateDateFolder) {
-        // 生成 YYYY-MM 格式的子目录
+        // 生成 YYYY-MM-DD 格式的子目录
         const now = new Date()
-        const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+        const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 
         // 从 basePath 中提取目录部分(如果 basePath 包含文件名)
         const baseDir = path.dirname(basePath)

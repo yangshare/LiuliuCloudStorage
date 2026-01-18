@@ -1,6 +1,7 @@
 import { createHttpClient, AppError } from './httpClient'
 import { AxiosInstance } from 'axios'
 import * as fs from 'fs'
+import { loggerService } from './LoggerService'
 
 export interface FileItem {
   name: string
@@ -107,7 +108,7 @@ class AlistService {
     // 确保不重复斜杠
     const cleanStoragePath = this.storagePath.endsWith('/') ? this.storagePath.slice(0, -1) : this.storagePath
     const fullPath = `${cleanStoragePath}${normalizedPath}`
-    console.log('[AlistService.getFullPath] storagePath:', this.storagePath, 'path:', path, '→ fullPath:', fullPath)
+    loggerService.info('AlistService', `getFullPath: storagePath=${this.storagePath}, path=${path} → fullPath=${fullPath}`)
     return fullPath
   }
 
@@ -132,35 +133,31 @@ class AlistService {
     }
 
     try {
-      console.log('[AlistService.login] 发起登录请求, 用户名:', username)
+      loggerService.info('AlistService', `login: 发起登录请求, 用户名=${username}`)
       const response = await this.client.post<AlistApiResponse<{ token: string; device_key: string }>>(
         '/api/auth/login',
         { username, password }
       )
 
-      console.log('[AlistService.login] 响应数据:', {
-        code: response.data.code,
-        message: response.data.message,
-        hasData: !!response.data.data
-      })
+      loggerService.info('AlistService', `login: 响应数据 code=${response.data.code}, message=${response.data.message}, hasData=${!!response.data.data}`)
 
       if (response.data.code === 200 && response.data.data?.token) {
         const token = response.data.data.token
         const deviceKey = response.data.data.device_key
         this.token = token
         this.deviceKey = deviceKey
-        console.log('[AlistService.login] Token 已设置, 长度:', token.length, '前30字符:', token.substring(0, 30))
-        console.log('[AlistService.login] DeviceKey 已设置:', deviceKey)
+        loggerService.info('AlistService', `login: Token 已设置, 长度=${token.length}`)
+        loggerService.info('AlistService', `login: DeviceKey 已设置=${deviceKey}`)
         return { success: true, token }
       } else {
-        console.error('[AlistService.login] 登录失败, 响应码:', response.data.code)
+        loggerService.error('AlistService', `login: 登录失败, 响应码=${response.data.code}`)
         return {
           success: false,
           message: response.data.message || '登录失败'
         }
       }
     } catch (error: any) {
-      console.error('[AlistService.login] 异常:', error.message)
+      loggerService.error('AlistService', `login: 异常=${error.message}`)
       return {
         success: false,
         message: error.response?.data?.message || error.message || '网络错误，请稍后重试'
@@ -174,18 +171,18 @@ class AlistService {
     }
 
     const headers = this.getHeaders()
-    console.log('[AlistService.getMe] 调用 /api/me')
-    console.log('[AlistService.getMe] Token 存在:', !!this.token, '长度:', this.token?.length)
-    console.log('[AlistService.getMe] DeviceKey 存在:', !!this.deviceKey, '值:', this.deviceKey)
-    console.log('[AlistService.getMe] 请求头 Authorization:', headers['Authorization']?.substring(0, 30) + '...')
-    console.log('[AlistService.getMe] 请求头 device-key:', headers['device-key'])
+    loggerService.info('AlistService', `getMe: 调用 /api/me`)
+    loggerService.info('AlistService', `getMe: Token 存在=${!!this.token}, 长度=${this.token?.length}`)
+    loggerService.info('AlistService', `getMe: DeviceKey 存在=${!!this.deviceKey}, 值=${this.deviceKey}`)
+    loggerService.info('AlistService', `getMe: 请求头 Authorization=${headers['Authorization']?.substring(0, 30)}...`)
+    loggerService.info('AlistService', `getMe: 请求头 device-key=${headers['device-key']}`)
 
     const response = await this.client.get<AlistApiResponse<UserInfo>>(
       '/api/me',
       { headers }
     )
 
-    console.log('[AlistService.getMe] 响应码:', response.data.code, '消息:', response.data.message)
+    loggerService.info('AlistService', `getMe: 响应码=${response.data.code}, 消息=${response.data.message}`)
 
     if (response.data.code !== 200) {
       throw {
@@ -203,8 +200,8 @@ class AlistService {
     }
 
     const fullPath = this.getFullPath(path)
-    console.log('[AlistService] listFiles called with path:', path, 'fullPath:', fullPath)
-    console.log('[AlistService] Headers:', this.getHeaders())
+    loggerService.info('AlistService', `listFiles: path=${path}, fullPath=${fullPath}`)
+    loggerService.debug('AlistService', `listFiles: Headers=${JSON.stringify(this.getHeaders())}`)
 
     const response = await this.client.post<AlistApiResponse<ListFilesResponse>>(
       '/api/fs/list',
@@ -212,8 +209,8 @@ class AlistService {
       { headers: this.getHeaders() }
     )
 
-    console.log('[AlistService] Response status:', response.status)
-    console.log('[AlistService] Response data:', JSON.stringify(response.data, null, 2))
+    loggerService.info('AlistService', `listFiles: Response status=${response.status}`)
+    loggerService.debug('AlistService', `listFiles: Response data=${JSON.stringify(response.data)}`)
 
     const apiResponse = response.data
     if (apiResponse.code !== 200) {
@@ -314,7 +311,7 @@ class AlistService {
         }
       }
     } catch (error: any) {
-      console.error('[AlistService] Upload error:', error)
+      loggerService.error('AlistService', `Upload error: ${error}`)
       return {
         success: false,
         error: error.message || '上传失败'
@@ -382,12 +379,7 @@ class AlistService {
         { headers: this.getHeaders() }
       )
 
-      console.log('[AlistService.getDownloadUrl] 响应:', {
-        code: response.data.code,
-        message: response.data.message,
-        dataKeys: response.data.data ? Object.keys(response.data.data) : 'null',
-        rawData: response.data.data
-      })
+      loggerService.info('AlistService', `getDownloadUrl: 响应 code=${response.data.code}, message=${response.data.message}`)
 
       if (response.data.code === 200) {
         return {
@@ -397,17 +389,14 @@ class AlistService {
           fileSize: response.data.data.size
         }
       } else {
-        console.error('[AlistService.getDownloadUrl] Alist API 返回错误:', {
-          code: response.data.code,
-          message: response.data.message
-        })
+        loggerService.error('AlistService', `getDownloadUrl: Alist API 返回错误 code=${response.data.code}, message=${response.data.message}`)
         return {
           success: false,
           error: `Alist错误(${response.data.code}): ${response.data.message}`
         }
       }
     } catch (error: any) {
-      console.error('[AlistService] Get download URL error:', error)
+      loggerService.error('AlistService', `Get download URL error: ${error}`)
       return {
         success: false,
         error: error.message || '获取下载链接失败'

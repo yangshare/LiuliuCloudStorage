@@ -59,19 +59,18 @@
               v-model="downloadPath"
               readonly
               placeholder="选择下载目录"
-            >
-              <template #append>
-                <el-button type="primary" @click="handleSelectDirectory">
-                  选择目录
-                </el-button>
-                <el-button @click="handleOpenDirectory">
-                  打开下载目录
-                </el-button>
-              </template>
-            </el-input>
-            <el-button plain size="small" @click="handleResetConfig" style="margin-top: 8px">
-              重置为默认
-            </el-button>
+            />
+            <div class="button-row">
+              <el-button type="primary" @click="handleSelectDirectory">
+                选择目录
+              </el-button>
+              <el-button @click="handleOpenDirectory">
+                打开下载目录
+              </el-button>
+              <el-button plain @click="handleResetConfig">
+                重置为默认
+              </el-button>
+            </div>
           </div>
         </el-form-item>
 
@@ -354,5 +353,11 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   width: 100%;
+}
+
+.button-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
 }
 </style>

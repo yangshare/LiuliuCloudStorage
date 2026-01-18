@@ -3,6 +3,7 @@ import { alistService, FileItem } from '../../services/AlistService'
 import { AppError } from '../../services/httpClient'
 import { getDatabase } from '../../database'
 import { activityService, ActionType } from '../../services/ActivityService'
+import { loggerService } from '../../services/LoggerService'
 
 export interface FileListResult {
   success: boolean
@@ -25,9 +26,9 @@ const CACHE_TTL = 60 * 60 * 1000 // 1 hour
 export function registerFileHandlers(): void {
   ipcMain.handle('file:list', async (_event, path: string): Promise<FileListResult> => {
     try {
-      console.log('[file:list] Fetching files for path:', path)
+      loggerService.info('FileHandler', `[list] Fetching files for path: ${path}`)
       const result = await alistService.listFiles(path || '/')
-      console.log('[file:list] Success:', result)
+      loggerService.info('FileHandler', `[list] Success: ${JSON.stringify(result)}`)
 
       // 缓存结果
       try {
@@ -40,7 +41,7 @@ export function registerFileHandlers(): void {
           )
         }
       } catch (cacheErr) {
-        console.warn('[file:list] Cache save failed:', cacheErr)
+        loggerService.warn('FileHandler', `[list] Cache save failed: ${cacheErr}`)
       }
 
       return {
@@ -52,7 +53,7 @@ export function registerFileHandlers(): void {
       }
     } catch (error) {
       const appError = error as AppError
-      console.error('[file:list] Error:', appError)
+      loggerService.error('FileHandler', `[list] Error: ${JSON.stringify(appError)}`)
 
       // 检测 401 错误（token 失效），标记需要重新登录
       if (appError.code === 'ALIST_401') {
@@ -71,7 +72,7 @@ export function registerFileHandlers(): void {
           const cached = db.prepare('SELECT content, cached_at FROM file_cache WHERE user_id = ? AND path = ?').get(userId, path) as { content: string; cached_at: number } | undefined
           if (cached && (Date.now() - cached.cached_at) < CACHE_TTL) {
             const data = JSON.parse(cached.content)
-            console.log('[file:list] Returning cached data')
+            loggerService.info('FileHandler', '[list] Returning cached data')
             return {
               success: true,
               data: {
@@ -84,7 +85,7 @@ export function registerFileHandlers(): void {
           }
         }
       } catch (cacheErr) {
-        console.warn('[file:list] Cache read failed:', cacheErr)
+        loggerService.warn('FileHandler', `[list] Cache read failed: ${cacheErr}`)
       }
 
       return {
@@ -107,7 +108,7 @@ export function registerFileHandlers(): void {
           fileCount: 1,
           details: { path }
         }).catch(err => {
-          console.warn('[file:mkdir] 日志记录失败:', err)
+          loggerService.warn('FileHandler', `[mkdir] 日志记录失败: ${err}`)
         })
       }
 
@@ -134,7 +135,7 @@ export function registerFileHandlers(): void {
           fileCount: 1,
           details: { dir, fileName }
         }).catch(err => {
-          console.warn('[file:delete] 日志记录失败:', err)
+          loggerService.warn('FileHandler', `[delete] 日志记录失败: ${err}`)
         })
       }
 
@@ -161,7 +162,7 @@ export function registerFileHandlers(): void {
           fileCount: fileNames.length,
           details: { dir, fileNames }
         }).catch(err => {
-          console.warn('[file:batchDelete] 日志记录失败:', err)
+          loggerService.warn('FileHandler', `[batchDelete] 日志记录失败: ${err}`)
         })
       }
 
@@ -188,7 +189,7 @@ export function registerFileHandlers(): void {
           fileCount: 1,
           details: { path, newName }
         }).catch(err => {
-          console.warn('[file:rename] 日志记录失败:', err)
+          loggerService.warn('FileHandler', `[rename] 日志记录失败: ${err}`)
         })
       }
 

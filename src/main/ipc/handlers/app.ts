@@ -1,4 +1,5 @@
-import { ipcMain, app } from 'electron'
+import { ipcMain, app, shell } from 'electron'
+import { loggerService } from '../../services/LoggerService'
 
 /**
  * 注册应用设置相关的IPC处理器
@@ -26,6 +27,17 @@ export function registerAppHandlers(): void {
         success: true,
         openAtLogin: settings.openAtLogin
       }
+    } catch (error: any) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // 打开日志目录
+  ipcMain.handle('app:open-logs-directory', async () => {
+    try {
+      const logsDir = loggerService.getLogsDir()
+      await shell.openPath(logsDir)
+      return { success: true }
     } catch (error: any) {
       return { success: false, error: error.message }
     }

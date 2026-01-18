@@ -103,7 +103,7 @@ export class LoggerService {
 
   /**
    * 获取日志目录路径
-   * exe 同级目录下的 logs 文件夹
+   * 用户数据目录下的 logs 文件夹
    */
   private getLogsDirectory(): string {
     // 开发环境：使用项目根目录下的 logs
@@ -111,9 +111,8 @@ export class LoggerService {
       return join(process.cwd(), 'logs')
     }
 
-    // 生产环境：exe 同级目录下的 logs
-    const exeDir = join(process.execPath, '..')
-    return join(exeDir, 'logs')
+    // 生产环境：使用用户数据目录下的 logs（避免 Program Files 权限问题）
+    return join(app.getPath('userData'), 'logs')
   }
 
   /**

@@ -26,7 +26,7 @@ function handleClick() {
 <template>
   <el-button
     v-if="updateStore.updateDownloaded"
-    type="primary"
+    type="danger"
     size="small"
     @click="handleClick"
   >

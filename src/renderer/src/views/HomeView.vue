@@ -2,7 +2,7 @@
 import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElContainer, ElMain, ElCard, ElButton, ElIcon, ElText, ElDrawer, ElDropdown, ElDropdownMenu, ElDropdownItem } from 'element-plus'
-import { Upload, Folder, List, Setting, Grid, Refresh, Document, FolderOpened, Memo } from '@element-plus/icons-vue'
+import { Upload, Folder, List, Setting, Grid, Refresh, Document, FolderOpened, Memo, ArrowLeft, Download } from '@element-plus/icons-vue'
 import FileList from '../components/file/FileList.vue'
 import Breadcrumb from '../components/file/Breadcrumb.vue'
 import FileDetail from '../components/file/FileDetail.vue'
@@ -261,7 +261,7 @@ onUnmounted(() => {
                   :disabled="fileStore.currentPath === '/'"
                   title="返回上级"
                 >
-                  <el-icon><FolderOpened /></el-icon>
+                  <el-icon><ArrowLeft /></el-icon>
                 </el-button>
                 <el-button
                   class="icon-btn-gray"
@@ -273,9 +273,9 @@ onUnmounted(() => {
                 <el-button
                   class="icon-btn-gray"
                   @click="showQueueDrawer = true"
-                  title="队列管理"
+                  title="下载列表"
                 >
-                  <el-icon><List /></el-icon>
+                  <el-icon><Download /></el-icon>
                 </el-button>
               </div>
             </div>

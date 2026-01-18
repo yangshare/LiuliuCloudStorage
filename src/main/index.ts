@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, Menu } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
 
@@ -89,6 +89,9 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
+  // 移除默认菜单栏
+  Menu.setApplicationMenu(null)
+
   loggerService.info('Main', '应用程序启动中...')
 
   initDatabase()

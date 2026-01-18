@@ -2,6 +2,7 @@ import { TransferService } from './TransferService'
 import { DownloadManager, type DownloadProgress } from './DownloadManager'
 import { alistService } from './AlistService'
 import { activityService, ActionType } from './ActivityService'
+import { loggerService } from './LoggerService'
 import { BrowserWindow } from 'electron'
 
 export interface DownloadQueueTask {
@@ -30,6 +31,7 @@ type DownloadProgressCallback = (data: {
 class DownloadQueueManager {
   private queue: Map<string, DownloadQueueTask> = new Map()
   private activeDownloads: Set<string> = new Set()
+  private recentlyCompleted: Set<string> = new Set()  // 跟踪最近完成的任务
   private maxConcurrent: number = 5
   private transferService: TransferService
   private downloadManager: DownloadManager
@@ -96,7 +98,14 @@ class DownloadQueueManager {
 
     for (const task of allTasks) {
       const dbTask = taskStatusMap.get(task.remotePath)
-      if (dbTask && dbTask.status === 'pending' && task.dbId) {
+
+      // 只处理 pending 状态的任务，且：
+      // 1. 有数据库 ID
+      // 2. 不在活跃下载集合中（防止重复启动）
+      // 3. 不在最近完成集合中（防止刚完成的任务被立即重新启动）
+      if (dbTask && dbTask.status === 'pending' && task.dbId &&
+          !this.activeDownloads.has(task.id) &&
+          !this.recentlyCompleted.has(task.id)) {
         pendingTasks.push(task as DownloadQueueTask & { dbId: number })
       }
     }
@@ -161,10 +170,20 @@ class DownloadQueueManager {
         fileCount: 1,
         fileSize: task.fileSize,
         details: { fileName: task.fileName, remotePath: task.remotePath, savePath: task.savePath }
-      }).catch(err => console.error('[DownloadQueueManager] 记录下载日志失败:', err))
+      }).catch(err => loggerService.error('DownloadQueueManager', `记录下载日志失败: ${err}`))
 
       // 从活跃集合移除
       this.activeDownloads.delete(task.id)
+
+      // 添加到最近完成集合，防止立即重新启动
+      this.recentlyCompleted.add(task.id)
+      loggerService.info('DownloadQueueManager', `[队列] 任务完成，添加到最近完成集合: ${task.id}`)
+
+      // 5秒后从最近完成集合移除
+      setTimeout(() => {
+        this.recentlyCompleted.delete(task.id)
+        loggerService.info('DownloadQueueManager', `[队列] 从最近完成集合移除: ${task.id}`)
+      }, 5000)
 
       // 发送完成事件
       const windows = BrowserWindow.getAllWindows()
@@ -283,7 +302,7 @@ class DownloadQueueManager {
         const downloadResult = await alistService.getDownloadUrl(dbTask.remotePath)
 
         if (!downloadResult.success || !downloadResult.rawUrl) {
-          console.error(`[DownloadQueueManager] 无法获取下载 URL: ${dbTask.fileName}`, downloadResult.error)
+          loggerService.error('DownloadQueueManager', `无法获取下载 URL: ${dbTask.fileName}, error=${downloadResult.error}`)
           // 标记任务为失败状态
           await this.transferService.markAsFailed(dbTask.id, '无法获取下载 URL', 0)
           continue
@@ -307,7 +326,7 @@ class DownloadQueueManager {
         this.queue.set(task.id, task)
         restoredCount++
       } catch (error: any) {
-        console.error(`[DownloadQueueManager] 恢复任务失败: ${dbTask.fileName}`, error)
+        loggerService.error('DownloadQueueManager', `恢复任务失败: ${dbTask.fileName}, error=${error}`)
         // 标记任务为失败状态
         await this.transferService.markAsFailed(dbTask.id, error.message, 0)
       }
@@ -389,12 +408,7 @@ class DownloadQueueManager {
    */
   private async emitQueueUpdated(): Promise<void> {
     const state = await this.getQueueState()
-    console.log('[DownloadQueueManager] 发送队列更新事件:', {
-      pending: state.pending.length,
-      active: state.active.length,
-      completed: state.completed.length,
-      failed: state.failed.length
-    })
+    loggerService.info('DownloadQueueManager', `发送队列更新事件: pending=${state.pending.length}, active=${state.active.length}, completed=${state.completed.length}, failed=${state.failed.length}`)
     const windows = BrowserWindow.getAllWindows()
     windows.forEach(win => {
       win.webContents.send('transfer:queue-updated', state)

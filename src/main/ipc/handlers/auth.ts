@@ -3,6 +3,7 @@ import { getDatabase } from '../../database'
 import { cryptoService } from '../../services/CryptoService'
 import { alistService } from '../../services/AlistService'
 import { activityService, ActionType } from '../../services/ActivityService'
+import { loggerService } from '../../services/LoggerService'
 import { DEFAULT_QUOTA } from '../../../shared/constants'
 
 const N8N_WEBHOOK_URL = 'http://10.2.3.7:5678/webhook/liuliu'
@@ -33,13 +34,13 @@ async function callWebhook(endpoint: string, data: object): Promise<any> {
         })
       })
       request.on('error', (err) => {
-        console.error('Webhook request error:', err.message)
+        loggerService.error('AuthHandler', `Webhook request error: ${err.message}`)
         resolve({ success: false, message: '无法连接到服务器，请检查网络' })
       })
       request.write(postData)
       request.end()
     } catch (err) {
-      console.error('Webhook error:', err)
+      loggerService.error('AuthHandler', `Webhook error: ${err}`)
       resolve({ success: false, message: '请求发送失败' })
     }
   })
@@ -57,11 +58,11 @@ function saveSession(userId: number, username: string, token: string, basePath: 
   currentSession = { userId, username, token }
 
   // 初始化 AlistService
-  console.log('[auth] Initializing AlistService for user:', username, 'basePath:', basePath)
+  loggerService.info('AuthHandler', `Initializing AlistService for user: ${username}, basePath: ${basePath}`)
   alistService.setToken(token)
   alistService.setBasePath(basePath)
   alistService.setUserId(userId)
-  console.log('[auth] AlistService initialized')
+  loggerService.info('AuthHandler', 'AlistService initialized')
 }
 
 function getStoredSession(): { userId: number; username: string; token: string } | null {
@@ -82,11 +83,11 @@ function getStoredSession(): { userId: number; username: string; token: string }
 
     // 恢复 AlistService 配置
     const basePath = row.base_path || '/'
-    console.log('[auth] Restoring AlistService for user:', row.username, 'basePath:', basePath)
+    loggerService.info('AuthHandler', `Restoring AlistService for user: ${row.username}, basePath: ${basePath}`)
     alistService.setToken(token)
     alistService.setBasePath(basePath)
     alistService.setUserId(row.user_id)
-    console.log('[auth] AlistService restored')
+    loggerService.info('AuthHandler', 'AlistService restored')
 
     return currentSession
   } catch {
@@ -140,32 +141,23 @@ function ensureUser(username: string): number {
 export function registerAuthHandlers(): void {
   ipcMain.handle('auth:login', async (_event, username: string, password: string) => {
     try {
-      console.log('[auth:login] ========== 开始登录流程 ==========')
-      console.log('[auth:login] 用户名:', username)
+      loggerService.info('AuthHandler', '[login] ========== 开始登录流程 ==========')
+      loggerService.info('AuthHandler', `[login] 用户名: ${username}`)
 
       // 直接调用 Alist 登录接口
       const result = await alistService.login(username, password)
-      console.log('[auth:login] Alist 登录结果:', {
-        success: result.success,
-        hasToken: !!result.token,
-        tokenLength: result.token?.length || 0,
-        message: result.message
-      })
+      loggerService.info('AuthHandler', `[login] Alist 登录结果: success=${result.success}, hasToken=${!!result.token}, tokenLength=${result.token?.length || 0}, message=${result.message}`)
 
       if (result.success && result.token) {
         try {
-          console.log('[auth:login] ========== 调用 getMe() 获取用户信息 ==========')
+          loggerService.info('AuthHandler', '[login] ========== 调用 getMe() 获取用户信息 ==========')
           const userInfo = await alistService.getMe()
-          console.log('[auth:login] 成功获取用户信息:', {
-            username: userInfo.username,
-            basePath: userInfo.basePath,
-            id: userInfo.id
-          })
+          loggerService.info('AuthHandler', `[login] 成功获取用户信息: username=${userInfo.username}, basePath=${userInfo.basePath}, id=${userInfo.id}`)
           const basePath = userInfo.basePath || '/'
           const userId = ensureUser(username)
-          console.log('[auth:login] 本地用户ID:', userId)
+          loggerService.info('AuthHandler', `[login] 本地用户ID: ${userId}`)
           saveSession(userId, username, result.token, basePath)
-          console.log('[auth:login] ========== 登录成功 ==========')
+          loggerService.info('AuthHandler', '[login] ========== 登录成功 ==========')
 
           // Story 9.2 CRITICAL FIX: 记录登录操作日志
           activityService.logActivity({
@@ -174,25 +166,19 @@ export function registerAuthHandlers(): void {
             fileCount: 0,
             fileSize: 0,
             details: { username }
-          }).catch(err => console.error('[auth] 记录登录日志失败:', err))
+          }).catch(err => loggerService.error('AuthHandler', `记录登录日志失败: ${err}`))
 
           return { success: true }
         } catch (err: any) {
-          console.error('[auth:login] ========== 获取用户信息失败 ==========')
-          console.error('[auth:login] 错误详情:', {
-            code: err.code,
-            message: err.message,
-            stack: err.stack
-          })
+          loggerService.error('AuthHandler', `[login] ========== 获取用户信息失败: code=${err.code}, message=${err.message}`)
           return { success: false, message: err.message || '获取用户信息失败' }
         }
       }
 
-      console.log('[auth:login] ========== 登录失败 ==========')
+      loggerService.info('AuthHandler', '[login] ========== 登录失败 ==========')
       return result
     } catch (err) {
-      console.error('[auth:login] ========== 登录异常 ==========')
-      console.error('[auth:login] 异常详情:', err)
+      loggerService.error('AuthHandler', `[login] ========== 登录异常: ${err}`)
       return { success: false, message: '网络错误，请稍后重试' }
     }
   })
@@ -211,7 +197,7 @@ export function registerAuthHandlers(): void {
         fileCount: 0,
         fileSize: 0,
         details: { username }
-      }).catch(err => console.error('[auth] 记录登出日志失败:', err))
+      }).catch(err => loggerService.error('AuthHandler', `记录登出日志失败: ${err}`))
     }
 
     return { success: true }
@@ -222,7 +208,7 @@ export function registerAuthHandlers(): void {
       const result = await callWebhook('register', { username, password })
       return result
     } catch (err) {
-      console.error('Register error:', err)
+      loggerService.error('AuthHandler', `Register error: ${err}`)
       return { success: false, message: '网络错误，请稍后重试' }
     }
   })
@@ -286,7 +272,7 @@ export function registerAuthHandlers(): void {
         }
       }
     } catch (error: any) {
-      console.error('获取当前用户信息失败:', error)
+      loggerService.error('AuthHandler', `获取当前用户信息失败: ${error.message || error}`)
       return { success: false, message: error.message || '获取用户信息失败' }
     }
   })
@@ -363,7 +349,7 @@ export function registerAuthHandlers(): void {
         }
       }
     } catch (error: any) {
-      console.error('获取用户列表失败:', error)
+      loggerService.error('AuthHandler', `获取用户列表失败: ${error.message || error}`)
       throw new Error(error.message || '获取用户列表失败')
     }
   })
@@ -398,11 +384,11 @@ export function registerAuthHandlers(): void {
         })
 
         if (webhookResult.success && webhookResult.data) {
-          console.log('[auth] 使用 n8n Webhook 获取存储统计')
+          loggerService.info('AuthHandler', '使用 n8n Webhook 获取存储统计')
           return webhookResult
         }
       } catch (n8nError) {
-        console.warn('[auth] n8n Webhook 调用失败，降级到本地查询:', n8nError)
+        loggerService.warn('AuthHandler', `n8n Webhook 调用失败，降级到本地查询: ${n8nError}`)
       }
 
       // 降级方案: 直接查询数据库
@@ -439,7 +425,7 @@ export function registerAuthHandlers(): void {
         }
       }
     } catch (error: any) {
-      console.error('获取存储统计失败:', error)
+      loggerService.error('AuthHandler', `获取存储统计失败: ${error.message || error}`)
       throw new Error(error.message || '获取存储统计失败')
     }
   })

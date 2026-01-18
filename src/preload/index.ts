@@ -17,7 +17,7 @@ const validChannels = [
   'crypto:encrypt', 'crypto:decrypt', 'crypto:isReady',
   'dialog:openFile',
   'tray:update-transfer-status', 'tray:update-transfer-counts', 'tray:show-window', 'tray:hide-window', 'tray-quick-upload',
-  'notification:show', 'app:getVersion', 'app:set-login-item-settings', 'app:get-login-item-settings',
+  'notification:show', 'app:getVersion', 'app:set-login-item-settings', 'app:get-login-item-settings', 'app:open-logs-directory',
   'activity:log', 'activity:get-user-logs', 'activity:get-all-logs', 'activity:get-dau', 'activity:get-user-stats',
   'downloadConfig:selectDirectory', 'downloadConfig:get', 'downloadConfig:update', 'downloadConfig:openDirectory', 'downloadConfig:openFileDirectory', 'downloadConfig:reset', 'downloadConfig:createDirectory',
   'update:check', 'update:install-now', 'update:install-on-quit',
@@ -167,7 +167,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   app: {
     getVersion: () => ipcRenderer.invoke('app:getVersion'),
     setLoginItemSettings: (settings: { openAtLogin: boolean }) => ipcRenderer.invoke('app:set-login-item-settings', settings),
-    getLoginItemSettings: () => ipcRenderer.invoke('app:get-login-item-settings')
+    getLoginItemSettings: () => ipcRenderer.invoke('app:get-login-item-settings'),
+    openLogsDirectory: () => ipcRenderer.invoke('app:open-logs-directory')
   },
 
   activity: {

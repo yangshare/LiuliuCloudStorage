@@ -79,6 +79,18 @@
           设置文件的默认下载位置
         </el-text>
 
+        <!-- 日志目录 -->
+        <el-divider />
+        <el-form-item label="日志目录">
+          <el-button @click="handleOpenLogsDirectory">
+            打开日志目录
+          </el-button>
+        </el-form-item>
+
+        <el-text type="info" size="small">
+          查看应用日志以排查问题
+        </el-text>
+
         <!-- 按日期自动分类 -->
         <el-divider />
         <el-form-item label="按日期自动分类">
@@ -292,6 +304,20 @@ async function handleResetConfig(): Promise<void> {
     if (error !== 'cancel') {
       ElMessage.error('重置失败: ' + error.message)
     }
+  }
+}
+
+/**
+ * 打开日志目录
+ */
+async function handleOpenLogsDirectory(): Promise<void> {
+  try {
+    const result = await window.electronAPI?.app.openLogsDirectory()
+    if (!result?.success) {
+      ElMessage.error(result?.error || '无法打开日志目录')
+    }
+  } catch (error: any) {
+    ElMessage.error('打开日志目录失败: ' + error.message)
   }
 }
 

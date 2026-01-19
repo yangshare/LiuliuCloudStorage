@@ -5,15 +5,14 @@ import { useUpdateStore } from '@/stores/updateStore'
 import { watch } from 'vue'
 
 const updateStore = useUpdateStore()
-const dialog = ElMessageBox
 
 watch(() => updateStore.errorMessage, (message) => {
   if (message) {
-    dialog.error({
-      title: '更新失败',
-      content: message,
-      positiveText: '确定',
-      onPositiveClick: () => updateStore.clearError()
+    ElMessageBox.alert(message, '更新失败', {
+      type: 'error',
+      confirmButtonText: '确定'
+    }).then(() => {
+      updateStore.clearError()
     })
   }
 })

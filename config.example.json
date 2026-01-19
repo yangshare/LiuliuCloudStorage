@@ -1,0 +1,4 @@
+{
+  "alistBaseUrl": "http://your-alist-server:5244",
+  "n8nBaseUrl": "http://your-n8n-server:5678"
+}

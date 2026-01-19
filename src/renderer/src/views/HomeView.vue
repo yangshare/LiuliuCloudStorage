@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElContainer, ElMain, ElCard, ElButton, ElIcon, ElText, ElDrawer, ElDropdown, ElDropdownMenu, ElDropdownItem } from 'element-plus'
+import { ElContainer, ElMain, ElCard, ElButton, ElIcon, ElText, ElDrawer, ElDropdown, ElDropdownMenu, ElDropdownItem, ElBadge } from 'element-plus'
 import { Upload, Folder, List, Setting, Grid, Refresh, Document, FolderOpened, Memo, ArrowLeft, Download } from '@element-plus/icons-vue'
 import FileList from '../components/file/FileList.vue'
 import Breadcrumb from '../components/file/Breadcrumb.vue'
 import FileDetail from '../components/file/FileDetail.vue'
 import OfflineBanner from '../components/common/OfflineBanner.vue'
 import TransferProgressList from '../components/transfer/TransferProgressList.vue'
-import DownloadProgressPanel from '../components/transfer/DownloadProgressPanel.vue'
 import DownloadQueuePanel from '../components/transfer/DownloadQueuePanel.vue'
 import CreateFolderModal from '../components/file/CreateFolderModal.vue'
 import BatchActionToolbar from '../components/file/BatchActionToolbar.vue'
@@ -30,11 +29,16 @@ const fileInputRef = ref<HTMLInputElement | null>(null)
 
 const uploadQueue = computed(() => transferStore.uploadQueue)
 const downloadQueue = computed(() => transferStore.downloadQueue)
-// 临时调试：同时检查 downloadQueue 和 activeDownloads
-const hasActiveDownloads = computed(() =>
-  transferStore.activeDownloads.length > 0 ||
-  transferStore.downloadQueue.some(t => t.status === 'in_progress' || t.status === 'pending')
-)
+
+// 计算活跃下载数量（用于徽章显示）
+const activeDownloadsCount = computed(() => {
+  const activeCount = transferStore.activeDownloads.length
+  const pendingCount = transferStore.downloadQueue.filter(
+    t => t.status === 'in_progress' || t.status === 'pending'
+  ).length
+  return activeCount + pendingCount
+})
+
 const showOverlay = ref(false)
 const dragCount = ref(0)
 let dragCounter = 0
@@ -270,13 +274,20 @@ onUnmounted(() => {
                 >
                   <el-icon><Setting /></el-icon>
                 </el-button>
-                <el-button
-                  class="icon-btn-gray"
-                  @click="showQueueDrawer = true"
-                  title="下载列表"
+                <el-badge
+                  :value="activeDownloadsCount"
+                  :hidden="activeDownloadsCount === 0"
+                  :max="99"
+                  type="primary"
                 >
-                  <el-icon><Download /></el-icon>
-                </el-button>
+                  <el-button
+                    class="icon-btn-gray"
+                    @click="showQueueDrawer = true"
+                    title="下载列表"
+                  >
+                    <el-icon><Download /></el-icon>
+                  </el-button>
+                </el-badge>
               </div>
             </div>
           </template>
@@ -288,10 +299,9 @@ onUnmounted(() => {
     </el-container>
     <FileDetail />
     <CreateFolderModal v-model:show="showCreateFolderModal" />
-    <!-- 传输进度面板（固定在底部） -->
-    <div class="transfer-panels">
-      <TransferProgressList v-if="uploadQueue.length > 0" class="transfer-panel" />
-      <DownloadProgressPanel v-if="hasActiveDownloads" class="download-panel" />
+    <!-- 上传进度面板（固定在底部） -->
+    <div class="upload-panel-container">
+      <TransferProgressList v-if="uploadQueue.length > 0" />
     </div>
     <!-- 全窗口拖拽覆盖层 -->
     <div v-if="showOverlay" class="drag-overlay">
@@ -538,37 +548,17 @@ onUnmounted(() => {
   gap: 16px;
 }
 
-.transfer-panels {
+/* 上传进度面板容器（固定在底部） */
+.upload-panel-container {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
   z-index: 1000;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
   pointer-events: none;
 }
 
-.transfer-panels > * {
+.upload-panel-container > * {
   pointer-events: auto;
-}
-
-.transfer-panel {
-  width: 100%;
-}
-
-.download-panel {
-  width: 100%;
-  transition: all 0.3s ease-in-out;
-}
-
-.download-panel:has(.collapsed) {
-  width: 260px;
-  margin-left: 0;
-  margin-bottom: 8px;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 </style>

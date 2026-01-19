@@ -21,14 +21,16 @@ import { trayService } from './services/TrayService'
 import { notificationService } from './services/NotificationService'
 import { updateService } from './services/UpdateService'
 import { loggerService } from './services/LoggerService'
+import { cacheService } from './services/CacheService'
+import { loadConfig, getConfigFilePath } from './config'
 
-// Alist 服务器地址，可通过环境变量配置
-const ALIST_BASE_URL = process.env.ALIST_BASE_URL || 'http://10.2.3.7:5244'
-const N8N_BASE_URL = process.env.N8N_BASE_URL || 'http://10.2.3.7:5678'
+// 加载应用配置（优先级: 环境变量 > config.json）
+const appConfig = loadConfig()
 
 let mainWindow: BrowserWindow | null = null
+let isQuitting = false
 
-function getWindowIcon(): string {
+function getWindowIcon(): string | undefined {
   const possiblePaths = [
     join(process.cwd(), 'build', 'icon.ico'),
     join(__dirname, '../../build/icon.ico'),
@@ -49,9 +51,8 @@ function getWindowIcon(): string {
     }
   }
 
-  const fallback = join(__dirname, '../../build/icon.ico')
-  loggerService.warn('Main', `⚠ 未找到图标，使用回退路径: ${fallback}`)
-  return fallback
+  loggerService.warn('Main', `⚠ 未找到图标文件`)
+  return undefined
 }
 
 function createWindow(): void {
@@ -74,7 +75,7 @@ function createWindow(): void {
 
   // 监听窗口关闭事件，最小化到托盘而不是直接关闭
   mainWindow.on('close', (event) => {
-    if (!app.isQuitting) {
+    if (!isQuitting) {
       event.preventDefault()
       mainWindow?.hide()
     }
@@ -94,17 +95,33 @@ app.whenReady().then(async () => {
 
   loggerService.info('Main', '应用程序启动中...')
 
-  initDatabase()
-  loggerService.info('Main', '数据库初始化完成')
+  // 数据库初始化 - 关键服务，失败则退出
+  try {
+    initDatabase()
+    loggerService.info('Main', '数据库初始化完成')
+  } catch (error) {
+    loggerService.error('Main', '数据库初始化失败', error as Error)
+    app.exit(1)
+    return
+  }
 
-  await cryptoService.initialize()
-  loggerService.info('Main', '加密服务初始化完成')
+  // 加密服务初始化 - 关键服务，失败则退出
+  try {
+    await cryptoService.initialize()
+    loggerService.info('Main', '加密服务初始化完成')
+  } catch (error) {
+    loggerService.error('Main', '加密服务初始化失败', error as Error)
+    app.exit(1)
+    return
+  }
 
-  alistService.initialize(ALIST_BASE_URL)
-  loggerService.info('Main', `Alist服务初始化完成: ${ALIST_BASE_URL}`)
+  // Alist 服务初始化
+  alistService.initialize(appConfig.alistBaseUrl)
+  loggerService.info('Main', `Alist服务初始化完成: ${appConfig.alistBaseUrl}`)
 
-  orchestrationService.initialize(N8N_BASE_URL)
-  loggerService.info('Main', `Orchestration服务初始化完成: ${N8N_BASE_URL}`)
+  // Orchestration 服务初始化
+  orchestrationService.initialize(appConfig.n8nBaseUrl)
+  loggerService.info('Main', `Orchestration服务初始化完成: ${appConfig.n8nBaseUrl}`)
 
   registerAllHandlers()
   loggerService.info('Main', 'IPC处理器注册完成')
@@ -121,6 +138,13 @@ app.whenReady().then(async () => {
   // 初始化系统托盘
   trayService.initialize()
   loggerService.info('Main', '系统托盘初始化完成')
+
+  // 初始化缓存清理服务
+  cacheService.initialize({
+    maxSize: 500 * 1024 * 1024, // 500MB
+    autoCleanupOnStart: true
+  })
+  loggerService.info('Main', '缓存清理服务初始化完成')
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -139,7 +163,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   loggerService.info('Main', '应用程序准备退出...')
   // 设置退出标志，允许窗口真正关闭
-  app.isQuitting = true
+  isQuitting = true
   // 应用关闭时自动安装更新
   updateService.installOnQuit()
 })

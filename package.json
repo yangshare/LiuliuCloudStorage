@@ -65,7 +65,7 @@
     "electron": "^30.0.0",
     "electron-builder": "^26.4.0",
     "electron-rebuild": "^3.2.9",
-    "electron-vite": "^2.0.0",
+    "electron-vite": "^2.3.0",
     "glob": "^10.5.0",
     "jsdom": "^27.4.0",
     "naive-ui": "^2.43.2",

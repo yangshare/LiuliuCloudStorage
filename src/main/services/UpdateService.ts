@@ -10,10 +10,14 @@ class UpdateService {
   init(mainWindow: BrowserWindow) {
     this.mainWindow = mainWindow
 
-    // 仅在开发环境允许从开发更新源检查更新
-    if (!app.isPackaged) {
+    // 开发环境：仅在设置 TEST_UPDATE=true 时启用更新测试
+    const isDevUpdateTest = !app.isPackaged && process.env.TEST_UPDATE === 'true'
+
+    if (isDevUpdateTest) {
       autoUpdater.forceDevUpdateConfig = true
-      loggerService.info('UpdateService', '开发模式：已启用开发更新源')
+      loggerService.info('UpdateService', '开发模式：已启用开发更新源（测试模式）')
+    } else if (!app.isPackaged) {
+      loggerService.info('UpdateService', '开发模式：更新检查已禁用（设置 TEST_UPDATE=true 启用）')
     }
 
     // 配置更新缓存路径：使用用户数据目录，避免权限问题
@@ -87,6 +91,13 @@ class UpdateService {
 
   async checkForUpdates() {
     try {
+      // 开发环境：未启用测试模式时跳过更新检查
+      if (!app.isPackaged && process.env.TEST_UPDATE !== 'true') {
+        loggerService.info('UpdateService', '开发环境：跳过更新检查')
+        this.sendToRenderer('update:not-available', undefined)
+        return
+      }
+
       loggerService.info('UpdateService', '开始检查更新...')
       await autoUpdater.checkForUpdates()
       loggerService.info('UpdateService', '检查更新完成')

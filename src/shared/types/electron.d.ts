@@ -85,6 +85,10 @@ export interface ElectronAPI {
   dialog: {
     openFile: (options?: { directory?: boolean }) => Promise<string[]>
   }
+  cache: {
+    getInfo: () => Promise<{ success: boolean; size?: string; directory?: string; lastCleanup?: string; error?: string }>
+    clear: () => Promise<{ success: boolean; clearedSize?: string; filesDeleted?: string; remainingSize?: string; error?: string }>
+  }
   updateAPI: {
     check: () => Promise<void>
     installNow: () => Promise<void>

@@ -37,22 +37,24 @@ function getWindowIcon(): string | undefined {
     join(process.resourcesPath, 'icon.ico'),
   ]
 
-  loggerService.debug('Main', '尝试查找图标文件...')
-  loggerService.debug('Main', `process.cwd(): ${process.cwd()}`)
-  loggerService.debug('Main', `__dirname: ${__dirname}`)
-  loggerService.debug('Main', `process.resourcesPath: ${process.resourcesPath}`)
+  loggerService.info('Main', '尝试查找图标文件...')
+  loggerService.info('Main', `process.cwd(): ${process.cwd()}`)
+  loggerService.info('Main', `__dirname: ${__dirname}`)
+  loggerService.info('Main', `process.resourcesPath: ${process.resourcesPath}`)
 
   for (const iconPath of possiblePaths) {
     const exists = existsSync(iconPath)
-    loggerService.debug('Main', `检查路径: ${iconPath}, 存在: ${exists}`)
+    loggerService.info('Main', `检查路径: ${iconPath}, 存在: ${exists}`)
     if (exists) {
       loggerService.info('Main', `✓ 使用图标: ${iconPath}`)
       return iconPath
     }
   }
 
-  loggerService.warn('Main', `⚠ 未找到图标文件`)
-  return undefined
+  // 使用 fallback 路径
+  const fallbackPath = join(__dirname, '../../build/icon.ico')
+  loggerService.warn('Main', `⚠ 未找到图标文件，使用 fallback: ${fallbackPath}`)
+  return fallbackPath
 }
 
 function createWindow(): void {
@@ -139,12 +141,11 @@ app.whenReady().then(async () => {
   trayService.initialize()
   loggerService.info('Main', '系统托盘初始化完成')
 
-  // 初始化缓存清理服务
+  // 初始化缓存服务
   cacheService.initialize({
-    maxSize: 500 * 1024 * 1024, // 500MB
-    autoCleanupOnStart: true
+    maxSize: 500 * 1024 * 1024 // 500MB
   })
-  loggerService.info('Main', '缓存清理服务初始化完成')
+  loggerService.info('Main', '缓存服务初始化完成')
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

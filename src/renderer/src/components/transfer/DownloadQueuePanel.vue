@@ -240,12 +240,128 @@ function formatSpeed(bytesPerSecond: number): string {
   padding: 16px;
 }
 
+/* 卡片 - 网易云风格 */
+:deep(.el-card) {
+  border-radius: var(--radius-lg) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  box-shadow: var(--shadow-md) !important;
+  background: rgba(255, 255, 255, 0.85) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+:deep(.el-card__header) {
+  background: rgba(245, 245, 245, 0.5) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
+.card-header span {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--netease-gray-7);
+}
+
+/* Tabs 样式 */
+:deep(.el-tabs) {
+  background: transparent;
+}
+
+:deep(.el-tabs--card) {
+  border: none;
+}
+
+:deep(.el-tabs__header) {
+  margin: 0 0 16px 0;
+  border: none;
+}
+
+:deep(.el-tabs__nav) {
+  border: none;
+  border-radius: var(--radius-md);
+  background: rgba(245, 245, 245, 0.5);
+  padding: 4px;
+}
+
+:deep(.el-tabs__item) {
+  border: none !important;
+  border-radius: var(--radius-sm) !important;
+  transition: all 0.2s ease;
+}
+
+:deep(.el-tabs__item:hover) {
+  color: var(--netease-red) !important;
+}
+
+:deep(.el-tabs__item.is-active) {
+  background: var(--netease-red) !important;
+  color: #fff !important;
+}
+
+:deep(.el-tabs__content) {
+  padding: 0;
+}
+
+/* 标签样式 */
+:deep(.el-tag) {
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+}
+
+:deep(.el-tag--warning) {
+  background: rgba(250, 140, 22, 0.1) !important;
+  border-color: rgba(250, 140, 22, 0.2) !important;
+  color: #FA8C16 !important;
+}
+
+:deep(.el-tag--primary) {
+  background: rgba(194, 12, 12, 0.1) !important;
+  border-color: rgba(194, 12, 12, 0.2) !important;
+  color: var(--netease-red) !important;
+}
+
+:deep(.el-tag--success) {
+  background: rgba(46, 204, 113, 0.1) !important;
+  border-color: rgba(46, 204, 113, 0.2) !important;
+  color: var(--netease-green) !important;
+}
+
+:deep(.el-tag--danger) {
+  background: rgba(194, 12, 12, 0.1) !important;
+  border-color: rgba(194, 12, 12, 0.2) !important;
+  color: var(--netease-red) !important;
+}
+
+:deep(.el-tag--info) {
+  background: rgba(153, 153, 153, 0.1) !important;
+  border-color: rgba(153, 153, 153, 0.2) !important;
+  color: var(--netease-gray-5) !important;
+}
+
+/* 按钮样式 */
+:deep(.el-button--primary) {
+  background: linear-gradient(135deg, var(--netease-red) 0%, var(--netease-red-light) 100%) !important;
+  border: none !important;
+  border-radius: var(--radius-sm) !important;
+}
+
+:deep(.el-button--warning) {
+  background: linear-gradient(135deg, #FA8C16 0%, #F9A825 100%) !important;
+  border: none !important;
+  border-radius: var(--radius-sm) !important;
+}
+
+:deep(.el-button--default) {
+  border-radius: var(--radius-sm) !important;
+}
+
+/* 任务列表 */
 .task-list {
   display: flex;
   flex-direction: column;
@@ -257,14 +373,19 @@ function formatSpeed(bytesPerSecond: number): string {
   align-items: flex-start;
   gap: 12px;
   padding: 12px;
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 8px;
-  transition: all 0.3s;
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: var(--radius-md);
+  transition: all 0.2s ease;
 }
 
 .task-item:hover {
-  border-color: var(--el-color-primary);
-  background-color: var(--el-fill-color-lighter);
+  border-color: var(--netease-red);
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
 }
 
 .task-content {
@@ -278,9 +399,40 @@ function formatSpeed(bytesPerSecond: number): string {
 .task-title {
   font-weight: 500;
   word-break: break-all;
+  color: var(--netease-gray-7);
+  font-size: 14px;
 }
 
+/* 进度条 - 网易云红 */
 :deep(.el-progress) {
   margin-bottom: 4px;
+}
+
+:deep(.el-progress-bar__outer) {
+  background-color: rgba(0, 0, 0, 0.06) !important;
+  border-radius: 4px !important;
+}
+
+:deep(.el-progress-bar__inner) {
+  background: linear-gradient(90deg, var(--netease-red) 0%, var(--netease-red-light) 100%) !important;
+  border-radius: 4px !important;
+}
+
+/* 空状态 */
+:deep(.el-empty) {
+  padding: 32px 0;
+}
+
+:deep(.el-empty__description) {
+  color: var(--netease-gray-5);
+}
+
+/* 文本样式 */
+:deep(.el-text--info) {
+  color: var(--netease-gray-5) !important;
+}
+
+:deep(.el-text--danger) {
+  color: var(--netease-red) !important;
 }
 </style>

@@ -5,6 +5,8 @@ import router from './router'
 import App from './App.vue'
 import { trayMonitorService } from './services/TrayMonitorService'
 import { setupElementPlus } from './plugins/element-plus'
+// 网易云音乐风格主题
+import './styles/theme-netease.css'
 
 const app = createApp(App)
 

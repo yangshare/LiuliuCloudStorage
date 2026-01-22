@@ -471,6 +471,24 @@ onMounted(async () => {
   max-width: 800px;
   margin: 0 auto;
   padding: 20px;
+  background: linear-gradient(135deg, #F5F5F5 0%, #E8E8E8 100%);
+  min-height: 100vh;
+}
+
+/* 卡片 - 网易云风格 */
+:deep(.el-card) {
+  border-radius: var(--radius-lg) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  box-shadow: var(--shadow-md) !important;
+  background: rgba(255, 255, 255, 0.85) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+:deep(.el-card__header) {
+  background: rgba(245, 245, 245, 0.5) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important;
 }
 
 .card-header {
@@ -479,10 +497,43 @@ onMounted(async () => {
   align-items: center;
 }
 
+.card-header span {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--netease-gray-7);
+}
+
 .settings-content {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
+  padding: 8px 0;
+}
+
+/* 表单项样式优化 */
+:deep(.el-form-item) {
+  margin-bottom: 0;
+}
+
+:deep(.el-form-item__label) {
+  font-weight: 500;
+  color: var(--netease-gray-6);
+}
+
+/* 开关样式 */
+:deep(.el-switch) {
+  --el-switch-on-color: var(--netease-red);
+}
+
+:deep(.el-switch.is-checked .el-switch__core) {
+  background-color: var(--netease-red) !important;
+  border-color: var(--netease-red) !important;
+}
+
+/* 分割线 */
+:deep(.el-divider) {
+  border-color: rgba(0, 0, 0, 0.06);
+  margin: 16px 0;
 }
 
 .directory-group,
@@ -495,7 +546,59 @@ onMounted(async () => {
 .button-row {
   display: flex;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+/* 按钮样式 - 网易云风格 */
+:deep(.el-button--primary) {
+  background: linear-gradient(135deg, var(--netease-red) 0%, var(--netease-red-light) 100%) !important;
+  border: none !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: 0 2px 8px rgba(194, 12, 12, 0.3) !important;
+}
+
+:deep(.el-button--primary:hover) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(194, 12, 12, 0.4) !important;
+}
+
+:deep(.el-button--danger) {
+  background: linear-gradient(135deg, #F56C6C 0%, #F78989 100%) !important;
+  border: none !important;
+  border-radius: var(--radius-md) !important;
+}
+
+:deep(.el-button--default),
+:deep(.el-button.is-plain) {
+  border-radius: var(--radius-md) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  background: rgba(255, 255, 255, 0.6) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+:deep(.el-button--default:hover),
+:deep(.el-button.is-plain:hover) {
+  background: rgba(255, 255, 255, 0.8) !important;
+  border-color: var(--netease-red) !important;
+  color: var(--netease-red) !important;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm) !important;
+}
+
+/* 输入框样式 */
+:deep(.el-input__wrapper) {
+  border-radius: var(--radius-md) !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1) inset !important;
+}
+
+:deep(.el-input__wrapper:hover) {
+  box-shadow: 0 0 0 1px var(--netease-red) inset !important;
+}
+
+:deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px var(--netease-red) inset !important;
 }
 
 /* 缓存管理样式 */
@@ -510,9 +613,12 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 12px;
-  background-color: #f5f7fa;
-  border-radius: 4px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: var(--radius-md);
 }
 
 .cache-stat {
@@ -523,24 +629,44 @@ onMounted(async () => {
 }
 
 .cache-stat .label {
-  color: #606266;
+  color: var(--netease-gray-5);
   min-width: 80px;
 }
 
 .cache-stat .value {
-  color: #303133;
+  color: var(--netease-gray-7);
   font-weight: 500;
 }
 
 .cache-stat .cache-path {
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: 12px;
-  color: #409eff;
+  color: var(--netease-red);
   word-break: break-all;
 }
 
 .cache-actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* 文本样式 */
+:deep(.el-text--info) {
+  color: var(--netease-gray-5) !important;
+}
+
+/* 复选框样式 */
+:deep(.el-checkbox) {
+  font-weight: 500;
+}
+
+:deep(.el-checkbox__input.is-checked .el-checkbox__inner) {
+  background-color: var(--netease-red) !important;
+  border-color: var(--netease-red) !important;
+}
+
+:deep(.el-checkbox__inner:hover) {
+  border-color: var(--netease-red) !important;
 }
 </style>

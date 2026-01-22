@@ -306,10 +306,10 @@ onUnmounted(() => {
     <!-- 全窗口拖拽覆盖层 -->
     <div v-if="showOverlay" class="drag-overlay">
       <div class="drag-overlay-content">
-        <el-icon :size="64" color="#1890ff">
+        <el-icon :size="64" :color="'var(--netease-red)'">
           <Upload />
         </el-icon>
-        <el-text style="font-size: 18px; color: #1890ff;">
+        <el-text style="font-size: 18px; color: var(--netease-red);">
           释放文件即可上传 {{ dragCount > 0 ? `(${dragCount} 个文件)` : '' }}
         </el-text>
       </div>
@@ -338,6 +338,7 @@ onUnmounted(() => {
   box-sizing: border-box;
   position: relative;
   overflow: hidden;
+  background: linear-gradient(135deg, #F5F5F5 0%, #E8E8E8 100%);
 }
 
 .file-card {
@@ -365,6 +366,14 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
+/* 卡片头部 - 网易云风格 */
+:deep(.el-card__header) {
+  background: rgba(255, 255, 255, 0.85) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -388,157 +397,199 @@ onUnmounted(() => {
   align-items: center;
 }
 
-/* 上传按钮 - 蓝色背景，白色文字（主操作） */
+/* ===== 网易云风格按钮 ===== */
+
+/* 上传按钮 - 网易红渐变（主操作） */
 .upload-btn {
-  background-color: #1890ff;
+  background: linear-gradient(135deg, var(--netease-red) 0%, var(--netease-red-light) 100%);
   color: #fff;
   border: none;
-  height: 32px;
+  height: 36px;
   padding: 0 20px;
   font-size: 14px;
-  border-radius: 4px;
-  transition: all 0.3s;
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(194, 12, 12, 0.3);
 }
 
 .upload-btn:hover:not(:disabled) {
-  background-color: #40a9ff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(194, 12, 12, 0.4);
 }
 
 .upload-btn:active:not(:disabled) {
-  background-color: #096dd9;
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(194, 12, 12, 0.3);
 }
 
 .upload-btn:disabled {
-  background-color: #d9d9d9;
+  background: #d9d9d9;
+  box-shadow: none;
   cursor: not-allowed;
+  transform: none;
 }
 
 .upload-btn .btn-icon {
   margin-right: 6px;
 }
 
-/* 新建文件夹按钮 - 白色背景，浅蓝色文字 */
+/* 新建文件夹按钮 - 毛玻璃效果 */
 .folder-btn {
-  background-color: #fff;
-  color: #40a9ff;
-  border: 1px solid #d9d9d9;
-  height: 32px;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--netease-gray-6);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  height: 36px;
   padding: 0 16px;
   font-size: 14px;
-  border-radius: 4px;
-  transition: all 0.3s;
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  transition: all 0.2s ease;
 }
 
 .folder-btn:hover:not(:disabled) {
-  background-color: #e6f7ff;
-  border-color: #40a9ff;
+  background: rgba(255, 255, 255, 0.8);
+  border-color: var(--netease-red);
+  color: var(--netease-red);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.folder-btn:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 .folder-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  transform: none;
 }
 
 .folder-btn .btn-icon {
-  color: #ffc53d; /* 黄色文件夹图标 */
+  color: #ffc53d;
   margin-right: 4px;
 }
 
-/* 新建文件按钮 - 浅蓝色背景，蓝色文字 */
+/* 新建文件按钮 - 浅红背景 */
 .file-btn {
-  background-color: #e6f7ff;
-  color: #1890ff;
-  border: 1px solid #91d5ff;
-  height: 32px;
+  background: var(--netease-red-pale);
+  color: var(--netease-red);
+  border: 1px solid rgba(194, 12, 12, 0.2);
+  height: 36px;
   padding: 0 16px;
   font-size: 14px;
-  border-radius: 4px;
-  transition: all 0.3s;
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  transition: all 0.2s ease;
 }
 
 .file-btn:hover:not(:disabled) {
-  background-color: #bae7ff;
-  border-color: #69c0ff;
+  background: #ffe0e0;
+  border-color: var(--netease-red);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.file-btn:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 .file-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  transform: none;
 }
 
 .file-btn .btn-icon {
   margin-right: 4px;
 }
 
-/* 视图切换按钮 */
+/* 视图切换按钮 - 毛玻璃风格 */
 .view-btn {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   padding: 0;
-  border: 1px solid #d9d9d9;
-  background-color: #fff;
-  border-radius: 4px;
-  transition: all 0.3s;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: var(--radius-md);
+  transition: all 0.2s ease;
 }
 
 .view-btn:hover {
-  background-color: #f5f5f5;
+  background: rgba(255, 255, 255, 0.8);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 .view-btn.active {
-  background-color: #e6f7ff;
-  border-color: #40a9ff;
-  color: #1890ff;
+  background: var(--netease-red-pale);
+  border-color: var(--netease-red);
+  color: var(--netease-red);
 }
 
 /* 刷新按钮 */
 .refresh-btn {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   padding: 0;
-  border: 1px solid #d9d9d9;
-  background-color: #fff;
-  border-radius: 4px;
-  transition: all 0.3s;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: var(--radius-md);
+  transition: all 0.2s ease;
 }
 
 .refresh-btn:hover:not(:disabled) {
-  background-color: #f5f5f5;
+  background: rgba(255, 255, 255, 0.8);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
-/* 通用图标按钮（灰色边框） */
+/* 通用图标按钮 - 毛玻璃风格 */
 .icon-btn-gray {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   padding: 0;
-  border: 1px solid #d9d9d9;
-  background-color: #fff;
-  border-radius: 4px;
-  transition: all 0.3s;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: var(--radius-md);
+  transition: all 0.2s ease;
 }
 
 .icon-btn-gray:hover:not(:disabled) {
-  background-color: #f5f5f5;
+  background: rgba(255, 255, 255, 0.8);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 .icon-btn-gray:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  transform: none;
 }
 
+/* 拖拽覆盖层 - 网易云红风格 */
 .drag-overlay {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(24, 144, 255, 0.1);
-  border: 3px dashed #1890ff;
+  background-color: rgba(194, 12, 12, 0.05);
+  border: 3px dashed var(--netease-red);
   z-index: 9999;
   display: flex;
   align-items: center;
   justify-content: center;
   pointer-events: none;
+  backdrop-filter: blur(2px);
 }
 
 .drag-overlay-content {

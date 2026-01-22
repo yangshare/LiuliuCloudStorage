@@ -94,10 +94,13 @@ const handleLogout = async () => {
 </script>
 
 <style scoped>
+/* 侧边栏 - 网易云风格 */
 .admin-aside {
-  border-right: 1px solid var(--el-border-color-light);
+  background: linear-gradient(180deg, rgba(194, 12, 12, 0.95) 0%, rgba(139, 0, 0, 0.95) 100%) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
   transition: width 0.3s;
   overflow: hidden;
+  box-shadow: 2px 0 8px rgba(194, 12, 12, 0.2);
 }
 
 .admin-logo {
@@ -105,14 +108,47 @@ const handleLogout = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-bottom: 1px solid var(--el-border-color-light);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   font-size: 18px;
   font-weight: bold;
   padding: 0 16px;
+  color: #fff;
 }
 
-.el-menu {
-  border-right: none;
+:deep(.el-menu) {
+  background: transparent !important;
+  border-right: none !important;
+}
+
+:deep(.el-menu-item) {
+  color: rgba(255, 255, 255, 0.7) !important;
+  transition: all 0.2s ease;
+}
+
+:deep(.el-menu-item:hover) {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #fff !important;
+}
+
+:deep(.el-menu-item.is-active) {
+  background: rgba(255, 255, 255, 0.15) !important;
+  color: #fff !important;
+  font-weight: 600;
+  border-left: 3px solid #fff;
+}
+
+/* Header - 网易云风格 */
+:deep(.el-header) {
+  background: rgba(255, 255, 255, 0.85) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+/* Main - 网易云风格 */
+:deep(.el-main) {
+  background: linear-gradient(135deg, #F5F5F5 0%, #E8E8E8 100%);
 }
 
 .menu-icon {
@@ -123,5 +159,23 @@ const handleLogout = async () => {
 .header-right {
   display: flex;
   align-items: center;
+}
+
+:deep(.header-left .el-text) {
+  color: var(--netease-gray-7);
+  font-weight: 600;
+}
+
+:deep(.header-right .el-text) {
+  color: var(--netease-gray-6);
+}
+
+:deep(.el-button.is-link) {
+  color: var(--netease-gray-6);
+  transition: all 0.2s ease;
+}
+
+:deep(.el-button.is-link:hover) {
+  color: var(--netease-red);
 }
 </style>

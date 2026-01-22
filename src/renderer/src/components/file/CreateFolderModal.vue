@@ -86,3 +86,87 @@ function handleCancel() {
   formData.folderName = ''
 }
 </script>
+
+<style scoped>
+/* 对话框 - 网易云风格 */
+:deep(.el-dialog) {
+  border-radius: var(--radius-xl) !important;
+  box-shadow: var(--shadow-xl) !important;
+  overflow: hidden;
+}
+
+:deep(.el-dialog__header) {
+  background: linear-gradient(135deg, var(--netease-red) 0%, var(--netease-red-light) 100%) !important;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0 !important;
+  padding: 20px 24px !important;
+}
+
+:deep(.el-dialog__title) {
+  color: #fff !important;
+  font-weight: 600;
+  font-size: 18px;
+}
+
+:deep(.el-dialog__headerbtn .el-dialog__close) {
+  color: #fff !important;
+  font-size: 20px;
+}
+
+:deep(.el-dialog__headerbtn:hover .el-dialog__close) {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+:deep(.el-dialog__body) {
+  padding: 24px !important;
+}
+
+:deep(.el-dialog__footer) {
+  padding: 16px 24px !important;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(245, 245, 245, 0.3);
+}
+
+/* 表单项 */
+:deep(.el-form-item__label) {
+  font-weight: 500;
+  color: var(--netease-gray-6);
+}
+
+/* 输入框 */
+:deep(.el-input__wrapper) {
+  border-radius: var(--radius-md) !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1) inset !important;
+  transition: all 0.2s ease;
+}
+
+:deep(.el-input__wrapper:hover) {
+  box-shadow: 0 0 0 1px var(--netease-red) inset !important;
+}
+
+:deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px var(--netease-red) inset !important;
+}
+
+/* 按钮 */
+:deep(.el-button--primary) {
+  background: linear-gradient(135deg, var(--netease-red) 0%, var(--netease-red-light) 100%) !important;
+  border: none !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: 0 2px 8px rgba(194, 12, 12, 0.3) !important;
+}
+
+:deep(.el-button--primary:hover) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(194, 12, 12, 0.4) !important;
+}
+
+:deep(.el-button--default) {
+  border-radius: var(--radius-md) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+:deep(.el-button--default:hover) {
+  border-color: var(--netease-red) !important;
+  color: var(--netease-red) !important;
+}
+</style>

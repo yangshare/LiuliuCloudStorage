@@ -20,6 +20,7 @@ const validChannels = [
   'notification:show', 'app:getVersion', 'app:set-login-item-settings', 'app:get-login-item-settings', 'app:open-logs-directory',
   'activity:log', 'activity:get-user-logs', 'activity:get-all-logs', 'activity:get-dau', 'activity:get-user-stats',
   'downloadConfig:selectDirectory', 'downloadConfig:get', 'downloadConfig:update', 'downloadConfig:openDirectory', 'downloadConfig:openFileDirectory', 'downloadConfig:reset', 'downloadConfig:createDirectory',
+  'cache:get-info', 'cache:clear',
   'update:check', 'update:install-now', 'update:install-on-quit',
   'update:available', 'update:not-available', 'update:download-progress', 'update:downloaded', 'update:error'
 ]
@@ -191,6 +192,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     openFileDirectory: (filePath: string) => ipcRenderer.invoke('downloadConfig:openFileDirectory', filePath),
     reset: () => ipcRenderer.invoke('downloadConfig:reset'),
     createDirectory: (dirPath: string) => ipcRenderer.invoke('downloadConfig:createDirectory', dirPath)
+  },
+
+  cache: {
+    getInfo: () => ipcRenderer.invoke('cache:get-info'),
+    clear: () => ipcRenderer.invoke('cache:clear')
   },
 
   updateAPI: {

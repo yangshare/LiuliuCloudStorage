@@ -9,6 +9,7 @@ import { registerAppHandlers } from './handlers/app'
 import { registerActivityHandlers } from './handlers/activity'
 import { registerDownloadConfigHandlers } from './handlers/downloadConfig'
 import { registerUpdateHandlers } from './handlers/update'
+import { registerCacheHandlers } from './handlers/cache'
 
 export function registerAllHandlers(): void {
   registerAuthHandlers()
@@ -22,4 +23,5 @@ export function registerAllHandlers(): void {
   registerActivityHandlers()
   registerDownloadConfigHandlers()
   registerUpdateHandlers()
+  registerCacheHandlers()
 }

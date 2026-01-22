@@ -62,9 +62,12 @@ async function handleCancel(taskId: string | number) {
 
 <style scoped>
 .transfer-list {
-  background: white;
-  border-top: 1px solid #e0e0e0;
-  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(194, 12, 12, 0.1);
+  box-shadow: 0 -4px 16px rgba(194, 12, 12, 0.15);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   transition: all 0.3s ease;
 }
 
@@ -76,27 +79,56 @@ async function handleCancel(taskId: string | number) {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
+  padding: 14px 20px;
   cursor: pointer;
   user-select: none;
-  background: #fafafa;
+  background: linear-gradient(135deg, rgba(194, 12, 12, 0.05) 0%, rgba(236, 65, 65, 0.05) 100%);
   font-weight: 500;
-  color: #333;
+  color: var(--netease-gray-7);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  transition: all 0.2s ease;
 }
 
 .list-header:hover {
-  background: #f5f5f5;
+  background: linear-gradient(135deg, rgba(194, 12, 12, 0.08) 0%, rgba(236, 65, 65, 0.08) 100%);
+}
+
+.list-header span {
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .list-content {
   max-height: 300px;
   overflow-y: auto;
+  padding: 8px;
+}
+
+/* 滚动条样式 */
+.list-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.list-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.list-content::-webkit-scrollbar-thumb {
+  background: rgba(194, 12, 12, 0.2);
+  border-radius: 3px;
+}
+
+.list-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(194, 12, 12, 0.4);
 }
 
 .empty-state {
-  padding: 24px;
+  padding: 32px 24px;
   text-align: center;
-  color: #999;
+  color: var(--netease-gray-5);
   font-size: 14px;
+  background: rgba(245, 245, 245, 0.3);
+  border-radius: var(--radius-md);
+  margin: 8px;
 }
 </style>

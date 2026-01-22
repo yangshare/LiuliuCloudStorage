@@ -1,0 +1,501 @@
+/* ========================================
+   网易云音乐风格主题
+   Liuliu Cloud Storage
+   ======================================== */
+
+:root {
+  /* ===== 网易云红 - 核心色彩 ===== */
+  --netease-red: #C20C0C;           /* 主红色 */
+  --netease-red-light: #EC4141;     /* 亮红（按钮、链接） */
+  --netease-red-dark: #8B0000;      /* 深红（悬停、按下） */
+  --netease-red-pale: #FFEBEB;      /* 浅红背景 */
+
+  /* ===== 中性色 ===== */
+  --netease-gray-1: #FFFFFF;        /* 纯白 */
+  --netease-gray-2: #F5F5F5;        /* 浅灰背景 */
+  --netease-gray-3: #E8E8E8;        /* 边框灰 */
+  --netease-gray-4: #CCCCCC;        /* 禁用灰 */
+  --netease-gray-5: #999999;        /* 次要文字 */
+  --netease-gray-6: #666666;        /* 主要文字 */
+  --netease-gray-7: #333333;        /* 标题文字 */
+  --netease-gray-8: #242424;        /* 深色背景 */
+
+  /* ===== 功能色 ===== */
+  --netease-green: #2ECC71;         /* 成功 */
+  --netease-orange: #F39C12;        /* 警告 */
+  --netease-blue: #3498DB;          /* 信息 */
+
+  /* ===== 圆角规范 ===== */
+  --radius-sm: 6px;                 /* 小元素：标签、徽章 */
+  --radius-md: 8px;                 /* 中等元素：按钮、输入框 */
+  --radius-lg: 12px;                /* 大元素：卡片、面板 */
+  --radius-xl: 16px;                /* 超大元素：模态框、抽屉 */
+  --radius-2xl: 20px;               /* 特大元素 */
+
+  /* ===== 阴影规范 ===== */
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --shadow-xl: 0 12px 32px rgba(0, 0, 0, 0.15);
+
+  /* ===== 背景 ===== */
+  --bg-glass: rgba(255, 255, 255, 0.75);
+  --bg-glass-dark: rgba(36, 36, 36, 0.85);
+}
+
+/* ========================================
+   Element Plus 主题变量覆盖
+   ======================================== */
+:root {
+  /* 主要颜色 */
+  --el-color-primary: var(--netease-red);
+  --el-color-primary-light-3: var(--netease-red-light);
+  --el-color-primary-light-5: #E57373;
+  --el-color-primary-light-7: #EF9A9A;
+  --el-color-primary-light-8: #FFCDD2;
+  --el-color-primary-light-9: var(--netease-red-pale);
+  --el-color-primary-dark-2: var(--netease-red-dark);
+
+  /* 文字颜色 */
+  --el-text-color-primary: var(--netease-gray-7);
+  --el-text-color-regular: var(--netease-gray-6);
+  --el-text-color-secondary: var(--netease-gray-5);
+  --el-text-color-placeholder: var(--netease-gray-4);
+
+  /* 边框颜色 */
+  --el-border-color: var(--netease-gray-3);
+  --el-border-color-light: #F0F0F0;
+  --el-border-color-lighter: #F5F5F5;
+  --el-border-color-extra-light: #FAFAFA;
+  --el-border-color-dark: #D4D4D4;
+  --el-border-darker: #C0C0C0;
+
+  /* 填充颜色 */
+  --el-fill-color: var(--netease-gray-2);
+  --el-fill-color-light: #FAFAFA;
+  --el-fill-color-lighter: #FAFAFA;
+  --el-fill-color-extra-light: #FAFAFA;
+  --el-fill-color-dark: #E8E8E8;
+  --el-fill-color-darker: #E0E0E0;
+  --el-fill-color-blank: #FFFFFF;
+
+  /* 背景颜色 */
+  --el-bg-color: #FFFFFF;
+  --el-bg-color-page: var(--netease-gray-2);
+
+  /* 圆角 */
+  --el-border-radius-base: var(--radius-md);
+  --el-border-radius-small: var(--radius-sm);
+  --el-border-radius-round: 100px;
+  --el-border-radius-circle: 100%;
+
+  /* 字体 */
+  --el-font-size-extra-large: 20px;
+  --el-font-size-large: 18px;
+  --el-font-size-medium: 16px;
+  --el-font-size-base: 14px;
+  --el-font-size-small: 13px;
+  --el-font-size-extra-small: 12px;
+
+  /* 阴影 */
+  --el-box-shadow-light: var(--shadow-md);
+  --el-box-shadow: var(--shadow-lg);
+  --el-box-shadow-dark: var(--shadow-xl);
+}
+
+/* ========================================
+   毛玻璃效果基类
+   ======================================== */
+.glass {
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.glass-dark {
+  background: var(--bg-glass-dark);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+/* ========================================
+   网易云红渐变
+   ======================================== */
+.netease-gradient {
+  background: linear-gradient(135deg, var(--netease-red) 0%, var(--netease-red-light) 100%);
+}
+
+.netease-gradient-subtle {
+  background: linear-gradient(180deg, rgba(194, 12, 12, 0.05) 0%, transparent 100%);
+}
+
+.netease-text-gradient {
+  background: linear-gradient(135deg, var(--netease-red) 0%, var(--netease-red-light) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ========================================
+   圆角辅助类
+   ======================================== */
+.rounded-sm { border-radius: var(--radius-sm); }
+.rounded-md { border-radius: var(--radius-md); }
+.rounded-lg { border-radius: var(--radius-lg); }
+.rounded-xl { border-radius: var(--radius-xl); }
+.rounded-2xl { border-radius: var(--radius-2xl); }
+.rounded-full { border-radius: 9999px; }
+
+/* ========================================
+   网易云风格卡片
+   ======================================== */
+.netease-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  transition: all 0.3s ease;
+}
+
+.netease-card:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
+/* ========================================
+   网易云风格按钮
+   ======================================== */
+/* 主按钮 - 网易红渐变 */
+.netease-btn-primary {
+  background: linear-gradient(135deg, var(--netease-red) 0%, var(--netease-red-light) 100%);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(194, 12, 12, 0.3);
+}
+
+.netease-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(194, 12, 12, 0.4);
+}
+
+.netease-btn-primary:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(194, 12, 12, 0.3);
+}
+
+/* 次要按钮 - 毛玻璃效果 */
+.netease-btn-secondary {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--netease-gray-6);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-md);
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.netease-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: var(--netease-red);
+  color: var(--netease-red);
+}
+
+/* ========================================
+   网易云风格输入框
+   ======================================== */
+.netease-input {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-md);
+  padding: 10px 16px;
+  font-size: 14px;
+  color: var(--netease-gray-6);
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.netease-input:focus {
+  border-color: var(--netease-red);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 3px rgba(194, 12, 12, 0.1);
+}
+
+.netease-input::placeholder {
+  color: var(--netease-gray-4);
+}
+
+/* ========================================
+   网易云风格导航栏
+   ======================================== */
+.netease-nav {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 16px 24px;
+  position: relative;
+}
+
+.netease-nav::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--netease-red) 0%, var(--netease-red-light) 100%);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+/* ========================================
+   滚动条美化
+   ======================================== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(194, 12, 12, 0.3);
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(194, 12, 12, 0.5);
+}
+
+/* ========================================
+   Element Plus 组件覆盖
+   ======================================== */
+
+/* 卡片组件 */
+.el-card {
+  border-radius: var(--radius-lg) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+.el-card__header {
+  background: rgba(245, 245, 245, 0.5) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important;
+}
+
+/* 按钮组件 */
+.el-button--primary {
+  background: linear-gradient(135deg, var(--netease-red) 0%, var(--netease-red-light) 100%) !important;
+  border: none !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: 0 2px 8px rgba(194, 12, 12, 0.3) !important;
+}
+
+.el-button--primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(194, 12, 12, 0.4) !important;
+}
+
+/* 输入框组件 */
+.el-input__wrapper {
+  border-radius: var(--radius-md) !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1) inset !important;
+}
+
+.el-input__wrapper:hover {
+  box-shadow: 0 0 0 1px var(--netease-red) inset !important;
+}
+
+.el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 1px var(--netease-red) inset !important;
+}
+
+/* 对话框组件 */
+.el-dialog {
+  border-radius: var(--radius-xl) !important;
+  box-shadow: var(--shadow-xl) !important;
+}
+
+.el-dialog__header {
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0 !important;
+  padding: 20px 24px !important;
+  background: rgba(245, 245, 245, 0.5) !important;
+}
+
+/* 抽屉组件 */
+.el-drawer {
+  border-radius: var(--radius-xl) 0 0 var(--radius-xl) !important;
+}
+
+/* 下拉菜单 */
+.el-dropdown-menu {
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+/* 消息提示 */
+.el-message {
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-lg) !important;
+  padding: 12px 20px !important;
+  border: none !important;
+}
+
+.el-message__content {
+  color: #fff !important;
+  font-weight: 500;
+}
+
+.el-message__icon {
+  color: #fff !important;
+}
+
+.el-message--success {
+  background: rgba(46, 204, 113, 0.95) !important;
+  backdrop-filter: blur(20px);
+  border-color: transparent !important;
+}
+
+.el-message--success .el-message__icon {
+  color: #fff !important;
+}
+
+.el-message--error {
+  background: rgba(194, 12, 12, 0.95) !important;
+  backdrop-filter: blur(20px);
+  border-color: transparent !important;
+}
+
+.el-message--error .el-message__icon {
+  color: #fff !important;
+}
+
+.el-message--info {
+  background: rgba(52, 152, 219, 0.95) !important;
+  backdrop-filter: blur(20px);
+  border-color: transparent !important;
+}
+
+.el-message--info .el-message__icon {
+  color: #fff !important;
+}
+
+.el-message--warning {
+  background: rgba(250, 140, 22, 0.95) !important;
+  backdrop-filter: blur(20px);
+  border-color: transparent !important;
+}
+
+.el-message--warning .el-message__icon {
+  color: #fff !important;
+}
+
+/* 关闭按钮样式 */
+.el-message__closeBtn {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.el-message__closeBtn:hover {
+  color: #fff !important;
+}
+
+/* ========================================
+   动画效果
+   ======================================== */
+@keyframes neteaseFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.netease-fade-in {
+  animation: neteaseFadeIn 0.3s ease-out;
+}
+
+/* ========================================
+   响应式调整
+   ======================================== */
+@media (max-width: 768px) {
+  .netease-nav {
+    padding: 12px 16px;
+  }
+
+  .netease-btn-primary,
+  .netease-btn-secondary {
+    padding: 8px 16px;
+    font-size: 13px;
+  }
+}
+
+/* ========================================
+   暗色模式支持（可选）
+   ======================================== */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-glass: rgba(36, 36, 36, 0.85);
+  }
+
+  .glass {
+    background: rgba(36, 36, 36, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .netease-card {
+    background: rgba(36, 36, 36, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .netease-input {
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .netease-btn-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+  }
+
+  .el-card {
+    background: rgba(36, 36, 36, 0.85) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  }
+
+  .el-input__wrapper {
+    background: rgba(255, 255, 255, 0.05) !important;
+  }
+
+  .el-input__inner {
+    color: #fff !important;
+  }
+}

@@ -106,6 +106,43 @@
             </el-text>
           </div>
         </el-form-item>
+
+        <!-- 缓存管理 -->
+        <el-divider />
+        <el-form-item label="缓存管理">
+          <div class="cache-management">
+            <div class="cache-info">
+              <div class="cache-stat">
+                <span class="label">当前缓存：</span>
+                <span class="value">{{ cacheSize }}</span>
+              </div>
+              <div class="cache-stat">
+                <span class="label">缓存目录：</span>
+                <span class="value cache-path">{{ cacheDirectory }}</span>
+              </div>
+              <div class="cache-stat" v-if="lastCleanupTime">
+                <span class="label">上次清理：</span>
+                <span class="value">{{ lastCleanupTime }}</span>
+              </div>
+            </div>
+            <div class="cache-actions">
+              <el-button
+                type="danger"
+                :loading="cleaningCache"
+                @click="handleClearCache"
+              >
+                清理缓存
+              </el-button>
+              <el-button @click="handleRefreshCacheInfo">
+                刷新信息
+              </el-button>
+            </div>
+          </div>
+        </el-form-item>
+
+        <el-text type="info" size="small">
+          清理缓存不会影响登录状态和应用设置
+        </el-text>
       </div>
     </el-card>
   </div>
@@ -127,6 +164,12 @@ const platformName = ref('')
 const loading = ref(false)
 const downloadPath = ref('')
 const autoCreateDateFolder = ref(false)
+
+// 缓存管理状态
+const cacheSize = ref('计算中...')
+const cacheDirectory = ref('加载中...')
+const lastCleanupTime = ref('')
+const cleaningCache = ref(false)
 
 /**
  * 获取平台名称
@@ -320,12 +363,106 @@ async function handleOpenLogsDirectory(): Promise<void> {
   }
 }
 
+/**
+ * 获取缓存信息
+ */
+async function getCacheInfo(): Promise<void> {
+  try {
+    const result = await window.electronAPI?.cache.getInfo()
+    if (result?.success) {
+      cacheSize.value = result.size
+      cacheDirectory.value = result.directory
+      lastCleanupTime.value = result.lastCleanup || '从未清理'
+    } else {
+      cacheSize.value = '获取失败'
+      cacheDirectory.value = '获取失败'
+    }
+  } catch (error: any) {
+    console.error('获取缓存信息失败:', error)
+    cacheSize.value = '获取失败'
+    cacheDirectory.value = '获取失败'
+  }
+}
+
+/**
+ * 刷新缓存信息
+ */
+async function handleRefreshCacheInfo(): Promise<void> {
+  cacheSize.value = '计算中...'
+  await getCacheInfo()
+  ElMessage.success('缓存信息已刷新')
+}
+
+/**
+ * 清理缓存
+ */
+async function handleClearCache(): Promise<void> {
+  try {
+    // 先获取最新的缓存信息用于确认对话框
+    const info = await window.electronAPI?.cache.getInfo()
+    if (!info?.success) {
+      ElMessage.error('无法获取缓存信息')
+      return
+    }
+
+    // 显示详细确认对话框
+    await ElMessageBox.confirm(
+      `即将清理以下内容：
+
+• 临时文件缓存
+• 下载缓存
+• 应用缓存数据
+
+当前缓存大小：${info.size}
+
+✅ 不会删除：
+• 登录状态
+• 应用设置
+• 下载的文件
+
+缓存目录：
+${info.directory}
+
+确定要清理缓存吗？`,
+      '⚠️ 确认清理缓存',
+      {
+        confirmButtonText: '确认清理',
+        cancelButtonText: '取消',
+        type: 'warning',
+        dangerouslyUseHTMLString: false,
+      }
+    )
+
+    // 用户确认后开始清理
+    cleaningCache.value = true
+    const result = await window.electronAPI?.cache.clear()
+
+    if (result?.success) {
+      ElMessage.success({
+        message: `缓存清理完成！已清理 ${result.clearedSize}，删除 ${result.filesDeleted} 个文件`,
+        duration: 5000,
+      })
+      // 刷新缓存信息
+      await getCacheInfo()
+    } else {
+      ElMessage.error('清理缓存失败: ' + (result?.error || '未知错误'))
+    }
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error('清理缓存失败: ' + error.message)
+    }
+  } finally {
+    cleaningCache.value = false
+  }
+}
+
 // 组件挂载时初始化
 onMounted(async () => {
   platformName.value = getPlatformName()
   await getAutoStartStatus()
   await getAppVersion()
   await getDownloadConfig()
+  await getCacheInfo()
 })
 </script>
 
@@ -334,6 +471,24 @@ onMounted(async () => {
   max-width: 800px;
   margin: 0 auto;
   padding: 20px;
+  background: linear-gradient(135deg, #F5F5F5 0%, #E8E8E8 100%);
+  min-height: 100vh;
+}
+
+/* 卡片 - 网易云风格 */
+:deep(.el-card) {
+  border-radius: var(--radius-lg) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  box-shadow: var(--shadow-md) !important;
+  background: rgba(255, 255, 255, 0.85) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+:deep(.el-card__header) {
+  background: rgba(245, 245, 245, 0.5) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important;
 }
 
 .card-header {
@@ -342,10 +497,43 @@ onMounted(async () => {
   align-items: center;
 }
 
+.card-header span {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--netease-gray-7);
+}
+
 .settings-content {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
+  padding: 8px 0;
+}
+
+/* 表单项样式优化 */
+:deep(.el-form-item) {
+  margin-bottom: 0;
+}
+
+:deep(.el-form-item__label) {
+  font-weight: 500;
+  color: var(--netease-gray-6);
+}
+
+/* 开关样式 */
+:deep(.el-switch) {
+  --el-switch-on-color: var(--netease-red);
+}
+
+:deep(.el-switch.is-checked .el-switch__core) {
+  background-color: var(--netease-red) !important;
+  border-color: var(--netease-red) !important;
+}
+
+/* 分割线 */
+:deep(.el-divider) {
+  border-color: rgba(0, 0, 0, 0.06);
+  margin: 16px 0;
 }
 
 .directory-group,
@@ -358,6 +546,127 @@ onMounted(async () => {
 .button-row {
   display: flex;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+/* 按钮样式 - 网易云风格 */
+:deep(.el-button--primary) {
+  background: linear-gradient(135deg, var(--netease-red) 0%, var(--netease-red-light) 100%) !important;
+  border: none !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: 0 2px 8px rgba(194, 12, 12, 0.3) !important;
+}
+
+:deep(.el-button--primary:hover) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(194, 12, 12, 0.4) !important;
+}
+
+:deep(.el-button--danger) {
+  background: linear-gradient(135deg, #F56C6C 0%, #F78989 100%) !important;
+  border: none !important;
+  border-radius: var(--radius-md) !important;
+}
+
+:deep(.el-button--default),
+:deep(.el-button.is-plain) {
+  border-radius: var(--radius-md) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  background: rgba(255, 255, 255, 0.6) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+:deep(.el-button--default:hover),
+:deep(.el-button.is-plain:hover) {
+  background: rgba(255, 255, 255, 0.8) !important;
+  border-color: var(--netease-red) !important;
+  color: var(--netease-red) !important;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm) !important;
+}
+
+/* 输入框样式 */
+:deep(.el-input__wrapper) {
+  border-radius: var(--radius-md) !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1) inset !important;
+}
+
+:deep(.el-input__wrapper:hover) {
+  box-shadow: 0 0 0 1px var(--netease-red) inset !important;
+}
+
+:deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px var(--netease-red) inset !important;
+}
+
+/* 缓存管理样式 */
+.cache-management {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.cache-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: var(--radius-md);
+}
+
+.cache-stat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.cache-stat .label {
+  color: var(--netease-gray-5);
+  min-width: 80px;
+}
+
+.cache-stat .value {
+  color: var(--netease-gray-7);
+  font-weight: 500;
+}
+
+.cache-stat .cache-path {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 12px;
+  color: var(--netease-red);
+  word-break: break-all;
+}
+
+.cache-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* 文本样式 */
+:deep(.el-text--info) {
+  color: var(--netease-gray-5) !important;
+}
+
+/* 复选框样式 */
+:deep(.el-checkbox) {
+  font-weight: 500;
+}
+
+:deep(.el-checkbox__input.is-checked .el-checkbox__inner) {
+  background-color: var(--netease-red) !important;
+  border-color: var(--netease-red) !important;
+}
+
+:deep(.el-checkbox__inner:hover) {
+  border-color: var(--netease-red) !important;
 }
 </style>

@@ -1,5 +1,5 @@
 import { app, session } from 'electron'
-import { join } from 'path'
+import { join, normalize, resolve } from 'path'
 import { existsSync } from 'fs'
 import { readdir, stat, rm } from 'fs/promises'
 import { loggerService } from './LoggerService'
@@ -10,8 +10,6 @@ import { loggerService } from './LoggerService'
 export interface CacheCleanupOptions {
   /** 缓存大小上限（字节），默认 500MB */
   maxSize?: number
-  /** 是否在启动时自动清理，默认 true */
-  autoCleanupOnStart?: boolean
 }
 
 /**
@@ -22,9 +20,11 @@ class CacheService {
   private static instance: CacheService | null = null
   private cacheDir: string
   private maxSize: number
+  private isInitialized: boolean = false
 
   private constructor() {
-    this.cacheDir = app.getPath('cache')
+    // 不在构造函数中初始化路径，等待 app.whenReady()
+    this.cacheDir = ''
     this.maxSize = 500 * 1024 * 1024 // 默认 500MB
   }
 
@@ -36,26 +36,72 @@ class CacheService {
   }
 
   /**
+   * 验证缓存路径是否安全
+   * 防止误删其他目录
+   */
+  private validateCachePath(cachePath: string): boolean {
+    try {
+      const normalizedPath = normalize(resolve(cachePath)).toLowerCase()
+
+      // 获取系统关键路径
+      const appDataPath = normalize(app.getPath('appData')).toLowerCase()
+      const userDataPath = normalize(app.getPath('userData')).toLowerCase()
+      const appName = app.getName().toLowerCase()
+
+      // 检查1: 必须在 AppData 目录下
+      if (!normalizedPath.startsWith(appDataPath)) {
+        loggerService.error('CacheService', `路径不在 AppData 目录下，拒绝操作: ${cachePath}`)
+        return false
+      }
+
+      // 检查2: 不能是 AppData 或 userData 的根目录
+      if (normalizedPath === appDataPath || normalizedPath === appDataPath + '\\' ||
+          normalizedPath === userDataPath || normalizedPath === userDataPath + '\\') {
+        loggerService.error('CacheService', `拒绝操作根目录: ${cachePath}`)
+        return false
+      }
+
+      // 检查3: 路径必须包含应用名称或 Cache 目录
+      const hasAppName = normalizedPath.includes(appName)
+      const hasCacheDir = normalizedPath.includes('cache')
+
+      if (!hasAppName && !hasCacheDir) {
+        loggerService.error('CacheService', `路径不包含应用名称或 Cache 目录，拒绝操作: ${cachePath}`)
+        return false
+      }
+
+      loggerService.info('CacheService', `路径验证通过: ${cachePath}`)
+      return true
+
+    } catch (error) {
+      loggerService.error('CacheService', `路径验证失败: ${error}`)
+      return false
+    }
+  }
+
+  /**
    * 初始化缓存服务
    */
   initialize(options: CacheCleanupOptions = {}): void {
+    if (this.isInitialized) {
+      loggerService.warn('CacheService', '缓存服务已初始化，跳过')
+      return
+    }
+
+    // 获取缓存路径
+    this.cacheDir = app.getPath('cache')
+
+    // 不在初始化时验证路径，只记录路径信息
+    // 路径验证会在手动清理时进行
+    loggerService.info('CacheService', `缓存目录: ${this.cacheDir}`)
+
+    this.isInitialized = true
     if (options.maxSize !== undefined) {
       this.maxSize = options.maxSize
     }
 
-    const autoCleanup = options.autoCleanupOnStart !== false
-
-    loggerService.info('CacheService', `缓存目录: ${this.cacheDir}`)
     loggerService.info('CacheService', `缓存大小上限: ${this.formatBytes(this.maxSize)}`)
-
-    if (autoCleanup) {
-      // 延迟执行，确保 session 已准备好
-      setTimeout(() => {
-        this.cleanupIfNeeded().catch(error => {
-          loggerService.error('CacheService', '自动清理缓存失败', error as Error)
-        })
-      }, 3000)
-    }
+    loggerService.info('CacheService', '缓存服务初始化完成')
   }
 
   /**
@@ -102,7 +148,7 @@ class CacheService {
             }
           } catch (error) {
             // 单个文件错误不影响整体计算
-            loggerService.debug('CacheService', `跳过文件: ${filePath}`)
+            loggerService.warn('CacheService', `跳过文件: ${filePath}`)
           }
         }
 
@@ -159,47 +205,70 @@ class CacheService {
 
   /**
    * 清理缓存目录文件
+   * 只删除目录内的文件，不删除目录本身
    */
   private async clearCacheFiles(): Promise<void> {
-    if (!existsSync(this.cacheDir)) {
+    // 再次验证路径安全性
+    if (!this.validateCachePath(this.cacheDir)) {
+      loggerService.error('CacheService', '路径验证失败，拒绝清理操作')
       return
     }
 
-    try {
-      await rm(this.cacheDir, { recursive: true, force: true })
-      loggerService.info('CacheService', '缓存目录文件已清理')
-    } catch (error) {
-      loggerService.error('CacheService', '清理缓存目录失败', error as Error)
+    if (!existsSync(this.cacheDir)) {
+      loggerService.info('CacheService', '缓存目录不存在，无需清理')
+      return
     }
-  }
 
-  /**
-   * 检查并在需要时清理缓存
-   */
-  async cleanupIfNeeded(): Promise<void> {
-    const cacheSize = await this.getCacheSize()
-    loggerService.info('CacheService', `当前缓存大小: ${this.formatBytes(cacheSize)}`)
+    // 额外安全检查：确保目录包含典型的 Electron 缓存子目录
+    try {
+      const files = await readdir(this.cacheDir)
+      const hasCacheSubdir = files.some(f =>
+        f.toLowerCase().includes('cache') ||
+        f.toLowerCase() === 'indexdb' ||
+        f.toLowerCase() === 'localstorage' ||
+        f === 'GPUCache'
+      )
 
-    if (cacheSize > this.maxSize) {
-      loggerService.info('CacheService', `缓存超过上限 (${this.formatBytes(this.maxSize)})，开始清理...`)
+      if (!hasCacheSubdir && files.length > 0) {
+        loggerService.warn('CacheService', `警告: 缓存目录不包含典型的缓存子目录，可能不是正确的缓存目录`)
+        loggerService.warn('CacheService', `目录内容: ${files.join(', ')}`)
+      }
+    } catch (error) {
+      loggerService.warn('CacheService', '无法读取缓存目录内容')
+    }
 
-      // 先清理 Electron 缓存
-      await this.clearElectronCache()
+    try {
+      loggerService.info('CacheService', `开始清理缓存目录内容: ${this.cacheDir}`)
 
-      // 等待文件系统更新
-      await new Promise(resolve => setTimeout(resolve, 500))
+      // 读取目录内容
+      const files = await readdir(this.cacheDir)
 
-      // 如果仍然过大，删除整个缓存目录
-      const newSize = await this.getCacheSize()
-      if (newSize > this.maxSize) {
-        loggerService.info('CacheService', '删除缓存目录...')
-        await this.clearCacheFiles()
+      if (files.length === 0) {
+        loggerService.info('CacheService', '缓存目录为空，无需清理')
+        return
       }
 
-      const finalSize = await this.getCacheSize()
-      loggerService.info('CacheService', `清理完成，当前缓存大小: ${this.formatBytes(finalSize)}`)
-    } else {
-      loggerService.info('CacheService', '缓存大小正常，无需清理')
+      loggerService.info('CacheService', `找到 ${files.length} 个文件/目录需要清理`)
+
+      // 逐个删除目录内的文件和子目录，但保留目录本身
+      let successCount = 0
+      let failCount = 0
+
+      for (const file of files) {
+        const filePath = join(this.cacheDir, file)
+        try {
+          await rm(filePath, { recursive: true, force: true })
+          successCount++
+          loggerService.info('CacheService', `已删除: ${file}`)
+        } catch (error) {
+          failCount++
+          loggerService.error('CacheService', `删除失败: ${file}`, error as Error)
+        }
+      }
+
+      loggerService.info('CacheService', `缓存清理完成 - 成功: ${successCount}, 失败: ${failCount}`)
+    } catch (error) {
+      loggerService.error('CacheService', '清理缓存目录失败', error as Error)
     }
   }
 
@@ -207,6 +276,17 @@ class CacheService {
    * 手动清理缓存
    */
   async forceCleanup(): Promise<void> {
+    if (!this.isInitialized) {
+      loggerService.error('CacheService', '服务未初始化，无法执行清理')
+      return
+    }
+
+    // 验证路径
+    if (!this.validateCachePath(this.cacheDir)) {
+      loggerService.error('CacheService', '路径验证失败，取消清理操作')
+      return
+    }
+
     loggerService.info('CacheService', '手动清理缓存...')
     await this.clearElectronCache()
     await this.clearCacheFiles()
@@ -230,11 +310,22 @@ class CacheService {
    * 获取缓存大小（供外部查询）
    */
   async getCacheSizeInfo(): Promise<{ size: number; formatted: string }> {
+    if (!this.isInitialized) {
+      return { size: 0, formatted: '0 B' }
+    }
+
     const size = await this.getCacheSize()
     return {
       size,
       formatted: this.formatBytes(size)
     }
+  }
+
+  /**
+   * 获取缓存目录路径（供调试使用）
+   */
+  getCacheDirectory(): string {
+    return this.cacheDir
   }
 }
 

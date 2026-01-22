@@ -141,85 +141,153 @@ function getStatus(status: string) {
 
 <style scoped>
 .transfer-item {
-  padding: 12px;
-  border-bottom: 1px solid #f0f0f0;
+  padding: 14px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: var(--radius-md);
+  margin-bottom: 8px;
+  transition: all 0.2s ease;
+}
+
+.transfer-item:hover {
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: var(--shadow-sm);
 }
 
 .file-info {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .file-name {
   font-weight: 500;
-  color: #333;
+  color: var(--netease-gray-7);
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 14px;
 }
 
 .file-size {
-  color: #666;
+  color: var(--netease-gray-5);
   font-size: 12px;
   margin-left: 12px;
+}
+
+/* 进度条样式 - 网易云红 */
+:deep(.el-progress) {
+  margin: 10px 0;
+}
+
+:deep(.el-progress__text) {
+  font-size: 13px !important;
+  font-weight: 500;
+}
+
+:deep(.el-progress.is-success .el-progress__text) {
+  color: var(--netease-green) !important;
+}
+
+:deep(.el-progress.is-error .el-progress__text) {
+  color: var(--netease-red) !important;
+}
+
+:deep(.el-progress-bar__outer) {
+  background-color: rgba(0, 0, 0, 0.06) !important;
+  border-radius: 4px !important;
+}
+
+:deep(.el-progress-bar__inner) {
+  background: linear-gradient(90deg, var(--netease-red) 0%, var(--netease-red-light) 100%) !important;
+  border-radius: 4px !important;
+}
+
+:deep(.el-progress.is-success .el-progress-bar__inner) {
+  background: linear-gradient(90deg, var(--netease-green) 0%, #58D68D 100%) !important;
+}
+
+:deep(.el-progress.is-error .el-progress-bar__inner) {
+  background: linear-gradient(90deg, var(--netease-red) 0%, #F78989 100%) !important;
 }
 
 .transfer-stats {
   display: flex;
   justify-content: space-between;
-  margin-top: 8px;
+  margin-top: 10px;
   font-size: 12px;
-  color: #999;
+  color: var(--netease-gray-5);
 }
 
 .speed {
-  color: #18a058;
+  color: var(--netease-green);
+  font-weight: 500;
 }
 
 .time {
-  color: #666;
+  color: var(--netease-gray-5);
 }
 
 .error-message {
-  margin-top: 8px;
-  padding: 8px;
-  background: #fff2f0;
-  border: 1px solid #ffccc7;
-  border-radius: 4px;
-  color: #ff4d4f;
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: rgba(194, 12, 12, 0.08);
+  border: 1px solid rgba(194, 12, 12, 0.2);
+  border-radius: var(--radius-sm);
+  color: var(--netease-red);
   font-size: 12px;
 }
 
 .error-section {
-  margin-top: 8px;
+  margin-top: 10px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
 .action-section {
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
 .status-message {
-  margin-top: 8px;
-  padding: 6px 12px;
-  border-radius: 4px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   text-align: center;
+  font-weight: 500;
 }
 
 .status-message.cancelled {
-  background: #fff7e6;
-  color: #fa8c16;
-  border: 1px solid #ffd591;
+  background: rgba(250, 140, 22, 0.1);
+  color: #FA8C16;
+  border: 1px solid rgba(250, 140, 22, 0.2);
 }
 
 .status-message.completed {
-  background: #f6ffed;
-  color: #52c41a;
-  border: 1px solid #b7eb8f;
+  background: rgba(46, 204, 113, 0.1);
+  color: var(--netease-green);
+  border: 1px solid rgba(46, 204, 113, 0.2);
+}
+
+/* 按钮样式 */
+:deep(.el-button--primary) {
+  background: linear-gradient(135deg, var(--netease-red) 0%, var(--netease-red-light) 100%) !important;
+  border: none !important;
+  border-radius: var(--radius-sm) !important;
+}
+
+:deep(.el-button--danger) {
+  background: linear-gradient(135deg, #F56C6C 0%, #F78989 100%) !important;
+  border: none !important;
+  border-radius: var(--radius-sm) !important;
+}
+
+:deep(.el-button--small) {
+  padding: 6px 12px;
+  font-size: 12px;
 }
 </style>

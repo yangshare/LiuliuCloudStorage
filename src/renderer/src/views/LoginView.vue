@@ -42,13 +42,14 @@ async function handleLogin() {
         <h1 class="netease-text-gradient">溜溜网盘</h1>
         <p class="login-subtitle">登录您的账户</p>
       </div>
-      <el-form class="login-form">
+      <el-form class="login-form" @submit.prevent="handleLogin">
         <el-form-item>
           <el-input
             v-model="formData.username"
             placeholder="请输入用户名"
             size="large"
             :prefix-icon="User"
+            @keyup.enter="handleLogin"
           />
         </el-form-item>
         <el-form-item>
@@ -69,6 +70,7 @@ async function handleLogin() {
             :loading="loading"
             @click="handleLogin"
             class="login-btn"
+            native-type="submit"
           >
             登录
           </el-button>

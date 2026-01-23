@@ -407,12 +407,25 @@ class DownloadQueueManager {
    * 发送队列更新事件
    */
   private async emitQueueUpdated(): Promise<void> {
-    const state = await this.getQueueState()
-    loggerService.info('DownloadQueueManager', `发送队列更新事件: pending=${state.pending.length}, active=${state.active.length}, completed=${state.completed.length}, failed=${state.failed.length}`)
-    const windows = BrowserWindow.getAllWindows()
-    windows.forEach(win => {
-      win.webContents.send('transfer:queue-updated', state)
-    })
+    try {
+      const state = await this.getQueueState()
+      // 确保 state 对象包含所有必需的属性
+      const safeState = {
+        pending: state.pending || [],
+        active: state.active || [],
+        completed: state.completed || [],
+        failed: state.failed || []
+      }
+      loggerService.info('DownloadQueueManager', `发送队列更新事件: pending=${safeState.pending.length}, active=${safeState.active.length}, completed=${safeState.completed.length}, failed=${safeState.failed.length}`)
+      const windows = BrowserWindow.getAllWindows()
+      windows.forEach(win => {
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('transfer:queue-updated', safeState)
+        }
+      })
+    } catch (error) {
+      loggerService.error('DownloadQueueManager', `发送队列更新事件失败: ${error}`)
+    }
   }
 }
 

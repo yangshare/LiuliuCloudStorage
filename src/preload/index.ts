@@ -3,7 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 // 允许的 IPC 通道白名单
 const validChannels = [
   'auth:login', 'auth:logout', 'auth:register', 'auth:check-session', 'auth:complete-onboarding', 'auth:get-current-user', 'auth:get-users', 'auth:get-storage-stats',
-  'file:list', 'file:mkdir', 'file:delete', 'file:batchDelete', 'file:rename',
+  'file:list', 'file:mkdir', 'file:delete', 'file:batchDelete', 'file:rename', 'file:getAllFilesInDirectory',
   'transfer:upload', 'transfer:download', 'transfer:saveAs', 'transfer:cancel', 'transfer:list', 'transfer:progress',
   'transfer:add-to-queue', 'transfer:queue-status', 'transfer:restore-queue',
   'transfer:completed', 'transfer:failed', 'transfer:cancelled',
@@ -61,7 +61,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     mkdir: (path: string) => ipcRenderer.invoke('file:mkdir', path),
     delete: (dir: string, fileName: string) => ipcRenderer.invoke('file:delete', dir, fileName),
     batchDelete: (dir: string, fileNames: string[]) => ipcRenderer.invoke('file:batchDelete', dir, fileNames),
-    rename: (path: string, newName: string) => ipcRenderer.invoke('file:rename', path, newName)
+    rename: (path: string, newName: string) => ipcRenderer.invoke('file:rename', path, newName),
+    getAllFilesInDirectory: (remotePath: string) => ipcRenderer.invoke('file:getAllFilesInDirectory', remotePath)
   },
 
   transfer: {

@@ -20,6 +20,8 @@ async function handleBatchDownload() {
     return
   }
 
+  console.log('[BatchActionToolbar] handleBatchDownload: selectedItems=', selectedItems)
+
   ElMessage.info(`正在准备添加 ${selectedItems.length} 个项目到下载队列...`)
 
   const currentPath = fileStore.currentPath === '/' ? '' : fileStore.currentPath
@@ -33,27 +35,36 @@ async function handleBatchDownload() {
   const directories = selectedItems.filter(f => f.isDir)
   const files = selectedItems.filter(f => !f.isDir)
 
+  console.log('[BatchActionToolbar] directories=', directories, 'files=', files, 'currentPath=', currentPath)
+
   // 直接添加文件路径
   files.forEach(file => {
-    filePaths.push(`${currentPath}/${file.name}`)
+    const filePath = currentPath ? `${currentPath}/${file.name}` : `/${file.name}`
+    filePaths.push(filePath)
   })
 
   // 处理目录：获取所有文件路径
   for (const dir of directories) {
-    const dirRemotePath = `${currentPath}/${dir.name}`
+    const dirRemotePath = currentPath ? `${currentPath}/${dir.name}` : `/${dir.name}`
+    console.log('[BatchActionToolbar] 获取目录文件: dirRemotePath=', dirRemotePath)
     try {
       const result = await window.electronAPI.file.getAllFilesInDirectory(dirRemotePath)
+      console.log('[BatchActionToolbar] 目录文件结果:', result)
       if (result.success && result.data) {
+        console.log('[BatchActionToolbar] 找到文件数:', result.data.length)
         filePaths.push(...result.data)
       } else {
+        console.log('[BatchActionToolbar] 获取目录文件失败:', result.error)
         failedCount++
       }
     } catch (error) {
+      console.error('[BatchActionToolbar] 获取目录文件异常:', error)
       failedCount++
     }
   }
 
   const totalFiles = filePaths.length
+  console.log('[BatchActionToolbar] 总文件数:', totalFiles, 'filePaths=', filePaths)
 
   if (totalFiles === 0) {
     ElMessage.warning('没有可下载的文件')

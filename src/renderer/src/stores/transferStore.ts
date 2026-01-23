@@ -493,10 +493,15 @@ export const useTransferStore = defineStore('transfer', () => {
             completed: state.completed?.length || 0,
             failed: state.failed?.length || 0
           })
-          downloadQueue.value = state.pending
-          activeDownloads.value = state.active
-          completedDownloads.value = state.completed
-          failedDownloads.value = state.failed
+          // 添加防御性检查，确保 state 对象包含所有必需的属性
+          if (!state) {
+            console.warn('[transferStore] 队列更新事件的数据为空')
+            return
+          }
+          downloadQueue.value = state.pending || []
+          activeDownloads.value = state.active || []
+          completedDownloads.value = state.completed || []
+          failedDownloads.value = state.failed || []
         }
         window.electronAPI.transfer.onQueueUpdated(queueUpdatedListener)
       }

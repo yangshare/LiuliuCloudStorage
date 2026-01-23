@@ -46,6 +46,7 @@ export interface ElectronAPI {
     mkdir: (path: string) => Promise<MkdirResult>
     delete: (dir: string, fileName: string) => Promise<MkdirResult>
     batchDelete: (dir: string, fileNames: string[]) => Promise<MkdirResult>
+    getAllFilesInDirectory: (remotePath: string) => Promise<{ success: boolean; data?: string[]; error?: string }>
   }
   transfer: {
     upload: (filePath: string, remotePath: string, userId: number, userToken: string, username: string, localTaskId: string) => Promise<{ success: boolean; taskId?: string; error?: string }>

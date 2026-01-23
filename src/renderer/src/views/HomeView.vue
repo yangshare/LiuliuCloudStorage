@@ -178,7 +178,7 @@ onUnmounted(() => {
               </div>
 
               <!-- 中间：主要操作按钮组 -->
-              <div class="header-center">
+              <div class="header-center" v-if="false">
                 <el-button
                   class="upload-btn"
                   @click="handleUpload"

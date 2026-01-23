@@ -403,6 +403,37 @@ class AlistService {
       }
     }
   }
+
+  /**
+   * 递归获取目录下所有文件（包括子目录）
+   * @param remotePath 目录路径
+   * @returns 所有文件的完整路径列表
+   */
+  async getAllFilesInDirectory(remotePath: string): Promise<string[]> {
+    const filePaths: string[] = []
+
+    async function traverse(path: string): Promise<void> {
+      try {
+        const result = await this.listFiles(path)
+        for (const item of result.content) {
+          if (item.isDir) {
+            // 构建子目录完整路径
+            const subPath = path === '/' ? `/${item.name}` : `${path}/${item.name}`
+            await traverse.call(this, subPath)
+          } else {
+            // 构建文件的完整路径
+            const filePath = path === '/' ? `/${item.name}` : `${path}/${item.name}`
+            filePaths.push(filePath)
+          }
+        }
+      } catch (error) {
+        loggerService.error('AlistService', `getAllFilesInDirectory: 遍历目录失败 path=${path}, error=${error}`)
+      }
+    }
+
+    await traverse.call(this, remotePath)
+    return filePaths
+  }
 }
 
 export const alistService = new AlistService()

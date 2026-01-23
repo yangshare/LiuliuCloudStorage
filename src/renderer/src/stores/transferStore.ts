@@ -321,6 +321,9 @@ export const useTransferStore = defineStore('transfer', () => {
     if (typeof window !== 'undefined' && window.electronAPI?.transfer?.removeDownloadFailedListener) {
       window.electronAPI.transfer.removeDownloadFailedListener(downloadFailedHandler)
     }
+    if (typeof window !== 'undefined' && window.electronAPI?.transfer?.removeDownloadCancelledListener) {
+      window.electronAPI.transfer.removeDownloadCancelledListener(downloadCancelledHandler)
+    }
   }
 
   // 恢复单个上传任务
@@ -645,7 +648,13 @@ export const useTransferStore = defineStore('transfer', () => {
   }
 
   // 下载进度处理函数（节流优化）
-  const downloadProgressHandler = (data: { taskId: string, fileName: string, progress: number, downloadedBytes: number, totalBytes: number, speed: number }) => {
+  const downloadProgressHandler = (data: { taskId: string, fileName: string, progress: number, downloadedBytes: number, totalBytes: number, speed: number } | undefined) => {
+    // 数据有效性检查
+    if (!data || !data.taskId) {
+      console.warn('[downloadProgressHandler] 收到无效的下载进度数据:', data)
+      return
+    }
+
     // 使用节流函数更新进度
     throttledProgressUpdate(data)
 
@@ -669,7 +678,13 @@ export const useTransferStore = defineStore('transfer', () => {
   }
 
   // 下载完成处理函数
-  const downloadCompletedHandler = (data: { taskId: string, fileName: string, savePath: string }) => {
+  const downloadCompletedHandler = (data: { taskId: string, fileName: string, savePath: string } | undefined) => {
+    // 数据有效性检查
+    if (!data || !data.taskId) {
+      console.warn('[downloadCompletedHandler] 收到无效的下载完成数据:', data)
+      return
+    }
+
     const task = downloadQueue.value.find(t => t.id === data.taskId)
     if (task) {
       task.status = 'completed'
@@ -740,7 +755,13 @@ export const useTransferStore = defineStore('transfer', () => {
   }
 
   // 下载失败处理函数
-  const downloadFailedHandler = (data: { taskId: string, fileName: string, error: string }) => {
+  const downloadFailedHandler = (data: { taskId: string, fileName: string, error: string } | undefined) => {
+    // 数据有效性检查
+    if (!data || !data.taskId) {
+      console.warn('[downloadFailedHandler] 收到无效的下载失败数据:', data)
+      return
+    }
+
     const task = downloadQueue.value.find(t => t.id === data.taskId)
     if (task) {
       task.status = 'failed'
@@ -764,6 +785,21 @@ export const useTransferStore = defineStore('transfer', () => {
     }
   }
 
+  // 下载取消处理函数
+  const downloadCancelledHandler = (data: { taskId: string | number } | undefined) => {
+    // 数据有效性检查
+    if (!data || data.taskId === undefined) {
+      console.warn('[downloadCancelledHandler] 收到无效的下载取消数据:', data)
+      return
+    }
+
+    const task = downloadQueue.value.find(t => t.id === data.taskId.toString())
+    if (task) {
+      task.status = 'cancelled'
+      task.error = '下载已取消'
+    }
+  }
+
   // 注册下载监听器
   if (typeof window !== 'undefined' && window.electronAPI?.transfer?.onDownloadProgress) {
     window.electronAPI.transfer.onDownloadProgress(downloadProgressHandler)
@@ -775,6 +811,10 @@ export const useTransferStore = defineStore('transfer', () => {
 
   if (typeof window !== 'undefined' && window.electronAPI?.transfer?.onDownloadFailed) {
     window.electronAPI.transfer.onDownloadFailed(downloadFailedHandler)
+  }
+
+  if (typeof window !== 'undefined' && window.electronAPI?.transfer?.onDownloadCancelled) {
+    window.electronAPI.transfer.onDownloadCancelled(downloadCancelledHandler)
   }
 
   // ========== 另存为下载 ==========

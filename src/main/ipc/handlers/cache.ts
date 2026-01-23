@@ -34,17 +34,17 @@ export function registerCacheHandlers(): void {
   })
 
   /**
-   * 清理缓存
+   * 清理缓存（只清理 f_ 开头的下载缓存）
    */
   ipcMain.handle('cache:clear', async () => {
     try {
-      loggerService.info('CacheHandler', '开始手动清理缓存')
+      loggerService.info('CacheHandler', '开始手动清理缓存（仅 f_ 文件）')
 
       // 获取清理前的大小
       const beforeSize = await cacheService.getCacheSizeInfo()
 
-      // 执行清理
-      await cacheService.forceCleanup()
+      // 执行清理并获取删除的文件数量
+      const filesDeleted = await cacheService.forceCleanup()
 
       // 获取清理后的大小
       const afterSize = await cacheService.getCacheSizeInfo()
@@ -53,15 +53,13 @@ export function registerCacheHandlers(): void {
       const clearedBytes = beforeSize.size - afterSize.size
       const clearedSize = formatBytes(clearedBytes)
 
-      // TODO: 保存清理时间到本地存储
-
-      loggerService.info('CacheHandler', `缓存清理完成，清理了 ${clearedSize}`)
+      loggerService.info('CacheHandler', `缓存清理完成，清理了 ${clearedSize}，删除了 ${filesDeleted} 个文件`)
 
       return {
         success: true,
         clearedSize: clearedSize,
-        filesDeleted: '未知', // CacheService 需要返回删除的文件数
-        remainingSize: afterSize.formatted
+        remainingSize: afterSize.formatted,
+        filesDeleted: filesDeleted
       }
     } catch (error: any) {
       loggerService.error('CacheHandler', '清理缓存失败', error)

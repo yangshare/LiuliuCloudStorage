@@ -13,32 +13,79 @@ const showDeleteConfirm = ref(false)
 const isDeleting = ref(false)
 
 async function handleBatchDownload() {
-  // 过滤掉文件夹,只保留文件
-  const filesToDownload = fileStore.selectedFiles.filter(f => !f.isDir)
+  const selectedItems = fileStore.selectedFiles
 
-  if (filesToDownload.length === 0) {
+  if (selectedItems.length === 0) {
+    ElMessage.warning('没有选中的项目')
+    return
+  }
+
+  console.log('[BatchActionToolbar] handleBatchDownload: selectedItems=', selectedItems)
+
+  ElMessage.info(`正在准备添加 ${selectedItems.length} 个项目到下载队列...`)
+
+  const currentPath = fileStore.currentPath === '/' ? '' : fileStore.currentPath
+  let successCount = 0
+  let failedCount = 0
+
+  // 收集所有需要下载的文件路径
+  const filePaths: string[] = []
+
+  // 处理目录：递归获取所有文件
+  const directories = selectedItems.filter(f => f.isDir)
+  const files = selectedItems.filter(f => !f.isDir)
+
+  console.log('[BatchActionToolbar] directories=', directories, 'files=', files, 'currentPath=', currentPath)
+
+  // 直接添加文件路径
+  files.forEach(file => {
+    const filePath = currentPath ? `${currentPath}/${file.name}` : `/${file.name}`
+    filePaths.push(filePath)
+  })
+
+  // 处理目录：获取所有文件路径
+  for (const dir of directories) {
+    const dirRemotePath = currentPath ? `${currentPath}/${dir.name}` : `/${dir.name}`
+    console.log('[BatchActionToolbar] 获取目录文件: dirRemotePath=', dirRemotePath)
+    try {
+      const result = await window.electronAPI.file.getAllFilesInDirectory(dirRemotePath)
+      console.log('[BatchActionToolbar] 目录文件结果:', result)
+      if (result.success && result.data) {
+        console.log('[BatchActionToolbar] 找到文件数:', result.data.length)
+        filePaths.push(...result.data)
+      } else {
+        console.log('[BatchActionToolbar] 获取目录文件失败:', result.error)
+        failedCount++
+      }
+    } catch (error) {
+      console.error('[BatchActionToolbar] 获取目录文件异常:', error)
+      failedCount++
+    }
+  }
+
+  const totalFiles = filePaths.length
+  console.log('[BatchActionToolbar] 总文件数:', totalFiles, 'filePaths=', filePaths)
+
+  if (totalFiles === 0) {
     ElMessage.warning('没有可下载的文件')
     return
   }
 
-  ElMessage.info(`正在添加 ${filesToDownload.length} 个文件到下载队列...`)
+  ElMessage.info(`正在添加 ${totalFiles} 个文件到下载队列...`)
 
-  // 批量添加到下载队列并统计结果
-  const currentPath = fileStore.currentPath === '/' ? '' : fileStore.currentPath
-  let successCount = 0
-  let failedFiles: string[] = []
-
-  const downloadPromises = filesToDownload.map(async (file) => {
-    const remotePath = `${currentPath}/${file.name}`
+  // 批量添加到下载队列
+  const downloadPromises = filePaths.map(async (remotePath) => {
+    // 从完整路径中提取文件名
+    const fileName = remotePath.split('/').pop() || 'unknown'
     try {
-      const result = await transferStore.queueDownload(remotePath, file.name)
+      const result = await transferStore.queueDownload(remotePath, fileName)
       if (result?.success) {
         successCount++
       } else {
-        failedFiles.push(file.name)
+        failedCount++
       }
     } catch (error) {
-      failedFiles.push(file.name)
+      failedCount++
     }
   })
 
@@ -48,12 +95,12 @@ async function handleBatchDownload() {
   fileStore.clearSelection()
 
   // 显示结果
-  if (failedFiles.length === 0) {
+  if (failedCount === 0) {
     ElMessage.success(`已添加 ${successCount} 个文件到下载队列`)
   } else if (successCount === 0) {
-    ElMessage.error(`添加失败: ${failedFiles.join(', ')}`)
+    ElMessage.error(`添加失败，请稍后重试`)
   } else {
-    ElMessage.warning(`成功添加 ${successCount} 个文件，失败 ${failedFiles.length} 个: ${failedFiles.join(', ')}`)
+    ElMessage.warning(`成功添加 ${successCount} 个文件，失败 ${failedCount} 个`)
   }
 }
 

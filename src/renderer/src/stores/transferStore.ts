@@ -224,12 +224,13 @@ export const useTransferStore = defineStore('transfer', () => {
       quotaStore.calculateQuota()
 
       // 显示应用内通知
-      const notification = useNotification()
-      notification.success({
-        title: '上传完成',
-        content: `文件 "${data.fileName}" 已成功上传`,
-        duration: 3000
-      })
+      if (window.$notification) {
+        window.$notification.success({
+          title: '上传完成',
+          content: `文件 "${data.fileName}" 已成功上传`,
+          duration: 3000
+        })
+      }
 
       // Story 8.4: 显示系统通知
       if (window.electronAPI?.notification?.show) {
@@ -493,10 +494,15 @@ export const useTransferStore = defineStore('transfer', () => {
             completed: state.completed?.length || 0,
             failed: state.failed?.length || 0
           })
-          downloadQueue.value = state.pending
-          activeDownloads.value = state.active
-          completedDownloads.value = state.completed
-          failedDownloads.value = state.failed
+          // 添加防御性检查，确保 state 对象包含所有必需的属性
+          if (!state) {
+            console.warn('[transferStore] 队列更新事件的数据为空')
+            return
+          }
+          downloadQueue.value = state.pending || []
+          activeDownloads.value = state.active || []
+          completedDownloads.value = state.completed || []
+          failedDownloads.value = state.failed || []
         }
         window.electronAPI.transfer.onQueueUpdated(queueUpdatedListener)
       }
@@ -711,39 +717,38 @@ export const useTransferStore = defineStore('transfer', () => {
     }, COMPLETED_TASK_CLEANUP_DELAY_MS)
 
     // 显示应用内完成通知（带打开文件夹按钮）
-    const notification = useNotification()
-    notification.success({
-      title: '下载完成',
-      content: `文件 "${data.fileName}" 已成功下载到 ${data.savePath}`,
-      duration: 5000,
-      action: () => h(
-        'button',
-        {
-          onClick: async () => {
-            try {
-              const result = await window.electronAPI?.downloadConfig.openFileDirectory(data.savePath)
-              if (!result?.success) {
-                const msg = useMessage()
-                msg.error(result?.error || '无法打开目录')
+    if (window.$notification) {
+      window.$notification.success({
+        title: '下载完成',
+        content: `文件 "${data.fileName}" 已成功下载到 ${data.savePath}`,
+        duration: 5000,
+        action: () => h(
+          'button',
+          {
+            onClick: async () => {
+              try {
+                const result = await window.electronAPI?.downloadConfig.openFileDirectory(data.savePath)
+                if (!result?.success) {
+                  window.$message?.error(result?.error || '无法打开目录')
+                }
+              } catch (error: any) {
+                window.$message?.error('打开目录失败: ' + error.message)
               }
-            } catch (error: any) {
-              const msg = useMessage()
-              msg.error('打开目录失败: ' + error.message)
+            },
+            style: {
+              padding: '4px 12px',
+              backgroundColor: '#18a058',
+              color: 'white',
+              border: 'none',
+              borderRadius: '3px',
+              cursor: 'pointer',
+              fontSize: '12px'
             }
           },
-          style: {
-            padding: '4px 12px',
-            backgroundColor: '#18a058',
-            color: 'white',
-            border: 'none',
-            borderRadius: '3px',
-            cursor: 'pointer',
-            fontSize: '12px'
-          }
-        },
-        '打开文件夹'
-      )
-    })
+          '打开文件夹'
+        )
+      })
+    }
 
     // Story 8.4: 显示系统下载完成通知
     if (window.electronAPI?.notification?.show) {
@@ -768,12 +773,13 @@ export const useTransferStore = defineStore('transfer', () => {
       task.error = data.error
 
       // 显示应用内失败通知
-      const notification = useNotification()
-      notification.error({
-        title: '下载失败',
-        content: `文件 "${data.fileName}" 下载失败：${data.error}`,
-        duration: 5000
-      })
+      if (window.$notification) {
+        window.$notification.error({
+          title: '下载失败',
+          content: `文件 "${data.fileName}" 下载失败：${data.error}`,
+          duration: 5000
+        })
+      }
 
       // Story 8.4: 显示系统下载失败通知
       if (window.electronAPI?.notification?.show) {

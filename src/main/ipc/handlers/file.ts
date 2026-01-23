@@ -202,4 +202,33 @@ export function registerFileHandlers(): void {
       }
     }
   })
+
+  // 获取目录下所有文件（递归子目录）
+  ipcMain.handle('file:getAllFilesInDirectory', async (_event, remotePath: string): Promise<{ success: boolean; data?: string[]; error?: string }> => {
+    try {
+      loggerService.info('FileHandler', `[getAllFilesInDirectory] Fetching all files in: ${remotePath}`)
+      const filePaths = await alistService.getAllFilesInDirectory(remotePath || '/')
+      loggerService.info('FileHandler', `[getAllFilesInDirectory] Success: found ${filePaths.length} files`)
+
+      return {
+        success: true,
+        data: filePaths
+      }
+    } catch (error) {
+      const appError = error as AppError
+      loggerService.error('FileHandler', `[getAllFilesInDirectory] Error: ${JSON.stringify(appError)}`)
+
+      if (appError.code === 'ALIST_401') {
+        return {
+          success: false,
+          error: appError.message || 'Token 已失效，请重新登录'
+        }
+      }
+
+      return {
+        success: false,
+        error: appError.message || '获取目录文件失败'
+      }
+    }
+  })
 }

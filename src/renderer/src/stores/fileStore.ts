@@ -92,7 +92,7 @@ export const useFileStore = defineStore('file', () => {
 
     try {
       const result = await window.electronAPI.file.list(path)
-      if (result.success && result.data) {
+      if (result?.success && result.data) {
         files.value = result.data.content
         currentPath.value = path
         // 检查是否来自缓存
@@ -104,18 +104,18 @@ export const useFileStore = defineStore('file', () => {
         }
       } else {
         // 检测 401 认证错误（token 失效），自动跳转登录页
-        if ((result as any).code === 'AUTH_REQUIRED') {
+        if ((result as any)?.code === 'AUTH_REQUIRED') {
           await window.electronAPI.auth.logout()
           router.push('/login')
           return
         }
         // 检测 403 权限错误，跳转登录页
-        if (result.error?.includes('403') || result.error?.includes('permission')) {
+        if (result?.error?.includes('403') || result?.error?.includes('permission')) {
           await window.electronAPI.auth.logout()
           router.push('/login')
           return
         }
-        filesError.value = result.error || '获取文件列表失败'
+        filesError.value = result?.error || '获取文件列表失败'
       }
     } catch (error) {
       console.error('获取文件列表失败:', error)

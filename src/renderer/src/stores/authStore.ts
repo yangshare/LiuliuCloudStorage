@@ -91,7 +91,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     try {
       const result = await window.electronAPI.auth.getUsers()
-      return result.success
+      return result?.success ?? false
     } catch {
       return false
     }

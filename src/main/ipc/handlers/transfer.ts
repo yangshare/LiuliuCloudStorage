@@ -405,6 +405,9 @@ export function registerTransferHandlers(): void {
     try {
       const downloadManager = new DownloadManager()
 
+      // 从数据库获取任务信息，用于发送完整的事件数据
+      const taskInfo = await transferService.getTask(taskId)
+
       // 恢复下载
       await downloadManager.resumeDownload(taskId, (progress) => {
         // 发送进度更新事件到渲染进程
@@ -417,8 +420,12 @@ export function registerTransferHandlers(): void {
         })
       })
 
-      // 下载完成
-      _event.sender.send('transfer:download-completed', { taskId })
+      // 下载完成 - 发送完整的事件数据
+      _event.sender.send('transfer:download-completed', {
+        taskId,
+        fileName: taskInfo?.fileName || '',
+        savePath: taskInfo?.filePath || ''
+      })
 
       return { success: true }
     } catch (error: any) {

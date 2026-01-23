@@ -49,7 +49,6 @@ async function handleLogin() {
             placeholder="请输入用户名"
             size="large"
             :prefix-icon="User"
-            @keyup.enter="handleLogin"
           />
         </el-form-item>
         <el-form-item>
@@ -60,7 +59,6 @@ async function handleLogin() {
             size="large"
             :prefix-icon="Lock"
             show-password
-            @keyup.enter="handleLogin"
           />
         </el-form-item>
         <div class="button-group">
@@ -68,7 +66,6 @@ async function handleLogin() {
             type="primary"
             size="large"
             :loading="loading"
-            @click="handleLogin"
             class="login-btn"
             native-type="submit"
           >

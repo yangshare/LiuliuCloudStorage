@@ -143,6 +143,20 @@
         <el-text type="info" size="small">
           清理缓存不会影响登录状态和应用设置
         </el-text>
+
+        <!-- 账号管理 -->
+        <el-divider />
+        <el-form-item label="账号管理">
+          <div class="account-actions">
+            <el-button type="danger" plain @click="handleLogout">
+              退出登录
+            </el-button>
+          </div>
+        </el-form-item>
+
+        <el-text type="info" size="small">
+          退出当前账号，返回登录界面
+        </el-text>
       </div>
     </el-card>
   </div>
@@ -154,7 +168,10 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 
+import { useAuthStore } from '../stores/authStore'
+
 const router = useRouter()
+const authStore = useAuthStore()
 
 // 状态
 const autoStartEnabled = ref(false)
@@ -170,6 +187,33 @@ const cacheSize = ref('计算中...')
 const cacheDirectory = ref('加载中...')
 const lastCleanupTime = ref('')
 const cleaningCache = ref(false)
+
+/**
+ * 退出登录
+ */
+async function handleLogout() {
+  try {
+    await ElMessageBox.confirm(
+      '确定要退出登录吗？',
+      '提示',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
+    
+    await authStore.logout()
+    ElMessage.success('已退出登录')
+    router.push('/login')
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('Logout error:', error)
+      // 即便是失败，通常也应该清除本地状态并跳转
+      // 但这里我们保留在当前页面以便用户重试，除非是网络错误等
+    }
+  }
+}
 
 /**
  * 获取平台名称

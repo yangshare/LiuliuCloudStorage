@@ -89,6 +89,23 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  // Story 10.1 FIX: 自动处理缓存读取失败错误
+  mainWindow.webContents.on('did-fail-load', async (_event, errorCode, errorDescription) => {
+    loggerService.error('Main', `页面加载失败: ${errorCode} - ${errorDescription}`)
+    
+    // 如果是缓存读取失败，尝试清理缓存并刷新
+    if (errorDescription.includes('ERR_CACHE_READ_FAILURE')) {
+      loggerService.info('Main', '检测到缓存损坏，自动执行清理...')
+      try {
+        await mainWindow?.webContents.session.clearCache()
+        loggerService.info('Main', '缓存清理完成，正在重载页面...')
+        mainWindow?.reload()
+      } catch (error) {
+        loggerService.error('Main', '自动清理缓存失败', error as Error)
+      }
+    }
+  })
 }
 
 app.whenReady().then(async () => {

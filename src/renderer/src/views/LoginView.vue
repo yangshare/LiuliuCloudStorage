@@ -7,6 +7,7 @@ import { User, Lock } from '@element-plus/icons-vue'
 const router = useRouter()
 
 const formData = ref({ username: '', password: '' })
+const autoLogin = ref(false)
 const loading = ref(false)
 
 async function handleLogin() {
@@ -19,7 +20,8 @@ async function handleLogin() {
   try {
     const result = await window.electronAPI.auth.login(
       formData.value.username,
-      formData.value.password
+      formData.value.password,
+      autoLogin.value
     )
     if (result.success) {
       ElMessage.success('登录成功')
@@ -61,6 +63,11 @@ async function handleLogin() {
             show-password
           />
         </el-form-item>
+        
+        <div class="options-row">
+          <el-checkbox v-model="autoLogin">自动登录</el-checkbox>
+        </div>
+
         <div class="button-group">
           <el-button
             type="primary"
@@ -153,6 +160,12 @@ async function handleLogin() {
 
 .login-form :deep(.el-form-item) {
   margin-bottom: 20px;
+}
+
+.options-row {
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
 }
 
 .login-btn {

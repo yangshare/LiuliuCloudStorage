@@ -39,6 +39,56 @@ export class PreferencesService {
   }
 
   /**
+   * 通用设置值
+   */
+  setValue(key: string, value: string): void {
+    if (!this.db) {
+      throw new Error('PreferencesService database not initialized')
+    }
+
+    const stmt = this.db.prepare(`
+      INSERT OR REPLACE INTO user_preferences (key, value, updated_at)
+      VALUES (?, ?, ?)
+    `)
+
+    stmt.run(key, value, Date.now())
+  }
+
+  /**
+   * 通用获取值
+   */
+  getValue(key: string): string | null {
+    if (!this.db) {
+      throw new Error('PreferencesService database not initialized')
+    }
+
+    const stmt = this.db.prepare(`
+      SELECT value FROM user_preferences
+      WHERE key = ?
+    `)
+
+    const result = stmt.get(key) as { value: string } | undefined
+
+    return result?.value || null
+  }
+
+  /**
+   * 通用删除值
+   */
+  deleteValue(key: string): void {
+    if (!this.db) {
+      throw new Error('PreferencesService database not initialized')
+    }
+
+    const stmt = this.db.prepare(`
+      DELETE FROM user_preferences
+      WHERE key = ?
+    `)
+
+    stmt.run(key)
+  }
+
+  /**
    * 保存最后下载路径
    * @param userId 用户ID
    * @param dirPath 下载目录路径

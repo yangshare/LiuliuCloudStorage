@@ -4,6 +4,7 @@ import { cryptoService } from '../../services/CryptoService'
 import { alistService } from '../../services/AlistService'
 import { activityService, ActionType } from '../../services/ActivityService'
 import { loggerService } from '../../services/LoggerService'
+import { preferencesService } from '../../services/PreferencesService'
 import { DEFAULT_QUOTA } from '../../../shared/constants'
 
 const N8N_WEBHOOK_URL = 'http://10.2.3.7:5678/webhook/liuliu'
@@ -65,34 +66,82 @@ function saveSession(userId: number, username: string, token: string, basePath: 
   loggerService.info('AuthHandler', 'AlistService initialized')
 }
 
-function getStoredSession(): { userId: number; username: string; token: string } | null {
+async function restoreSession(): Promise<{ userId: number; username: string; token: string } | null> {
   if (currentSession) return currentSession
 
   const db = getDatabase()
+  // Story: Auto Login - Get the latest session regardless of expiry
   const row = db.prepare(`
     SELECT s.user_id, s.token_encrypted, s.expires_at, s.base_path, u.username
     FROM sessions s JOIN users u ON s.user_id = u.id
-    WHERE s.expires_at > ? ORDER BY s.created_at DESC LIMIT 1
-  `).get(Date.now()) as { user_id: number; token_encrypted: string; username: string; base_path: string } | undefined
+    ORDER BY s.created_at DESC LIMIT 1
+  `).get() as { user_id: number; token_encrypted: string; expires_at: number; username: string; base_path: string } | undefined
 
   if (!row) return null
 
-  try {
-    const token = cryptoService.decrypt(row.token_encrypted)
-    currentSession = { userId: row.user_id, username: row.username, token }
+  // Check auto-login preference
+  const autoLogin = preferencesService.getValue(`auto_login_${row.username}`) === 'true'
+  if (!autoLogin) {
+    loggerService.info('AuthHandler', `Auto login disabled for user: ${row.username}`)
+    return null
+  }
 
-    // 恢复 AlistService 配置
-    const basePath = row.base_path || '/'
+  // Helper to restore alist service
+  const restoreAlist = (token: string, basePath: string) => {
     loggerService.info('AuthHandler', `Restoring AlistService for user: ${row.username}, basePath: ${basePath}`)
     alistService.setToken(token)
     alistService.setBasePath(basePath)
     alistService.setUserId(row.user_id)
     loggerService.info('AuthHandler', 'AlistService restored')
-
-    return currentSession
-  } catch {
-    return null
   }
+
+  // 1. Session valid?
+  if (row.expires_at > Date.now()) {
+    try {
+      const token = cryptoService.decrypt(row.token_encrypted)
+      currentSession = { userId: row.user_id, username: row.username, token }
+      restoreAlist(token, row.base_path || '/')
+      return currentSession
+    } catch (e) {
+      loggerService.error('AuthHandler', `Session decryption failed: ${e}`)
+      // Fall through to try password login
+    }
+  }
+
+  // 2. Session expired or invalid, try to re-login with stored credentials
+  loggerService.info('AuthHandler', `Session expired or invalid for ${row.username}, attempting auto-login...`)
+  const encryptedPwd = preferencesService.getValue(`auth_password_${row.username}`)
+  
+  if (encryptedPwd) {
+    try {
+      const password = cryptoService.decrypt(encryptedPwd)
+      const result = await alistService.login(row.username, password)
+      
+      if (result.success && result.token) {
+        loggerService.info('AuthHandler', `Auto-login successful for ${row.username}`)
+        
+        // Get user info to get base path
+        let basePath = '/'
+        try {
+           const userInfo = await alistService.getMe()
+           basePath = userInfo.basePath || '/'
+        } catch (e) {
+           loggerService.warn('AuthHandler', `Failed to get user info during auto-login, using default path: ${e}`)
+        }
+
+        saveSession(row.user_id, row.username, result.token, basePath)
+        return currentSession
+      } else {
+        loggerService.warn('AuthHandler', `Auto-login failed for ${row.username}: ${result.message}`)
+      }
+    } catch (e) {
+      loggerService.error('AuthHandler', `Auto-login exception for ${row.username}: ${e}`)
+    }
+  } else {
+    loggerService.info('AuthHandler', `No stored password for ${row.username}`)
+  }
+
+  return null
 }
 
 function clearSession(): void {
@@ -139,10 +188,10 @@ function ensureUser(username: string): number {
 }
 
 export function registerAuthHandlers(): void {
-  ipcMain.handle('auth:login', async (_event, username: string, password: string) => {
+  ipcMain.handle('auth:login', async (_event, username: string, password: string, autoLogin: boolean = false) => {
     try {
       loggerService.info('AuthHandler', '[login] ========== 开始登录流程 ==========')
-      loggerService.info('AuthHandler', `[login] 用户名: ${username}`)
+      loggerService.info('AuthHandler', `[login] 用户名: ${username}, 自动登录: ${autoLogin}`)
 
       // 直接调用 Alist 登录接口
       const result = await alistService.login(username, password)
@@ -157,6 +206,16 @@ export function registerAuthHandlers(): void {
           const userId = ensureUser(username)
           loggerService.info('AuthHandler', `[login] 本地用户ID: ${userId}`)
           saveSession(userId, username, result.token, basePath)
+          
+          // 处理自动登录设置
+          if (autoLogin) {
+            preferencesService.setValue(`auto_login_${username}`, 'true')
+            preferencesService.setValue(`auth_password_${username}`, cryptoService.encrypt(password))
+          } else {
+            preferencesService.setValue(`auto_login_${username}`, 'false')
+            preferencesService.deleteValue(`auth_password_${username}`)
+          }
+
           loggerService.info('AuthHandler', '[login] ========== 登录成功 ==========')
 
           // Story 9.2 CRITICAL FIX: 记录登录操作日志
@@ -214,7 +273,7 @@ export function registerAuthHandlers(): void {
   })
 
   ipcMain.handle('auth:check-session', async () => {
-    const session = getStoredSession()
+    const session = await restoreSession()
     if (!session) return { valid: false }
 
     const db = getDatabase()
@@ -240,7 +299,7 @@ export function registerAuthHandlers(): void {
    */
   ipcMain.handle('auth:get-current-user', async () => {
     try {
-      const session = getStoredSession()
+      const session = await restoreSession()
       if (!session) {
         return { success: false, message: '用户未登录' }
       }
@@ -283,7 +342,7 @@ export function registerAuthHandlers(): void {
    */
   ipcMain.handle('auth:get-users', async (_event, params: { page?: number; pageSize?: number; search?: string } = {}) => {
     try {
-      const session = getStoredSession()
+      const session = await restoreSession()
 
       if (!session) {
         throw new Error('用户未登录')
@@ -360,7 +419,7 @@ export function registerAuthHandlers(): void {
    */
   ipcMain.handle('auth:get-storage-stats', async () => {
     try {
-      const session = getStoredSession()
+      const session = await restoreSession()
 
       if (!session) {
         throw new Error('用户未登录')

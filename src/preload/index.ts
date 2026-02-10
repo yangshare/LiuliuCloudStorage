@@ -46,7 +46,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   auth: {
-    login: (username: string, password: string) => ipcRenderer.invoke('auth:login', username, password),
+    login: (username: string, password: string, autoLogin: boolean = false) => ipcRenderer.invoke('auth:login', username, password, autoLogin),
     logout: () => ipcRenderer.invoke('auth:logout'),
     register: (username: string, password: string) => ipcRenderer.invoke('auth:register', username, password),
     checkSession: () => ipcRenderer.invoke('auth:check-session'),

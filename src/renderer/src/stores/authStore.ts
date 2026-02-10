@@ -84,6 +84,17 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  /**
+   * 退出登录
+   */
+  async function logout() {
+    try {
+      await window.electronAPI.auth.logout()
+    } finally {
+      clearUser()
+    }
+  }
+
   async function checkAdminPermission(): Promise<boolean> {
     if (!isLoggedIn.value) {
       return false
@@ -103,6 +114,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAdmin,
     setUser,
     clearUser,
+    logout,
     initUserFromSession,
     checkAdminPermission
   }

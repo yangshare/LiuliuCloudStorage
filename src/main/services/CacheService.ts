@@ -1,4 +1,4 @@
-import { app } from 'electron'
+import { app, session } from 'electron'
 import { join, normalize, resolve } from 'path'
 import { existsSync } from 'fs'
 import { readdir, stat, rm } from 'fs/promises'
@@ -240,6 +240,15 @@ class CacheService {
 
     loggerService.info('CacheService', '开始清理缓存（仅 f_ 文件）...')
     const deletedCount = await this.clearCacheDataFailures()
+
+    // Story 10.1 FIX: 清理 Electron 会话缓存以解决 net::ERR_CACHE_READ_FAILURE
+    try {
+      loggerService.info('CacheService', '正在清理 Electron 会话缓存...')
+      await session.defaultSession.clearCache()
+      loggerService.info('CacheService', 'Electron 会话缓存清理完成')
+    } catch (e) {
+      loggerService.error('CacheService', '清理 Electron 会话缓存失败', e as Error)
+    }
 
     const finalSize = await this.getCacheSize()
     loggerService.info('CacheService', `缓存清理完成，当前缓存大小: ${this.formatBytes(finalSize)}`)

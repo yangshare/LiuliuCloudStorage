@@ -22,7 +22,8 @@ const validChannels = [
   'downloadConfig:selectDirectory', 'downloadConfig:get', 'downloadConfig:update', 'downloadConfig:openDirectory', 'downloadConfig:openFileDirectory', 'downloadConfig:reset', 'downloadConfig:createDirectory',
   'cache:get-info', 'cache:clear',
   'update:check', 'update:install-now', 'update:install-on-quit',
-  'update:available', 'update:not-available', 'update:download-progress', 'update:downloaded', 'update:error'
+  'update:available', 'update:not-available', 'update:download-progress', 'update:downloaded', 'update:error',
+  'shareTransfer:exec', 'shareTransfer:list', 'shareTransfer:latest', 'shareTransfer:complete', 'shareTransfer:delete', 'shareTransfer:batchDelete'
 ]
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -213,6 +214,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('update:downloaded', () => callback()),
     onError: (callback: (message: string) => void) =>
       ipcRenderer.on('update:error', (_, message) => callback(message))
+  },
+
+  shareTransfer: {
+    exec: (params: { url: string; userId: number }) =>
+      ipcRenderer.invoke('shareTransfer:exec', params),
+    list: (params: { userId: number; pageNum?: number; pageSize?: number; status?: string }) =>
+      ipcRenderer.invoke('shareTransfer:list', params),
+    latest: (params: { userId: number }) =>
+      ipcRenderer.invoke('shareTransfer:latest', params),
+    complete: (params: { id: number; userId: number }) =>
+      ipcRenderer.invoke('shareTransfer:complete', params),
+    delete: (params: { id: number; userId: number }) =>
+      ipcRenderer.invoke('shareTransfer:delete', params),
+    batchDelete: (params: { ids: number[]; userId: number }) =>
+      ipcRenderer.invoke('shareTransfer:batchDelete', params)
   }
 })
 

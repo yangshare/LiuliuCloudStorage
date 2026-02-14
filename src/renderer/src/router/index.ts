@@ -57,6 +57,11 @@ const router = createRouter({
       path: '/settings',
       name: 'settings',
       component: () => import('../views/SettingsView.vue')
+    },
+    {
+      path: '/share-transfer',
+      name: 'share-transfer',
+      component: () => import('../views/ShareTransferView.vue')
     }
   ]
 })

@@ -11,6 +11,8 @@ export interface AppConfig {
   alistBaseUrl: string
   /** N8N 工作流服务器地址 */
   n8nBaseUrl: string
+  /** AMB API 服务器地址（分享转存接口） */
+  ambApiBaseUrl: string
 }
 
 /**
@@ -18,7 +20,8 @@ export interface AppConfig {
  */
 const DEFAULT_CONFIG: AppConfig = {
   alistBaseUrl: 'http://10.2.3.7:5244',
-  n8nBaseUrl: 'http://10.2.3.7:5678'
+  n8nBaseUrl: 'http://10.2.3.7:5678',
+  ambApiBaseUrl: 'https://amb.yangshare.com/prod-api'
 }
 
 /**
@@ -83,6 +86,9 @@ export function loadConfig(): AppConfig {
       if (fileConfig.n8nBaseUrl !== undefined) {
         config.n8nBaseUrl = fileConfig.n8nBaseUrl
       }
+      if (fileConfig.ambApiBaseUrl !== undefined) {
+        config.ambApiBaseUrl = fileConfig.ambApiBaseUrl
+      }
 
       loggerService.info('Config', `已加载配置文件: ${filePath}`)
     } catch (error) {
@@ -99,8 +105,12 @@ export function loadConfig(): AppConfig {
     config.n8nBaseUrl = process.env.N8N_BASE_URL
     loggerService.info('Config', `使用环境变量覆盖 N8N_BASE_URL`)
   }
+  if (process.env.AMB_API_BASE_URL) {
+    config.ambApiBaseUrl = process.env.AMB_API_BASE_URL
+    loggerService.info('Config', `使用环境变量覆盖 AMB_API_BASE_URL`)
+  }
 
-  loggerService.info('Config', `配置加载完成 - Alist: ${config.alistBaseUrl}, N8N: ${config.n8nBaseUrl}`)
+  loggerService.info('Config', `配置加载完成 - Alist: ${config.alistBaseUrl}, N8N: ${config.n8nBaseUrl}, AMB: ${config.ambApiBaseUrl}`)
 
   cachedConfig = config
   return config

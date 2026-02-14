@@ -110,6 +110,24 @@ export const downloadConfig = sqliteTable('download_config', {
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date())
 })
 
+// 分享转存记录表
+export const shareTransferRecords = sqliteTable('share_transfer_records', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: integer('user_id').notNull().references(() => users.id),
+  shareUrl: text('share_url').notNull(),
+  shareCode: text('share_code'),
+  receiver: text('receiver'),
+  alistPath: text('alist_path'),
+  status: text('status', { enum: ['pending', 'transferring', 'completed', 'failed'] }).notNull().default('pending'),
+  errorMessage: text('error_message'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date())
+}, (table) => [
+  index('idx_share_transfer_user_id').on(table.userId),
+  index('idx_share_transfer_status').on(table.status),
+  index('idx_share_transfer_created_at').on(table.createdAt)
+])
+
 // 类型导出
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
@@ -125,3 +143,5 @@ export type DailyStats = typeof dailyStats.$inferSelect
 export type NewDailyStats = typeof dailyStats.$inferInsert
 export type DownloadConfig = typeof downloadConfig.$inferSelect
 export type NewDownloadConfig = typeof downloadConfig.$inferInsert
+export type ShareTransferRecord = typeof shareTransferRecords.$inferSelect
+export type NewShareTransferRecord = typeof shareTransferRecords.$inferInsert

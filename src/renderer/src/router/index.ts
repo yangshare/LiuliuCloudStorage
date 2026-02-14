@@ -15,11 +15,6 @@ const router = createRouter({
       component: () => import('../views/LoginView.vue')
     },
     {
-      path: '/register',
-      name: 'register',
-      component: () => import('../views/RegisterView.vue')
-    },
-    {
       path: '/onboarding',
       name: 'onboarding',
       component: () => import('../views/OnboardingView.vue')
@@ -68,7 +63,7 @@ const router = createRouter({
 
 // 路由守卫：未登录时跳转到登录页，首次登录跳转到引导页
 router.beforeEach(async (to) => {
-  if (to.path === '/login' || to.path === '/register') return true
+  if (to.path === '/login') return true
 
   const authStore = useAuthStore()
   const session = await window.electronAPI.auth.checkSession()

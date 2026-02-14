@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 // 允许的 IPC 通道白名单
 const validChannels = [
-  'auth:login', 'auth:logout', 'auth:register', 'auth:check-session', 'auth:complete-onboarding', 'auth:get-current-user', 'auth:get-users', 'auth:get-storage-stats',
+  'auth:login', 'auth:logout', 'auth:check-session', 'auth:complete-onboarding', 'auth:get-current-user', 'auth:get-users', 'auth:get-storage-stats',
   'file:list', 'file:mkdir', 'file:delete', 'file:batchDelete', 'file:rename', 'file:getAllFilesInDirectory',
   'transfer:upload', 'transfer:download', 'transfer:saveAs', 'transfer:cancel', 'transfer:list', 'transfer:progress',
   'transfer:add-to-queue', 'transfer:queue-status', 'transfer:restore-queue',
@@ -48,7 +48,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   auth: {
     login: (username: string, password: string, autoLogin: boolean = false) => ipcRenderer.invoke('auth:login', username, password, autoLogin),
     logout: () => ipcRenderer.invoke('auth:logout'),
-    register: (username: string, password: string) => ipcRenderer.invoke('auth:register', username, password),
     checkSession: () => ipcRenderer.invoke('auth:check-session'),
     completeOnboarding: () => ipcRenderer.invoke('auth:complete-onboarding'),
     getCurrentUser: () => ipcRenderer.invoke('auth:get-current-user'),

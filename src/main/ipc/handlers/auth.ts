@@ -262,16 +262,6 @@ export function registerAuthHandlers(): void {
     return { success: true }
   })
 
-  ipcMain.handle('auth:register', async (_event, username: string, password: string) => {
-    try {
-      const result = await callWebhook('register', { username, password })
-      return result
-    } catch (err) {
-      loggerService.error('AuthHandler', `Register error: ${err}`)
-      return { success: false, message: '网络错误，请稍后重试' }
-    }
-  })
-
   ipcMain.handle('auth:check-session', async () => {
     const session = await restoreSession()
     if (!session) return { valid: false }

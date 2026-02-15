@@ -3,6 +3,7 @@ import { randomBytes, createCipheriv, createDecipheriv } from 'crypto'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { app } from 'electron'
+import { loadConfig } from '../config'
 
 const ALGORITHM = 'aes-256-gcm'
 const KEY_LENGTH = 32
@@ -19,7 +20,7 @@ class CryptoService {
     if (safeStorage.isEncryptionAvailable()) {
       await this.initWithSafeStorage()
     } else {
-      this.initWithEnvKey()
+      this.initWithConfigKey()
     }
   }
 
@@ -39,14 +40,14 @@ class CryptoService {
     }
   }
 
-  private initWithEnvKey(): void {
-    const envKey = process.env.LIULIU_ENCRYPTION_KEY
-    if (envKey && envKey.length === 64) {
-      this.key = Buffer.from(envKey, 'hex')
+  private initWithConfigKey(): void {
+    const config = loadConfig()
+    if (config.encryptionKey && config.encryptionKey.length === 64) {
+      this.key = Buffer.from(config.encryptionKey, 'hex')
     } else {
-      // Generate and store key for development
+      // 生成临时密钥（每次启动不同，仅用于开发/测试）
       this.key = randomBytes(KEY_LENGTH)
-      console.warn('CryptoService: Using generated key. Set LIULIU_ENCRYPTION_KEY for production.')
+      console.warn('CryptoService: 未配置加密密钥，使用临时密钥。请在配置文件中设置 encryptionKey（64位十六进制）。')
     }
   }
 

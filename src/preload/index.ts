@@ -23,7 +23,8 @@ const validChannels = [
   'cache:get-info', 'cache:clear',
   'update:check', 'update:install-now', 'update:install-on-quit',
   'update:available', 'update:not-available', 'update:download-progress', 'update:downloaded', 'update:error',
-  'shareTransfer:exec', 'shareTransfer:list', 'shareTransfer:latest', 'shareTransfer:complete', 'shareTransfer:delete', 'shareTransfer:batchDelete'
+  'shareTransfer:exec', 'shareTransfer:list', 'shareTransfer:latest', 'shareTransfer:complete', 'shareTransfer:delete', 'shareTransfer:batchDelete',
+  'config:check', 'config:get', 'config:save', 'config:reinit'
 ]
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -229,6 +230,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('shareTransfer:delete', params),
     batchDelete: (params: { ids: number[]; userId: number }) =>
       ipcRenderer.invoke('shareTransfer:batchDelete', params)
+  },
+
+  config: {
+    check: () => ipcRenderer.invoke('config:check'),
+    get: () => ipcRenderer.invoke('config:get'),
+    /**
+     * 保存配置（部分更新）
+     * @param config - 与 src/main/config.ts 中的 Partial<AppConfig> 保持同步
+     */
+    save: (config: { alistBaseUrl?: string; n8nBaseUrl?: string; ambApiBaseUrl?: string; ambTransferToken?: string }) =>
+      ipcRenderer.invoke('config:save', config),
+    reinit: () => ipcRenderer.invoke('config:reinit')
   }
 })
 

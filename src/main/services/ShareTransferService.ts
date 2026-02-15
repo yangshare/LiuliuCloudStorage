@@ -8,22 +8,15 @@ import { loadConfig } from '../config'
 import { loggerService } from './LoggerService'
 
 /**
- * 获取转存 Token（从环境变量或配置文件读取）
+ * 获取转存 Token（从配置文件读取）
  */
 function getTransferToken(): string {
-  // 优先从环境变量读取
-  const envToken = process.env.AMB_TRANSFER_TOKEN
-  if (envToken) {
-    return envToken
-  }
-
-  // 从配置文件读取（配置文件中可以配置 token 字段）
   const config = loadConfig()
   if (config.ambTransferToken) {
     return config.ambTransferToken
   }
 
-  loggerService.warn('ShareTransfer', '未配置 AMB_TRANSFER_TOKEN，转存功能可能无法正常工作')
+  loggerService.warn('ShareTransfer', '未配置转存 Token，请在设置中配置')
   return ''
 }
 
@@ -92,7 +85,7 @@ export class ShareTransferService {
       // 调用三方接口
       const token = getTransferToken()
       if (!token) {
-        throw new Error('未配置转存 Token，请设置环境变量 AMB_TRANSFER_TOKEN')
+        throw new Error('未配置转存 Token，请在设置中配置')
       }
 
       const response = await axios.post<AmbApiResponse<string>>(

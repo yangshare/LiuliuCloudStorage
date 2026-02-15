@@ -29,8 +29,15 @@ onMounted(() => {
 </template>
 
 <style>
-body {
+html, body {
   margin: 0;
   padding: 0;
+  height: 100vh;
+  overflow: hidden;
+}
+
+#app {
+  height: 100vh;
+  overflow: hidden;
 }
 </style>

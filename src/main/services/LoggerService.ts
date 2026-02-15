@@ -1,8 +1,28 @@
 import { app } from 'electron'
 import { join } from 'path'
-import { existsSync, mkdirSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync } from 'fs'
 import winston from 'winston'
 import DailyRotateFile from 'winston-daily-rotate-file'
+
+/**
+ * 从配置文件读取日志级别（避免循环依赖）
+ */
+function getLogLevelFromConfig(): string {
+  try {
+    const userDataPath = app.getPath('userData')
+    const configPath = join(userDataPath, 'config.json')
+    if (existsSync(configPath)) {
+      const content = readFileSync(configPath, 'utf-8')
+      const config = JSON.parse(content)
+      if (config.logLevel && ['error', 'warn', 'info', 'debug'].includes(config.logLevel)) {
+        return config.logLevel
+      }
+    }
+  } catch {
+    // 配置文件读取失败，使用默认值
+  }
+  return 'info'
+}
 
 /**
  * 日志级别枚举
@@ -32,7 +52,7 @@ export class LoggerService {
 
     // 创建 logger 实例
     this.logger = winston.createLogger({
-      level: process.env.LOG_LEVEL || 'info',
+      level: getLogLevelFromConfig(),
       format: winston.format.combine(
         winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
         winston.format.errors({ stack: true }),

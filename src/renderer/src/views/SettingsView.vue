@@ -516,7 +516,9 @@ onMounted(async () => {
   margin: 0 auto;
   padding: 20px;
   background: linear-gradient(135deg, #F5F5F5 0%, #E8E8E8 100%);
-  min-height: 100vh;
+  height: 100vh;
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 
 /* 卡片 - 网易云风格 */

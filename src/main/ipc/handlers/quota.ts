@@ -2,15 +2,25 @@ import { ipcMain, net } from 'electron'
 import { getDatabase } from '../../database'
 import { getCurrentSession } from './auth'
 import { quotaCalculationService } from '../../services/QuotaCalculationService'
+import { loadConfig } from '../../config'
 
-// n8n Webhook URL (Story 6.4: 管理员配额调整必须通过 n8n)
-const N8N_WEBHOOK_URL = 'http://10.2.3.7:5678/webhook/liuliu'
+// 缓存 N8N Webhook URL，避免重复计算
+let cachedN8nWebhookUrl: string | null = null
+
+function getN8nWebhookUrl(): string {
+  if (!cachedN8nWebhookUrl) {
+    const config = loadConfig()
+    cachedN8nWebhookUrl = `${config.n8nBaseUrl}/webhook/liuliu`
+  }
+  return cachedN8nWebhookUrl
+}
 
 /**
  * 调用 n8n Webhook (Story 6.4: Dual-Flow Architecture)
  */
 async function callN8nWebhook(endpoint: string, data: object): Promise<any> {
   return new Promise((resolve) => {
+    const N8N_WEBHOOK_URL = getN8nWebhookUrl()
     const url = `${N8N_WEBHOOK_URL}/${endpoint}`
     const postData = JSON.stringify(data)
 

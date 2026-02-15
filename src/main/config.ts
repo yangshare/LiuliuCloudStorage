@@ -13,6 +13,8 @@ export interface AppConfig {
   n8nBaseUrl: string
   /** AMB API 服务器地址（分享转存接口） */
   ambApiBaseUrl: string
+  /** AMB 转存 Token（可选，也可通过环境变量 AMB_TRANSFER_TOKEN 配置） */
+  ambTransferToken?: string
 }
 
 /**
@@ -21,7 +23,8 @@ export interface AppConfig {
 const DEFAULT_CONFIG: AppConfig = {
   alistBaseUrl: 'http://10.2.3.7:5244',
   n8nBaseUrl: 'http://10.2.3.7:5678',
-  ambApiBaseUrl: 'https://amb.yangshare.com/prod-api'
+  ambApiBaseUrl: 'https://amb.yangshare.com/prod-api',
+  ambTransferToken: undefined
 }
 
 /**
@@ -89,6 +92,9 @@ export function loadConfig(): AppConfig {
       if (fileConfig.ambApiBaseUrl !== undefined) {
         config.ambApiBaseUrl = fileConfig.ambApiBaseUrl
       }
+      if (fileConfig.ambTransferToken !== undefined) {
+        config.ambTransferToken = fileConfig.ambTransferToken
+      }
 
       loggerService.info('Config', `已加载配置文件: ${filePath}`)
     } catch (error) {
@@ -109,8 +115,14 @@ export function loadConfig(): AppConfig {
     config.ambApiBaseUrl = process.env.AMB_API_BASE_URL
     loggerService.info('Config', `使用环境变量覆盖 AMB_API_BASE_URL`)
   }
+  if (process.env.AMB_TRANSFER_TOKEN) {
+    config.ambTransferToken = process.env.AMB_TRANSFER_TOKEN
+    loggerService.info('Config', `使用环境变量覆盖 AMB_TRANSFER_TOKEN`)
+  }
 
-  loggerService.info('Config', `配置加载完成 - Alist: ${config.alistBaseUrl}, N8N: ${config.n8nBaseUrl}, AMB: ${config.ambApiBaseUrl}`)
+  // 记录配置加载完成（敏感信息只显示是否配置，不显示具体值）
+  const tokenStatus = config.ambTransferToken ? '已配置' : '未配置'
+  loggerService.info('Config', `配置加载完成 - Alist: ${config.alistBaseUrl}, N8N: ${config.n8nBaseUrl}, AMB: ${config.ambApiBaseUrl}, TransferToken: ${tokenStatus}`)
 
   cachedConfig = config
   return config

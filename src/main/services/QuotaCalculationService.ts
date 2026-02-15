@@ -1,18 +1,23 @@
 import axios from 'axios'
 import { alistService, ListFilesResponse } from './AlistService'
+import { loadConfig } from '../config'
 
 /**
  * 配额计算服务
  * 负责计算用户的实际存储使用量
  */
 export class QuotaCalculationService {
-  private n8nWebhookUrl: string
-
   // Story 6.2 MEDIUM FIX: 最大递归深度限制，防止栈溢出
   private readonly MAX_RECURSION_DEPTH = 50
 
-  constructor() {
-    this.n8nWebhookUrl = process.env.N8N_WEBHOOK_URL || 'http://localhost:5678'
+  /**
+   * 获取 n8n API 基础 URL
+   * 注意：此处返回的是 n8n API 地址（如 http://10.2.3.7:5678/api/...）
+   * 与其他模块使用的 webhook URL（.../webhook/liuliu/...）不同
+   */
+  private getN8nApiUrl(): string {
+    const config = loadConfig()
+    return config.n8nBaseUrl
   }
 
   /**
@@ -25,9 +30,11 @@ export class QuotaCalculationService {
     try {
       const userPath = '/alist/'
 
-      // 方法1: 尝试通过 n8n Webhook 计算配额（更准确）
+      // 方法1: 尝试通过 n8n API 计算配额（更准确）
+      // 调用 n8n REST API 端点（非 webhook）
       try {
-        const response = await axios.post(`${this.n8nWebhookUrl}/api/quota/calculate`, {
+        const n8nApiUrl = this.getN8nApiUrl()
+        const response = await axios.post(`${n8nApiUrl}/api/quota/calculate`, {
           userId,
           username,
           path: userPath

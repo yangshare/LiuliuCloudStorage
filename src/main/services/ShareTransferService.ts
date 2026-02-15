@@ -19,9 +19,8 @@ function getTransferToken(): string {
 
   // 从配置文件读取（配置文件中可以配置 token 字段）
   const config = loadConfig()
-  const configToken = (config as any).ambTransferToken
-  if (configToken) {
-    return configToken
+  if (config.ambTransferToken) {
+    return config.ambTransferToken
   }
 
   loggerService.warn('ShareTransfer', '未配置 AMB_TRANSFER_TOKEN，转存功能可能无法正常工作')

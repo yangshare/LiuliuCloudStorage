@@ -78,13 +78,6 @@ async function handleLogin() {
           >
             登录
           </el-button>
-          <el-button
-            link
-            @click="router.push('/register')"
-            class="register-link"
-          >
-            没有账号？去注册
-          </el-button>
         </div>
       </el-form>
     </div>

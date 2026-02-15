@@ -111,6 +111,23 @@ CREATE TABLE IF NOT EXISTS download_config (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
+
+-- 分享转存记录表：记录百度网盘分享链接的转存历史
+CREATE TABLE IF NOT EXISTS share_transfer_records (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),      -- 执行转存操作的用户ID
+  share_url TEXT NOT NULL,                            -- 分享链接地址
+  share_code TEXT,                                    -- 分享提取码（如有）
+  receiver TEXT,                                      -- 接收转存的百度账号名
+  alist_path TEXT,                                    -- Alist 目标存储路径
+  status TEXT NOT NULL DEFAULT 'pending',             -- 状态: pending/success/failed
+  error_message TEXT,                                 -- 失败时的错误信息
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_share_transfer_user_id ON share_transfer_records(user_id);
+CREATE INDEX IF NOT EXISTS idx_share_transfer_status ON share_transfer_records(status);
+CREATE INDEX IF NOT EXISTS idx_share_transfer_created_at ON share_transfer_records(created_at);
 `
 
 // 迁移：添加 base_path 字段到旧数据库

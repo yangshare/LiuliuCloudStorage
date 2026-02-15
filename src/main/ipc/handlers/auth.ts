@@ -6,13 +6,24 @@ import { activityService, ActionType } from '../../services/ActivityService'
 import { loggerService } from '../../services/LoggerService'
 import { preferencesService } from '../../services/PreferencesService'
 import { DEFAULT_QUOTA } from '../../../shared/constants'
-
-const N8N_WEBHOOK_URL = 'http://10.2.3.7:5678/webhook/liuliu'
+import { loadConfig } from '../../config'
 
 let currentSession: { userId: number; username: string; token: string } | null = null
 
+// 缓存 N8N Webhook URL，避免重复计算
+let cachedN8nWebhookUrl: string | null = null
+
+function getN8nWebhookUrl(): string {
+  if (!cachedN8nWebhookUrl) {
+    const config = loadConfig()
+    cachedN8nWebhookUrl = `${config.n8nBaseUrl}/webhook/liuliu`
+  }
+  return cachedN8nWebhookUrl
+}
+
 async function callWebhook(endpoint: string, data: object): Promise<any> {
   return new Promise((resolve) => {
+    const N8N_WEBHOOK_URL = getN8nWebhookUrl()
     const url = `${N8N_WEBHOOK_URL}/${endpoint}`
     const postData = JSON.stringify(data)
 
@@ -260,16 +271,6 @@ export function registerAuthHandlers(): void {
     }
 
     return { success: true }
-  })
-
-  ipcMain.handle('auth:register', async (_event, username: string, password: string) => {
-    try {
-      const result = await callWebhook('register', { username, password })
-      return result
-    } catch (err) {
-      loggerService.error('AuthHandler', `Register error: ${err}`)
-      return { success: false, message: '网络错误，请稍后重试' }
-    }
   })
 
   ipcMain.handle('auth:check-session', async () => {

@@ -37,7 +37,6 @@ export interface ElectronAPI {
   auth: {
     login: (username: string, password: string) => Promise<{ success: boolean; message?: string; token?: string }>
     logout: () => Promise<{ success: boolean }>
-    register: (username: string, password: string) => Promise<{ success: boolean; message?: string }>
     checkSession: () => Promise<{ valid: boolean; username?: string; onboardingCompleted?: boolean }>
     completeOnboarding: () => Promise<{ success: boolean }>
   }

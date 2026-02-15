@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 // 允许的 IPC 通道白名单
 const validChannels = [
-  'auth:login', 'auth:logout', 'auth:register', 'auth:check-session', 'auth:complete-onboarding', 'auth:get-current-user', 'auth:get-users', 'auth:get-storage-stats',
+  'auth:login', 'auth:logout', 'auth:check-session', 'auth:complete-onboarding', 'auth:get-current-user', 'auth:get-users', 'auth:get-storage-stats',
   'file:list', 'file:mkdir', 'file:delete', 'file:batchDelete', 'file:rename', 'file:getAllFilesInDirectory',
   'transfer:upload', 'transfer:download', 'transfer:saveAs', 'transfer:cancel', 'transfer:list', 'transfer:progress',
   'transfer:add-to-queue', 'transfer:queue-status', 'transfer:restore-queue',
@@ -22,7 +22,8 @@ const validChannels = [
   'downloadConfig:selectDirectory', 'downloadConfig:get', 'downloadConfig:update', 'downloadConfig:openDirectory', 'downloadConfig:openFileDirectory', 'downloadConfig:reset', 'downloadConfig:createDirectory',
   'cache:get-info', 'cache:clear',
   'update:check', 'update:install-now', 'update:install-on-quit',
-  'update:available', 'update:not-available', 'update:download-progress', 'update:downloaded', 'update:error'
+  'update:available', 'update:not-available', 'update:download-progress', 'update:downloaded', 'update:error',
+  'shareTransfer:exec', 'shareTransfer:list', 'shareTransfer:latest', 'shareTransfer:complete', 'shareTransfer:delete', 'shareTransfer:batchDelete'
 ]
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -48,7 +49,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   auth: {
     login: (username: string, password: string, autoLogin: boolean = false) => ipcRenderer.invoke('auth:login', username, password, autoLogin),
     logout: () => ipcRenderer.invoke('auth:logout'),
-    register: (username: string, password: string) => ipcRenderer.invoke('auth:register', username, password),
     checkSession: () => ipcRenderer.invoke('auth:check-session'),
     completeOnboarding: () => ipcRenderer.invoke('auth:complete-onboarding'),
     getCurrentUser: () => ipcRenderer.invoke('auth:get-current-user'),
@@ -214,6 +214,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('update:downloaded', () => callback()),
     onError: (callback: (message: string) => void) =>
       ipcRenderer.on('update:error', (_, message) => callback(message))
+  },
+
+  shareTransfer: {
+    exec: (params: { url: string; userId: number }) =>
+      ipcRenderer.invoke('shareTransfer:exec', params),
+    list: (params: { userId: number; pageNum?: number; pageSize?: number; status?: string }) =>
+      ipcRenderer.invoke('shareTransfer:list', params),
+    latest: (params: { userId: number }) =>
+      ipcRenderer.invoke('shareTransfer:latest', params),
+    complete: (params: { id: number; userId: number }) =>
+      ipcRenderer.invoke('shareTransfer:complete', params),
+    delete: (params: { id: number; userId: number }) =>
+      ipcRenderer.invoke('shareTransfer:delete', params),
+    batchDelete: (params: { ids: number[]; userId: number }) =>
+      ipcRenderer.invoke('shareTransfer:batchDelete', params)
   }
 })
 

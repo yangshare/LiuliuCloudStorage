@@ -2,7 +2,7 @@
 import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElContainer, ElMain, ElCard, ElButton, ElIcon, ElText, ElDrawer, ElDropdown, ElDropdownMenu, ElDropdownItem, ElBadge } from 'element-plus'
-import { Upload, Folder, List, Setting, Grid, Refresh, Document, FolderOpened, Memo, ArrowLeft, Download } from '@element-plus/icons-vue'
+import { Upload, Folder, List, Setting, Grid, Refresh, Document, FolderOpened, Memo, ArrowLeft, Download, Link } from '@element-plus/icons-vue'
 import FileList from '../components/file/FileList.vue'
 import Breadcrumb from '../components/file/Breadcrumb.vue'
 import FileDetail from '../components/file/FileDetail.vue'
@@ -273,6 +273,13 @@ onUnmounted(() => {
                   title="设置"
                 >
                   <el-icon><Setting /></el-icon>
+                </el-button>
+                <el-button
+                  class="icon-btn-gray"
+                  @click="router.push('/share-transfer')"
+                  title="分享转存"
+                >
+                  <el-icon><Link /></el-icon>
                 </el-button>
                 <el-badge
                   :value="activeDownloadsCount"

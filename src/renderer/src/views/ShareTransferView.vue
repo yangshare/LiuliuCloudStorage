@@ -42,6 +42,7 @@
           <div class="records-header">
             <span class="records-title">转存记录</span>
             <el-space>
+              <!-- 批量删除功能暂不开放
               <el-button
                 type="danger"
                 plain
@@ -50,6 +51,7 @@
               >
                 批量删除 ({{ selectedIds.length }})
               </el-button>
+              -->
               <el-button @click="loadRecords" :loading="loading">
                 刷新
               </el-button>

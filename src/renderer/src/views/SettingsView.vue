@@ -11,6 +11,53 @@
         </div>
       </template>
       <div class="settings-content">
+        <!-- 服务器配置 -->
+        <div class="section-title">服务器配置</div>
+        <el-form-item>
+          <label class="form-label">
+            <span class="required">*</span> Alist 服务地址
+          </label>
+          <el-input
+            v-model="serverConfig.alistBaseUrl"
+            placeholder="例如: http://10.2.3.7:5244"
+            :prefix-icon="Link"
+          />
+          <span class="form-hint">用于文件存储和访问</span>
+        </el-form-item>
+
+        <el-form-item>
+          <label class="form-label">
+            <span class="required">*</span> AMB API 地址
+          </label>
+          <el-input
+            v-model="serverConfig.ambApiBaseUrl"
+            placeholder="例如: https://amb.example.com/prod-api"
+            :prefix-icon="Platform"
+          />
+          <span class="form-hint">用于用户登录和分享转存</span>
+        </el-form-item>
+
+        <el-form-item>
+          <label class="form-label">转存 Token (可选)</label>
+          <el-input
+            v-model="serverConfig.ambTransferToken"
+            placeholder="请输入转存 Token"
+            :prefix-icon="Key"
+            show-password
+          />
+          <span class="form-hint">用于百度网盘分享转存功能</span>
+        </el-form-item>
+
+        <el-button
+          type="primary"
+          :loading="serverConfigLoading"
+          @click="handleSaveServerConfig"
+        >
+          保存服务器配置
+        </el-button>
+
+        <el-divider />
+
         <!-- 开机自启动 -->
         <el-form-item label="开机自启动">
           <el-switch
@@ -166,7 +213,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft } from '@element-plus/icons-vue'
+import { ArrowLeft, Link, Platform, Key } from '@element-plus/icons-vue'
 
 import { useAuthStore } from '../stores/authStore'
 
@@ -181,6 +228,15 @@ const platformName = ref('')
 const loading = ref(false)
 const downloadPath = ref('')
 const autoCreateDateFolder = ref(false)
+
+// 服务器配置状态
+const serverConfig = ref({
+  alistBaseUrl: '',
+  n8nBaseUrl: '',
+  ambApiBaseUrl: '',
+  ambTransferToken: ''
+})
+const serverConfigLoading = ref(false)
 
 // 缓存管理状态
 const cacheSize = ref('计算中...')
@@ -500,6 +556,98 @@ ${info.directory}
   }
 }
 
+/**
+ * 获取服务器配置
+ */
+async function getServerConfig(): Promise<void> {
+  try {
+    const config = await window.electronAPI?.config.get()
+    if (config) {
+      serverConfig.value = {
+        alistBaseUrl: config.alistBaseUrl || '',
+        n8nBaseUrl: config.n8nBaseUrl || '',
+        ambApiBaseUrl: config.ambApiBaseUrl || '',
+        ambTransferToken: config.ambTransferToken || ''
+      }
+    }
+  } catch (error) {
+    console.error('获取服务器配置失败:', error)
+  }
+}
+
+/**
+ * 验证 URL 格式
+ */
+function isValidUrl(url: string): boolean {
+  if (!url) return false
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 规范化 URL（移除末尾斜杠）
+ */
+function normalizeUrl(url: string): string {
+  if (!url) return url
+  return url.replace(/\/+$/, '')
+}
+
+/**
+ * 保存服务器配置
+ */
+async function handleSaveServerConfig(): Promise<void> {
+  // 验证必填项
+  if (!serverConfig.value.alistBaseUrl) {
+    ElMessage.error('请填写 Alist 服务地址')
+    return
+  }
+  if (!serverConfig.value.ambApiBaseUrl) {
+    ElMessage.error('请填写 AMB API 地址')
+    return
+  }
+
+  // 验证 URL 格式
+  if (!isValidUrl(serverConfig.value.alistBaseUrl)) {
+    ElMessage.error('Alist 服务地址格式不正确')
+    return
+  }
+  if (!isValidUrl(serverConfig.value.ambApiBaseUrl)) {
+    ElMessage.error('AMB API 地址格式不正确')
+    return
+  }
+
+  serverConfigLoading.value = true
+  try {
+    const saveResult = await window.electronAPI?.config.save({
+      alistBaseUrl: normalizeUrl(serverConfig.value.alistBaseUrl),
+      n8nBaseUrl: normalizeUrl(serverConfig.value.n8nBaseUrl),
+      ambApiBaseUrl: normalizeUrl(serverConfig.value.ambApiBaseUrl),
+      ambTransferToken: serverConfig.value.ambTransferToken || undefined
+    })
+
+    if (!saveResult?.success) {
+      ElMessage.error('保存配置失败: ' + (saveResult?.error || '未知错误'))
+      return
+    }
+
+    // 重新初始化服务
+    const reinitResult = await window.electronAPI?.config.reinit()
+    if (!reinitResult?.success) {
+      ElMessage.warning('配置已保存，但服务初始化失败，可能需要重启应用')
+    } else {
+      ElMessage.success('服务器配置已保存')
+    }
+  } catch (error: any) {
+    ElMessage.error('保存配置失败: ' + error.message)
+  } finally {
+    serverConfigLoading.value = false
+  }
+}
+
 // 组件挂载时初始化
 onMounted(async () => {
   platformName.value = getPlatformName()
@@ -507,6 +655,7 @@ onMounted(async () => {
   await getAppVersion()
   await getDownloadConfig()
   await getCacheInfo()
+  await getServerConfig()
 })
 </script>
 
@@ -714,5 +863,41 @@ onMounted(async () => {
 
 :deep(.el-checkbox__inner:hover) {
   border-color: var(--netease-red) !important;
+}
+
+/* 服务器配置区块样式 */
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--netease-gray-7);
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--netease-red);
+  display: inline-block;
+}
+
+.form-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--netease-gray-7);
+  margin-bottom: 8px;
+}
+
+.form-label .required {
+  color: var(--netease-red);
+  margin-right: 4px;
+}
+
+.form-hint {
+  display: block;
+  font-size: 12px;
+  color: var(--netease-gray-4);
+  margin-top: 4px;
+}
+
+/* 服务器配置输入框 */
+.server-config-group :deep(.el-input__wrapper) {
+  border-radius: var(--radius-md) !important;
 }
 </style>

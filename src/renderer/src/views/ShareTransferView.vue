@@ -17,8 +17,9 @@
             <el-input
               v-model="transferForm.url"
               type="textarea"
-              :rows="2"
-              placeholder="请输入百度网盘分享链接，例如：https://pan.baidu.com/s/1xxxxx"
+              :rows="3"
+              placeholder="支持直接粘贴分享文本，例如：&#10;链接:https://pan.baidu.com/s/1xxxxx?pwd=xxxx&#10;或&#10;链接：https://pan.baidu.com/s/1xxxxx 提取码：xxxx"
+              @blur="parseAndFormatUrl"
             />
           </el-form-item>
           <el-form-item>
@@ -185,6 +186,45 @@ const getStatusConfig = (status: string) => {
 // 格式化日期
 const formatDate = (date: string | Date) => {
   return new Date(date).toLocaleString('zh-CN')
+}
+
+/**
+ * 解析并格式化百度网盘链接
+ * 支持两种格式：
+ * 1. 链接:https://pan.baidu.com/s/xxx?pwd=xxx
+ * 2. 链接：https://pan.baidu.com/s/xxx 提取码：xxx
+ */
+function parseAndFormatUrl() {
+  const input = transferForm.url.trim()
+  if (!input) return
+
+  // 提取链接（支持 pan.baidu.com/s/ 和 dwz.cn/ 短链）
+  const urlMatch = input.match(/(https?:\/\/(?:pan\.baidu\.com\/s\/[a-zA-Z0-9_-]+|dwz\.cn\/[a-zA-Z0-9_-]+)[^\s]*)/)
+  if (!urlMatch) return
+
+  let url = urlMatch[1]
+
+  // 检查链接中是否已包含 pwd 参数
+  const pwdInUrlMatch = url.match(/[?&]pwd=([a-zA-Z0-9]+)/i)
+  if (pwdInUrlMatch) {
+    // 已经有完整链接，清理多余空格
+    transferForm.url = url.split(/\s/)[0]
+    return
+  }
+
+  // 尝试从文本中提取提取码
+  // 匹配 "提取码：xxx" 或 "提取码:xxx" 或 "密码：xxx" 或 "密码:xxx"
+  const pwdMatch = input.match(/(?:提取码|密码)[：:]\s*([a-zA-Z0-9]{4})/i)
+
+  if (pwdMatch) {
+    const pwd = pwdMatch[1]
+    // 移除 URL 末尾可能的多余字符，然后添加 pwd 参数
+    url = url.split(/[?\s]/)[0]
+    transferForm.url = `${url}?pwd=${pwd}`
+  } else {
+    // 没有提取码，只保留链接部分
+    transferForm.url = url.split(/[?\s]/)[0]
+  }
 }
 
 /**

@@ -15,9 +15,9 @@ interface ConfigForm {
 }
 
 const formData = ref<ConfigForm>({
-  alistBaseUrl: '',
+  alistBaseUrl: 'https://alist.yangshare.com',
   n8nBaseUrl: '',
-  ambApiBaseUrl: '',
+  ambApiBaseUrl: 'https://pan.yangshare.com/prod-api',
   ambTransferToken: ''
 })
 
@@ -48,10 +48,11 @@ onMounted(async () => {
 
   try {
     const config = await window.electronAPI.config.get()
+    // 使用默认值作为 fallback
     formData.value = {
-      alistBaseUrl: config.alistBaseUrl || '',
+      alistBaseUrl: config.alistBaseUrl || 'https://alist.yangshare.com',
       n8nBaseUrl: config.n8nBaseUrl || '',
-      ambApiBaseUrl: config.ambApiBaseUrl || '',
+      ambApiBaseUrl: config.ambApiBaseUrl || 'https://pan.yangshare.com/prod-api',
       ambTransferToken: config.ambTransferToken || ''
     }
   } catch (error) {
@@ -160,7 +161,7 @@ async function handleSave() {
             size="large"
             :prefix-icon="Link"
           />
-          <span class="form-hint">用于文件存储和访问</span>
+          <span class="form-hint">用于文件存储和访问（默认无需修改）</span>
         </el-form-item>
 
         <el-form-item>
@@ -173,7 +174,7 @@ async function handleSave() {
             size="large"
             :prefix-icon="Platform"
           />
-          <span class="form-hint">用于用户登录和分享转存</span>
+          <span class="form-hint">用于用户登录和分享转存（默认无需修改）</span>
         </el-form-item>
 
         <el-form-item>
@@ -185,7 +186,7 @@ async function handleSave() {
             :prefix-icon="Key"
             show-password
           />
-          <span class="form-hint">用于百度网盘分享转存功能</span>
+          <span class="form-hint">用于百度网盘分享转存功能（默认无需修改）</span>
         </el-form-item>
 
         <div class="tip-box">

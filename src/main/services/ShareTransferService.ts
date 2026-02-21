@@ -66,10 +66,13 @@ export class ShareTransferService {
     recordId?: number
   }> {
     const baseUrl = this.getApiBaseUrl()
+    const fullUrl = `${baseUrl}/bdshare/transfer/exec`
     let recordId: number | undefined = undefined
 
     try {
-      loggerService.info('ShareTransfer', `开始执行转存: ${url}`)
+      loggerService.info('ShareTransfer', `开始执行转存`)
+      loggerService.info('ShareTransfer', `  - 分享链接: ${url}`)
+      loggerService.info('ShareTransfer', `  - API地址: ${fullUrl}`)
 
       // 创建本地记录（转存中状态）
       const record: NewShareTransferRecord = {
@@ -81,6 +84,7 @@ export class ShareTransferService {
       }
       const [insertedRecord] = await this.db.insert(shareTransferRecords).values(record).returning()
       recordId = insertedRecord.id
+      loggerService.info('ShareTransfer', `  - 本地记录ID: ${recordId}`)
 
       // 调用三方接口
       const token = getTransferToken()
@@ -88,12 +92,18 @@ export class ShareTransferService {
         throw new Error('未配置转存 Token，请在设置中配置')
       }
 
+      // Token 脱敏显示（只显示前4位和后4位）
+      const maskedToken = token.length > 8
+        ? `${token.substring(0, 4)}****${token.substring(token.length - 4)}`
+        : '****'
+      loggerService.info('ShareTransfer', `  - Token: ${maskedToken} (长度: ${token.length})`)
+
+      const requestBody = { token, url }
+      loggerService.info('ShareTransfer', `  - 请求体: ${JSON.stringify({ token: maskedToken, url })}`)
+
       const response = await axios.post<AmbApiResponse<string>>(
-        `${baseUrl}/bdshare/transfer/exec`,
-        {
-          token,
-          url
-        },
+        fullUrl,
+        requestBody,
         {
           timeout: 30000,
           headers: {
@@ -101,6 +111,9 @@ export class ShareTransferService {
           }
         }
       )
+
+      loggerService.info('ShareTransfer', `  - 响应状态码: ${response.status}`)
+      loggerService.info('ShareTransfer', `  - 响应数据: ${JSON.stringify(response.data)}`)
 
       const result = response.data
 
@@ -145,6 +158,7 @@ export class ShareTransferService {
         .where(eq(shareTransferRecords.id, recordId))
 
       loggerService.error('ShareTransfer', `转存失败: ${errorMsg}`)
+      loggerService.error('ShareTransfer', `  - 接口返回码: ${result.code}`)
 
       return {
         success: false,
@@ -152,7 +166,22 @@ export class ShareTransferService {
         recordId
       }
     } catch (error: any) {
+      // 详细记录错误信息
       loggerService.error('ShareTransfer', `转存异常: ${error.message}`)
+      loggerService.error('ShareTransfer', `  - API地址: ${fullUrl}`)
+
+      if (error.response) {
+        // 服务器返回了响应，但状态码不在 2xx 范围
+        loggerService.error('ShareTransfer', `  - 响应状态码: ${error.response.status}`)
+        loggerService.error('ShareTransfer', `  - 响应头: ${JSON.stringify(error.response.headers)}`)
+        loggerService.error('ShareTransfer', `  - 响应数据: ${JSON.stringify(error.response.data)}`)
+      } else if (error.request) {
+        // 请求已发出但没有收到响应
+        loggerService.error('ShareTransfer', `  - 未收到响应，请求可能超时或网络异常`)
+      } else {
+        // 请求配置出错
+        loggerService.error('ShareTransfer', `  - 请求配置错误: ${error.message}`)
+      }
 
       // 尝试更新记录状态为失败（如果记录已创建）
       if (recordId) {

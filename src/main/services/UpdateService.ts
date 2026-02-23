@@ -48,7 +48,11 @@ class UpdateService {
     autoUpdater.on('update-available', (info) => {
       loggerService.info('UpdateService', `发现新版本: ${info.version}`)
       this.sendToRenderer('update:available', info)
-      autoUpdater.downloadUpdate() // 开始静默下载
+      // 开始静默下载，捕获异常避免静默失败
+      autoUpdater.downloadUpdate().catch((error) => {
+        loggerService.error('UpdateService', `下载更新失败: ${error.message}`, error)
+        this.sendToRenderer('update:error', `下载更新失败: ${error.message}`)
+      })
     })
 
     autoUpdater.on('update-not-available', () => {

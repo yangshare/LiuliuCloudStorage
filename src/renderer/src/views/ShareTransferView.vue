@@ -30,10 +30,17 @@
             >
               开始转存
             </el-button>
-            <el-text type="info" size="small" style="margin-left: 12px;">
-              转存成功后可在 Alist 中访问
-            </el-text>
           </el-form-item>
+          <el-alert
+            type="warning"
+            :closable="false"
+            show-icon
+            style="margin-bottom: 16px;"
+          >
+            <template #title>
+              <strong>重要提示：</strong>转存成功后请立即下载，为了保证网盘容量，<strong>6小时后会删除转存文件</strong>。
+            </template>
+          </el-alert>
         </el-form>
 
         <el-divider />

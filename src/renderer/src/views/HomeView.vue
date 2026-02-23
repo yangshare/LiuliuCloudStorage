@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElContainer, ElMain, ElCard, ElButton, ElIcon, ElText, ElDrawer, ElDropdown, ElDropdownMenu, ElDropdownItem, ElBadge } from 'element-plus'
 import { Upload, Folder, List, Setting, Grid, Refresh, Document, FolderOpened, Memo, ArrowLeft, Download, Link } from '@element-plus/icons-vue'
 import FileList from '../components/file/FileList.vue'
@@ -17,6 +17,7 @@ import { useTransferStore } from '../stores/transferStore'
 import { useAuthStore } from '../stores/authStore'
 
 const router = useRouter()
+const route = useRoute()
 const fileStore = useFileStore()
 const transferStore = useTransferStore()
 const authStore = useAuthStore()
@@ -133,10 +134,61 @@ function handleFileSelect(event: Event) {
   showFileInput.value = false
 }
 
+/**
+ * 安全解码 URI 组件
+ * 防止无效编码导致的异常
+ */
+function safeDecodeURIComponent(str: string): string {
+  try {
+    return decodeURIComponent(str)
+  } catch {
+    console.warn('路径解码失败，使用原始值')
+    return str
+  }
+}
+
+/**
+ * 验证并清理路径
+ * 防止路径遍历攻击和非法路径
+ */
+function sanitizePath(path: string): string {
+  // 移除路径遍历字符
+  let sanitized = path.replace(/\.\./g, '')
+  // 移除控制字符
+  sanitized = sanitized.replace(/[\x00-\x1f\x7f]/g, '')
+  // 确保路径以 / 开头
+  if (!sanitized.startsWith('/')) {
+    sanitized = '/' + sanitized
+  }
+  // 移除多余的斜杠
+  sanitized = sanitized.replace(/\/+/g, '/')
+  return sanitized || '/'
+}
+
+/**
+ * 从路由参数中安全获取目标路径
+ */
+function getTargetPathFromRoute(): string {
+  const pathParam = route.query.path
+  if (!pathParam) return '/'
+
+  // 处理类型：string | string[]
+  const pathStr = Array.isArray(pathParam) ? pathParam[0] : pathParam
+  if (!pathStr || typeof pathStr !== 'string') return '/'
+
+  // 解码并清理路径
+  return sanitizePath(safeDecodeURIComponent(pathStr))
+}
+
 onMounted(() => {
   // 加载网格密度偏好
   fileStore.loadGridDensityPreference()
-  fileStore.fetchFiles('/')
+
+  // 从路由参数获取目标路径（例如从转存成功后跳转）
+  const targetPath = getTargetPathFromRoute()
+
+  // 加载文件列表（如果有目标路径则直接导航到该路径）
+  fileStore.fetchFiles(targetPath)
 
   // 初始化下载队列
   if (authStore.isLoggedIn && authStore.user) {

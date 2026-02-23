@@ -2,6 +2,7 @@ import { autoUpdater } from 'electron-updater'
 import { BrowserWindow, app } from 'electron'
 import { join } from 'path'
 import { loggerService } from './LoggerService'
+import { loadConfig } from '../config'
 
 class UpdateService {
   private mainWindow: BrowserWindow | null = null
@@ -10,14 +11,15 @@ class UpdateService {
   init(mainWindow: BrowserWindow) {
     this.mainWindow = mainWindow
 
-    // 开发环境：仅在设置 TEST_UPDATE=true 时启用更新测试
-    const isDevUpdateTest = !app.isPackaged && process.env.TEST_UPDATE === 'true'
+    // 开发环境：仅在配置 testUpdate=true 时启用更新测试
+    const config = loadConfig()
+    const isDevUpdateTest = !app.isPackaged && config.testUpdate === true
 
     if (isDevUpdateTest) {
       autoUpdater.forceDevUpdateConfig = true
       loggerService.info('UpdateService', '开发模式：已启用开发更新源（测试模式）')
     } else if (!app.isPackaged) {
-      loggerService.info('UpdateService', '开发模式：更新检查已禁用（设置 TEST_UPDATE=true 启用）')
+      loggerService.info('UpdateService', '开发模式：更新检查已禁用（在配置文件中设置 testUpdate: true 启用）')
     }
 
     // 配置更新缓存路径：使用用户数据目录，避免权限问题
@@ -92,7 +94,8 @@ class UpdateService {
   async checkForUpdates() {
     try {
       // 开发环境：未启用测试模式时跳过更新检查
-      if (!app.isPackaged && process.env.TEST_UPDATE !== 'true') {
+      const config = loadConfig()
+      if (!app.isPackaged && config.testUpdate !== true) {
         loggerService.info('UpdateService', '开发环境：跳过更新检查')
         this.sendToRenderer('update:not-available', undefined)
         return

@@ -15,6 +15,11 @@ const router = createRouter({
       component: () => import('../views/LoginView.vue')
     },
     {
+      path: '/setup',
+      name: 'setup',
+      component: () => import('../views/SetupView.vue')
+    },
+    {
       path: '/onboarding',
       name: 'onboarding',
       component: () => import('../views/OnboardingView.vue')
@@ -66,10 +71,35 @@ const router = createRouter({
   ]
 })
 
-// 路由守卫：未登录时跳转到登录页，首次登录跳转到引导页
+// 路由守卫：配置检查 → 登录检查 → 引导检查
 router.beforeEach(async (to) => {
+  // 1. 配置向导页面跳过所有检查
+  if (to.path === '/setup') return true
+
+  // 2. 检查配置是否完整（带超时保护）
+  try {
+    const configPromise = window.electronAPI.config.check()
+    const timeoutPromise = new Promise<{ complete: false }>((_, reject) =>
+      setTimeout(() => reject(new Error('配置检查超时')), 5000)
+    )
+
+    const configStatus = await Promise.race([configPromise, timeoutPromise])
+
+    if (!configStatus.complete) {
+      console.log('配置不完整，跳转到配置向导')
+      return '/setup?reason=incomplete'
+    }
+  } catch (error) {
+    // IPC 错误或超时时跳转配置页（可能是首次启动或配置文件损坏）
+    const reason = error instanceof Error && error.message.includes('超时') ? 'timeout' : 'error'
+    console.error(`检查配置失败 (${reason}):`, error)
+    return `/setup?reason=${reason}`
+  }
+
+  // 3. 登录页跳过登录检查
   if (to.path === '/login') return true
 
+  // 4. 检查登录状态
   const authStore = useAuthStore()
   const session = await window.electronAPI.auth.checkSession()
 
@@ -80,17 +110,18 @@ router.beforeEach(async (to) => {
     authStore.initUserFromSession(session)
   }
 
+  // 5. 检查功能引导
   if (to.path === '/onboarding') return true
   if (!session.onboardingCompleted) return '/onboarding'
 
-  // 管理员权限检查
+  // 6. 管理员权限检查
   if (to.meta.requiresAdmin) {
     if (!authStore.isAdmin) {
       // 尝试验证管理员权限
       const hasPermission = await authStore.checkAdminPermission()
       if (!hasPermission) {
         console.warn('权限不足：仅管理员可以访问此页面')
-        return '/home'
+        return '/'
       }
     }
   }

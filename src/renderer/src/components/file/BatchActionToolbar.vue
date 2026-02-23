@@ -168,9 +168,11 @@ function getDeleteConfirmContent() {
     <el-button @click="handleBatchDownload" :icon="Download">
       批量下载
     </el-button>
+    <!-- 批量删除功能暂不开放
     <el-button type="danger" @click="handleBatchDelete" :icon="Delete">
       批量删除
     </el-button>
+    -->
     <el-button @click="handleInvertSelection" :icon="Refresh">
       反选
     </el-button>

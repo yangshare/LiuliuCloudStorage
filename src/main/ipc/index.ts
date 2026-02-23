@@ -11,6 +11,7 @@ import { registerDownloadConfigHandlers } from './handlers/downloadConfig'
 import { registerUpdateHandlers } from './handlers/update'
 import { registerCacheHandlers } from './handlers/cache'
 import { registerShareTransferHandlers } from './handlers/shareTransfer'
+import { registerConfigHandlers } from './handlers/config'
 
 export function registerAllHandlers(): void {
   registerAuthHandlers()
@@ -26,4 +27,5 @@ export function registerAllHandlers(): void {
   registerUpdateHandlers()
   registerCacheHandlers()
   registerShareTransferHandlers()
+  registerConfigHandlers()
 }

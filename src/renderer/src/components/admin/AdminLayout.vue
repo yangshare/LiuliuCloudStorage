@@ -47,8 +47,10 @@
         </div>
       </el-header>
 
-      <el-main style="padding: 24px">
-        <slot />
+      <el-main class="admin-main">
+        <div class="admin-content">
+          <slot />
+        </div>
       </el-main>
     </el-container>
   </el-container>
@@ -147,8 +149,17 @@ const handleLogout = async () => {
 }
 
 /* Main - 网易云风格 */
-:deep(.el-main) {
+.admin-main {
+  padding: 0;
   background: linear-gradient(135deg, #F5F5F5 0%, #E8E8E8 100%);
+  overflow: hidden;
+}
+
+.admin-content {
+  height: 100%;
+  padding: 24px;
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .menu-icon {

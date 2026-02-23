@@ -17,8 +17,9 @@
             <el-input
               v-model="transferForm.url"
               type="textarea"
-              :rows="2"
-              placeholder="请输入百度网盘分享链接，例如：https://pan.baidu.com/s/1xxxxx"
+              :rows="3"
+              placeholder="支持直接粘贴分享文本，例如：&#10;链接:https://pan.baidu.com/s/1xxxxx?pwd=xxxx&#10;或&#10;链接：https://pan.baidu.com/s/1xxxxx 提取码：xxxx"
+              @blur="parseAndFormatUrl"
             />
           </el-form-item>
           <el-form-item>
@@ -42,6 +43,7 @@
           <div class="records-header">
             <span class="records-title">转存记录</span>
             <el-space>
+              <!-- 批量删除功能暂不开放
               <el-button
                 type="danger"
                 plain
@@ -50,6 +52,7 @@
               >
                 批量删除 ({{ selectedIds.length }})
               </el-button>
+              -->
               <el-button @click="loadRecords" :loading="loading">
                 刷新
               </el-button>
@@ -130,11 +133,9 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/authStore'
-import { useFileStore } from '../stores/fileStore'
 
 const router = useRouter()
 const authStore = useAuthStore()
-const fileStore = useFileStore()
 
 // 表单引用
 const formRef = ref<FormInstance>()
@@ -186,6 +187,86 @@ const formatDate = (date: string | Date) => {
 }
 
 /**
+ * 解析并格式化百度网盘链接
+ * 支持两种格式：
+ * 1. 链接:https://pan.baidu.com/s/xxx?pwd=xxx
+ * 2. 链接：https://pan.baidu.com/s/xxx 提取码：xxx
+ */
+function parseAndFormatUrl() {
+  const input = transferForm.url.trim()
+  if (!input) return
+
+  // 提取链接（支持 pan.baidu.com/s/ 和 dwz.cn/ 短链）
+  const urlMatch = input.match(/(https?:\/\/(?:pan\.baidu\.com\/s\/[a-zA-Z0-9_-]+|dwz\.cn\/[a-zA-Z0-9_-]+)[^\s]*)/)
+  if (!urlMatch) return
+
+  let url = urlMatch[1]
+
+  // 检查链接中是否已包含 pwd 参数
+  const pwdInUrlMatch = url.match(/[?&]pwd=([a-zA-Z0-9]+)/i)
+  if (pwdInUrlMatch) {
+    // 已经有完整链接，清理多余空格
+    transferForm.url = url.split(/\s/)[0]
+    return
+  }
+
+  // 尝试从文本中提取提取码
+  // 匹配 "提取码：xxx" 或 "提取码:xxx" 或 "密码：xxx" 或 "密码:xxx"
+  const pwdMatch = input.match(/(?:提取码|密码)[：:]\s*([a-zA-Z0-9]{4})/i)
+
+  if (pwdMatch) {
+    const pwd = pwdMatch[1]
+    // 移除 URL 末尾可能的多余字符，然后添加 pwd 参数
+    url = url.split(/[?\s]/)[0]
+    transferForm.url = `${url}?pwd=${pwd}`
+  } else {
+    // 没有提取码，只保留链接部分
+    transferForm.url = url.split(/[?\s]/)[0]
+  }
+}
+
+/**
+ * 验证并清理路径
+ * 防止路径遍历攻击和非法路径
+ */
+function sanitizePath(path: string): string {
+  // 移除路径遍历字符
+  let sanitized = path.replace(/\.\./g, '')
+  // 移除控制字符
+  sanitized = sanitized.replace(/[\x00-\x1f\x7f]/g, '')
+  // 确保路径以 / 开头
+  if (!sanitized.startsWith('/')) {
+    sanitized = '/' + sanitized
+  }
+  // 移除多余的斜杠
+  sanitized = sanitized.replace(/\/+/g, '/')
+  return sanitized || '/'
+}
+
+/**
+ * 从 Alist URL 中提取界面路径
+ * Alist URL 格式: https://alist.domain.com/storage-name/path/to/file
+ * 界面路径需要去掉存储名称前缀，例如 /baidu/xxx -> /xxx
+ */
+function extractTargetPath(alistUrl: string): string | null {
+  // 从 URL 中提取完整路径
+  const pathMatch = alistUrl.match(/https?:\/\/[^/]+(\/.*)/)
+  if (!pathMatch) return null
+
+  const fullPath = pathMatch[1]
+
+  // 智能提取存储名称（第一个路径段）
+  // 例如：/baidu/xxx -> 提取 /baidu，然后得到 /xxx
+  const segments = fullPath.split('/').filter(Boolean)
+  if (segments.length === 0) return '/'
+
+  // 移除第一个路径段（存储名称），得到界面路径
+  const targetPath = '/' + segments.slice(1).join('/')
+
+  return sanitizePath(targetPath)
+}
+
+/**
  * 执行转存
  */
 async function handleTransfer() {
@@ -215,16 +296,12 @@ async function handleTransfer() {
 
         // 跳转到转存路径
         if (result.alistPath) {
-          // 从 Alist URL 中提取路径，例如: https://alist.yangshare.cn/baidu/xxx -> /baidu/xxx
-          const pathMatch = result.alistPath.match(/https?:\/\/[^/]+(\/.*)/)
-          const targetPath = pathMatch ? pathMatch[1] : null
+          const targetPath = extractTargetPath(result.alistPath)
 
-          if (targetPath) {
+          if (targetPath && targetPath !== '/') {
             ElMessage.info('正在跳转到转存目录...')
-            // 先跳转到主页
-            await router.push('/')
-            // 然后导航到目标路径
-            fileStore.navigateTo(targetPath)
+            // 通过路由参数传递目标路径，让主页在加载时直接导航到该路径
+            await router.push(`/?path=${encodeURIComponent(targetPath)}`)
           }
         }
       } else {

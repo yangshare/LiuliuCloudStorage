@@ -31,7 +31,7 @@
               开始转存
             </el-button>
             <el-text type="info" size="small" style="margin-left: 12px;">
-              转存成功后可在 Alist 中访问
+              转存成功后请立即下载，为了保证网盘容量，6小时后会删除。
             </el-text>
           </el-form-item>
         </el-form>

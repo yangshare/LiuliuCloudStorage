@@ -123,7 +123,17 @@ export const useTransferStore = defineStore('transfer', () => {
       })
     } else {
       const content = `${files.length} 个文件下载完成`
-      const lastSavePath = files[files.length - 1].savePath
+      const dirs = files.map(f => (f.savePath || '').replace(/[\\/][^\\/]+$/, '').replace(/\\/g, '/'))
+      const commonDir = dirs.reduce((a, b) => {
+        const pa = a.split('/'), pb = b.split('/')
+        const common: string[] = []
+        for (let i = 0; i < Math.min(pa.length, pb.length); i++) {
+          if (pa[i] === pb[i]) common.push(pa[i])
+          else break
+        }
+        return common.join('/')
+      })
+      const lastSavePath = commonDir.replace(/\//g, '\\')
       window.$notification?.success({
         title,
         content,
@@ -133,9 +143,7 @@ export const useTransferStore = defineStore('transfer', () => {
           {
             onClick: async () => {
               try {
-                const dirPath = lastSavePath.replace(/[/\\][^/\\]+$/, '')
-                const result = await window.electronAPI?.downloadConfig.openDirectory?.() ||
-                  await window.electronAPI?.downloadConfig.openFileDirectory(lastSavePath)
+                const result = await window.electronAPI?.downloadConfig.openFileDirectory(lastSavePath)
                 if (!result?.success) window.$message?.error(result?.error || '无法打开目录')
               } catch (error: any) {
                 window.$message?.error('打开目录失败: ' + error.message)
@@ -676,10 +684,27 @@ export const useTransferStore = defineStore('transfer', () => {
       const result = await window.electronAPI.transfer.clearDownloadQueue?.()
       return result || { success: false, error: '清空队列功能未实现' }
     } catch (error: any) {
-      return {
-        success: false,
-        error: error.message || '清空队列失败'
-      }
+      return { success: false, error: error.message || '清空队列失败' }
+    }
+  }
+
+  // 清空等待中的任务
+  async function clearPendingQueue() {
+    try {
+      const result = await window.electronAPI.transfer.clearPendingQueue?.()
+      return result || { success: false, error: '清空等待队列功能未实现' }
+    } catch (error: any) {
+      return { success: false, error: error.message || '清空等待队列失败' }
+    }
+  }
+
+  // 清空正在下载的任务
+  async function clearActiveQueue() {
+    try {
+      const result = await window.electronAPI.transfer.clearActiveQueue?.()
+      return result || { success: false, error: '清空下载队列功能未实现' }
+    } catch (error: any) {
+      return { success: false, error: error.message || '清空下载队列失败' }
     }
   }
 
@@ -1026,6 +1051,8 @@ export const useTransferStore = defineStore('transfer', () => {
     pauseDownloadQueue,
     resumeDownloadQueue,
     clearDownloadQueue,
+    clearPendingQueue,
+    clearActiveQueue,
     fetchDownloadQueueState,
     startDownload,
     downloadWithSaveAs,

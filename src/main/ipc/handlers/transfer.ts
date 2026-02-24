@@ -138,12 +138,12 @@ export function registerTransferHandlers(): void {
           totalBytes: progress.totalBytes,
           speed: progress.speed
         })
-      }).then(() => {
+      }).then((actualSavePath) => {
         // 下载完成
         _event.sender.send('transfer:download-completed', {
           taskId,
           fileName: downloadResult.fileName,
-          savePath
+          savePath: actualSavePath
         })
       }).catch((error) => {
         // 下载失败
@@ -329,10 +329,21 @@ export function registerTransferHandlers(): void {
         return { success: false, error: downloadResult.error }
       }
 
-      // 确定保存路径
+      // 确定保存路径：保留 remotePath 的目录结构
       const downloadManager = new DownloadManager()
       const defaultPath = downloadManager.getDefaultDownloadPath()
-      const savePath = taskData.savePath || path.join(defaultPath, taskData.fileName)
+      let savePath = taskData.savePath
+      if (!savePath) {
+        const remoteDir = path.posix.dirname(taskData.remotePath)
+        const RESERVED = /^(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])$/i
+        const sanitize = (seg: string) => {
+          let s = seg.replace(/[\\/:*?"<>|]/g, '_').replace(/[\s.]+$/, '')
+          if (RESERVED.test(s)) s = '_' + s
+          return s || '_'
+        }
+        const subDir = remoteDir === '/' ? '' : remoteDir.split('/').filter(Boolean).map(sanitize).join(path.sep)
+        savePath = path.join(defaultPath, subDir, taskData.fileName)
+      }
 
       // 构建完整任务
       const task: DownloadQueueTask = {
@@ -398,6 +409,26 @@ export function registerTransferHandlers(): void {
     }
   })
 
+  // 清空等待中的任务
+  ipcMain.handle('transfer:clearPendingQueue', async () => {
+    try {
+      await downloadQueueManager.clearPendingQueue()
+      return { success: true }
+    } catch (error: any) {
+      return { success: false, error: error.message || '清空等待队列失败' }
+    }
+  })
+
+  // 清空正在下载的任务
+  ipcMain.handle('transfer:clearActiveQueue', async () => {
+    try {
+      await downloadQueueManager.clearActiveQueue()
+      return { success: true }
+    } catch (error: any) {
+      return { success: false, error: error.message || '清空下载队列失败' }
+    }
+  })
+
   // ========== 下载恢复和取消 ==========
 
   // 恢复下载任务（Story 4-5: 下载断点续传）
@@ -406,7 +437,7 @@ export function registerTransferHandlers(): void {
       const downloadManager = new DownloadManager()
 
       // 从数据库获取任务信息，用于发送完整的事件数据
-      const taskInfo = await transferService.getTask(taskId)
+      const taskInfo = await transferService.getTask(Number(taskId))
 
       // 恢复下载
       await downloadManager.resumeDownload(taskId, (progress) => {

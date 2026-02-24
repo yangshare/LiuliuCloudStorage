@@ -3,6 +3,7 @@ import { alistService } from './AlistService'
 import { orchestrationService } from './OrchestrationService'
 import { activityService, ActionType } from './ActivityService'
 import { BrowserWindow } from 'electron'
+import { MAX_CONCURRENT_UPLOADS } from '../../shared/constants'
 
 export interface QueueTask {
   id: number
@@ -20,7 +21,7 @@ type TaskCallback = (taskId: number, progress: number) => void
 class TransferQueueManager {
   private queue: QueueTask[] = []
   private activeCount = 0
-  private readonly MAX_CONCURRENT = 5
+  private maxConcurrent = MAX_CONCURRENT_UPLOADS
   private readonly MAX_RETRIES = 3  // 最大重试次数
   private transferService: TransferService
   private onProgressCallback: TaskCallback | null = null
@@ -42,7 +43,7 @@ class TransferQueueManager {
   }
 
   private async processQueue(): Promise<void> {
-    while (this.activeCount < this.MAX_CONCURRENT && this.queue.length > 0) {
+    while (this.activeCount < this.maxConcurrent && this.queue.length > 0) {
       const task = this.queue.shift()
       if (task) {
         this.activeCount++
@@ -154,7 +155,7 @@ class TransferQueueManager {
     return {
       active: this.activeCount,
       pending: this.queue.length,
-      maxConcurrent: this.MAX_CONCURRENT
+      maxConcurrent: this.maxConcurrent
     }
   }
 

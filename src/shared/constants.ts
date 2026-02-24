@@ -23,7 +23,7 @@ export const QUOTA_CACHE_DURATION = 5 * 60 * 1000
 /**
  * 最大并发上传任务数
  */
-export const MAX_CONCURRENT_UPLOADS = 5
+export const MAX_CONCURRENT_UPLOADS = 10
 
 /**
  * 最大并发下载任务数

@@ -210,7 +210,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Link, Platform, Key } from '@element-plus/icons-vue'
@@ -222,7 +222,8 @@ const authStore = useAuthStore()
 
 // 状态
 const autoStartEnabled = ref(false)
-const notificationsEnabled = ref(true)
+const NOTIFICATIONS_STORAGE_KEY = 'liuliu_notifications_enabled'
+const notificationsEnabled = ref(localStorage.getItem(NOTIFICATIONS_STORAGE_KEY) !== 'false')
 const appVersion = ref('')
 const platformName = ref('')
 const loading = ref(false)
@@ -649,6 +650,10 @@ async function handleSaveServerConfig(): Promise<void> {
 }
 
 // 组件挂载时初始化
+watch(notificationsEnabled, (val) => {
+  localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, String(val))
+})
+
 onMounted(async () => {
   platformName.value = getPlatformName()
   await getAutoStartStatus()

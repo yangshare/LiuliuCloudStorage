@@ -28,6 +28,22 @@
             >
               清空已完成
             </el-button>
+            <el-button
+              size="small"
+              type="danger"
+              :disabled="downloadQueue.length === 0"
+              @click="handleClearPendingQueue"
+            >
+              清空等待
+            </el-button>
+            <el-button
+              size="small"
+              type="danger"
+              :disabled="activeDownloads.length === 0"
+              @click="handleClearActiveQueue"
+            >
+              清空下载中
+            </el-button>
           </el-space>
         </div>
       </template>
@@ -219,6 +235,24 @@ async function handleClearQueue() {
       title: '清空失败',
       message: result.error || '清空下载队列失败'
     })
+  }
+}
+
+async function handleClearPendingQueue() {
+  const result = await transferStore.clearPendingQueue()
+  if (result.success) {
+    ElNotification.success({ title: '已清空', message: '等待中的任务已全部取消' })
+  } else {
+    ElNotification.error({ title: '清空失败', message: result.error || '清空等待队列失败' })
+  }
+}
+
+async function handleClearActiveQueue() {
+  const result = await transferStore.clearActiveQueue()
+  if (result.success) {
+    ElNotification.success({ title: '已清空', message: '下载中的任务已全部取消' })
+  } else {
+    ElNotification.error({ title: '清空失败', message: result.error || '清空下载队列失败' })
   }
 }
 

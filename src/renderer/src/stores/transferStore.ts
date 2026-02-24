@@ -6,6 +6,12 @@ import { useQuotaStore } from './quotaStore'
 
 // ==================== 常量定义 ====================
 
+const NOTIFICATIONS_STORAGE_KEY = 'liuliu_notifications_enabled'
+
+function isNotificationsEnabled(): boolean {
+  return localStorage.getItem(NOTIFICATIONS_STORAGE_KEY) !== 'false'
+}
+
 /**
  * 进度更新节流间隔（毫秒）
  * 用于限制下载/上传进度更新频率，避免 UI 过于频繁刷新
@@ -63,6 +69,102 @@ export const useTransferStore = defineStore('transfer', () => {
   const isUploading = ref<boolean>(false)
   const uploadError = ref<string | null>(null)
   const queueStatus = ref<QueueStatus>({ active: 0, pending: 0, maxConcurrent: 5 })
+
+  // 批量通知状态
+  const pendingUploadNotifications = ref<string[]>([])
+  let uploadNotifyTimer: ReturnType<typeof setTimeout> | null = null
+  const pendingDownloadNotifications = ref<Array<{ fileName: string; savePath: string }>>([])
+  let downloadNotifyTimer: ReturnType<typeof setTimeout> | null = null
+
+  function flushUploadNotifications() {
+    const files = pendingUploadNotifications.value.splice(0)
+    if (files.length === 0 || !isNotificationsEnabled()) return
+    const title = '上传完成'
+    const content = files.length === 1
+      ? `文件 "${files[0]}" 已成功上传`
+      : `${files.length} 个文件上传完成`
+    window.$notification?.success({ title, content, duration: 4000 })
+    window.electronAPI?.notification?.show({ title: '溜溜网盘', body: content })
+  }
+
+  function flushDownloadNotifications() {
+    const files = pendingDownloadNotifications.value.splice(0)
+    if (files.length === 0 || !isNotificationsEnabled()) return
+    const title = '下载完成'
+    if (files.length === 1) {
+      const { fileName, savePath } = files[0]
+      window.$notification?.success({
+        title,
+        content: `文件 "${fileName}" 已成功下载`,
+        duration: 5000,
+        action: () => h(
+          'button',
+          {
+            onClick: async () => {
+              try {
+                const result = await window.electronAPI?.downloadConfig.openFileDirectory(savePath)
+                if (!result?.success) window.$message?.error(result?.error || '无法打开目录')
+              } catch (error: any) {
+                window.$message?.error('打开目录失败: ' + error.message)
+              }
+            },
+            style: {
+              padding: '4px 12px',
+              backgroundColor: '#18a058',
+              color: 'white',
+              border: 'none',
+              borderRadius: '3px',
+              cursor: 'pointer',
+              fontSize: '12px'
+            }
+          },
+          '打开文件夹'
+        )
+      })
+    } else {
+      const content = `${files.length} 个文件下载完成`
+      const dirs = files.map(f => (f.savePath || '').replace(/[\\/][^\\/]+$/, '').replace(/\\/g, '/'))
+      const commonDir = dirs.reduce((a, b) => {
+        const pa = a.split('/'), pb = b.split('/')
+        const common: string[] = []
+        for (let i = 0; i < Math.min(pa.length, pb.length); i++) {
+          if (pa[i] === pb[i]) common.push(pa[i])
+          else break
+        }
+        return common.join('/')
+      })
+      const lastSavePath = commonDir.replace(/\//g, '\\')
+      window.$notification?.success({
+        title,
+        content,
+        duration: 5000,
+        action: () => h(
+          'button',
+          {
+            onClick: async () => {
+              try {
+                const result = await window.electronAPI?.downloadConfig.openFileDirectory(lastSavePath)
+                if (!result?.success) window.$message?.error(result?.error || '无法打开目录')
+              } catch (error: any) {
+                window.$message?.error('打开目录失败: ' + error.message)
+              }
+            },
+            style: {
+              padding: '4px 12px',
+              backgroundColor: '#18a058',
+              color: 'white',
+              border: 'none',
+              borderRadius: '3px',
+              cursor: 'pointer',
+              fontSize: '12px'
+            }
+          },
+          '打开文件夹'
+        )
+      })
+    }
+    window.electronAPI?.notification?.show({ title: '溜溜网盘', body: `${files.length} 个文件下载完成` })
+  }
 
   // Getters
   const pendingUploads = computed(() =>
@@ -223,22 +325,10 @@ export const useTransferStore = defineStore('transfer', () => {
       const quotaStore = useQuotaStore()
       quotaStore.calculateQuota()
 
-      // 显示应用内通知
-      if (window.$notification) {
-        window.$notification.success({
-          title: '上传完成',
-          content: `文件 "${data.fileName}" 已成功上传`,
-          duration: 3000
-        })
-      }
-
-      // Story 8.4: 显示系统通知
-      if (window.electronAPI?.notification?.show) {
-        window.electronAPI.notification.show({
-          title: '溜溜网盘',
-          body: `文件 ${data.fileName} 上传完成`
-        })
-      }
+      // 批量合并上传完成通知
+      pendingUploadNotifications.value.push(data.fileName)
+      if (uploadNotifyTimer) clearTimeout(uploadNotifyTimer)
+      uploadNotifyTimer = setTimeout(flushUploadNotifications, 1500)
     }
   }
 
@@ -250,17 +340,15 @@ export const useTransferStore = defineStore('transfer', () => {
       task.error = data.error
       task.resumable = true  // 失败任务可恢复
 
-      // 显示应用内失败通知
-      const notification = useNotification()
-      notification.error({
-        title: '上传失败',
-        content: `文件 "${data.fileName}" 上传失败：${data.error}`,
-        duration: 5000
-      })
-
-      // Story 8.4: 显示系统失败通知
-      if (window.electronAPI?.notification?.show) {
-        window.electronAPI.notification.show({
+      // 显示应用内失败通知（失败通知不合并，让用户知道哪个失败）
+      if (isNotificationsEnabled()) {
+        const notification = useNotification()
+        notification.error({
+          title: '上传失败',
+          content: `文件 "${data.fileName}" 上传失败：${data.error}`,
+          duration: 5000
+        })
+        window.electronAPI?.notification?.show({
           title: '上传失败',
           body: `文件 ${data.fileName} 上传失败：${data.error}`
         })
@@ -372,24 +460,28 @@ export const useTransferStore = defineStore('transfer', () => {
   if (typeof window !== 'undefined') {
     window.addEventListener('online', async () => {
       isOnline.value = true
-      const notification = useNotification()
-      notification.success({
-        title: '网络已恢复',
-        content: '正在重试失败的上传任务...',
-        duration: 3000
-      })
+      if (isNotificationsEnabled()) {
+        const notification = useNotification()
+        notification.success({
+          title: '网络已恢复',
+          content: '正在重试失败的上传任务...',
+          duration: 3000
+        })
+      }
       // TODO: 这里需要获取用户信息，暂时跳过
       // await autoRetryFailedTasks(userId, userToken, username)
     })
 
     window.addEventListener('offline', () => {
       isOnline.value = false
-      const notification = useNotification()
-      notification.warning({
-        title: '网络已断开',
-        content: '上传任务已暂停，等待网络恢复...',
-        duration: 5000
-      })
+      if (isNotificationsEnabled()) {
+        const notification = useNotification()
+        notification.warning({
+          title: '网络已断开',
+          content: '上传任务已暂停，等待网络恢复...',
+          duration: 5000
+        })
+      }
     })
   }
 
@@ -592,10 +684,27 @@ export const useTransferStore = defineStore('transfer', () => {
       const result = await window.electronAPI.transfer.clearDownloadQueue?.()
       return result || { success: false, error: '清空队列功能未实现' }
     } catch (error: any) {
-      return {
-        success: false,
-        error: error.message || '清空队列失败'
-      }
+      return { success: false, error: error.message || '清空队列失败' }
+    }
+  }
+
+  // 清空等待中的任务
+  async function clearPendingQueue() {
+    try {
+      const result = await window.electronAPI.transfer.clearPendingQueue?.()
+      return result || { success: false, error: '清空等待队列功能未实现' }
+    } catch (error: any) {
+      return { success: false, error: error.message || '清空等待队列失败' }
+    }
+  }
+
+  // 清空正在下载的任务
+  async function clearActiveQueue() {
+    try {
+      const result = await window.electronAPI.transfer.clearActiveQueue?.()
+      return result || { success: false, error: '清空下载队列功能未实现' }
+    } catch (error: any) {
+      return { success: false, error: error.message || '清空下载队列失败' }
     }
   }
 
@@ -716,47 +825,10 @@ export const useTransferStore = defineStore('transfer', () => {
       downloadProgressMap.value.delete(data.taskId)
     }, COMPLETED_TASK_CLEANUP_DELAY_MS)
 
-    // 显示应用内完成通知（带打开文件夹按钮）
-    if (window.$notification) {
-      window.$notification.success({
-        title: '下载完成',
-        content: `文件 "${data.fileName}" 已成功下载到 ${data.savePath}`,
-        duration: 5000,
-        action: () => h(
-          'button',
-          {
-            onClick: async () => {
-              try {
-                const result = await window.electronAPI?.downloadConfig.openFileDirectory(data.savePath)
-                if (!result?.success) {
-                  window.$message?.error(result?.error || '无法打开目录')
-                }
-              } catch (error: any) {
-                window.$message?.error('打开目录失败: ' + error.message)
-              }
-            },
-            style: {
-              padding: '4px 12px',
-              backgroundColor: '#18a058',
-              color: 'white',
-              border: 'none',
-              borderRadius: '3px',
-              cursor: 'pointer',
-              fontSize: '12px'
-            }
-          },
-          '打开文件夹'
-        )
-      })
-    }
-
-    // Story 8.4: 显示系统下载完成通知
-    if (window.electronAPI?.notification?.show) {
-      window.electronAPI.notification.show({
-        title: '溜溜网盘',
-        body: `文件 ${data.fileName} 下载完成`
-      })
-    }
+    // 批量合并下载完成通知
+    pendingDownloadNotifications.value.push({ fileName: data.fileName, savePath: data.savePath })
+    if (downloadNotifyTimer) clearTimeout(downloadNotifyTimer)
+    downloadNotifyTimer = setTimeout(flushDownloadNotifications, 1500)
   }
 
   // 下载失败处理函数
@@ -772,18 +844,14 @@ export const useTransferStore = defineStore('transfer', () => {
       task.status = 'failed'
       task.error = data.error
 
-      // 显示应用内失败通知
-      if (window.$notification) {
-        window.$notification.error({
+      // 显示应用内失败通知（失败通知不合并）
+      if (isNotificationsEnabled()) {
+        window.$notification?.error({
           title: '下载失败',
           content: `文件 "${data.fileName}" 下载失败：${data.error}`,
           duration: 5000
         })
-      }
-
-      // Story 8.4: 显示系统下载失败通知
-      if (window.electronAPI?.notification?.show) {
-        window.electronAPI.notification.show({
+        window.electronAPI?.notification?.show({
           title: '下载失败',
           body: `文件 ${data.fileName} 下载失败：${data.error}`
         })
@@ -983,6 +1051,8 @@ export const useTransferStore = defineStore('transfer', () => {
     pauseDownloadQueue,
     resumeDownloadQueue,
     clearDownloadQueue,
+    clearPendingQueue,
+    clearActiveQueue,
     fetchDownloadQueueState,
     startDownload,
     downloadWithSaveAs,

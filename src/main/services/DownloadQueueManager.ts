@@ -4,6 +4,7 @@ import { alistService } from './AlistService'
 import { activityService, ActionType } from './ActivityService'
 import { loggerService } from './LoggerService'
 import { BrowserWindow } from 'electron'
+import * as fs from 'fs'
 
 export interface DownloadQueueTask {
   id: string
@@ -134,7 +135,7 @@ class DownloadQueueManager {
 
     try {
       // 开始下载(传递 dbId 以避免创建重复的数据库记录)
-      await this.downloadManager.startDownload({ ...task, dbId: task.dbId }, (progress) => {
+      const actualSavePath = await this.downloadManager.startDownload({ ...task, dbId: task.dbId }, (progress) => {
         // 发送进度更新事件
         if (this.onProgressCallback) {
           this.onProgressCallback({
@@ -191,7 +192,7 @@ class DownloadQueueManager {
         win.webContents.send('transfer:download-completed', {
           taskId: task.id,
           fileName: task.fileName,
-          savePath: task.savePath
+          savePath: actualSavePath
         })
       })
 
@@ -373,6 +374,42 @@ class DownloadQueueManager {
       }
     }
 
+    this.emitQueueUpdated()
+  }
+
+  /**
+   * 清空等待中的任务
+   */
+  async clearPendingQueue(): Promise<void> {
+    const tasks = Array.from(this.queue.values())
+    const remotePaths = tasks.map(task => task.remotePath)
+    const taskStatusMap = await this.transferService.getTasksByRemotePaths(remotePaths, 'download')
+
+    for (const task of tasks) {
+      if (this.activeDownloads.has(task.id)) continue
+      const dbTask = taskStatusMap.get(task.remotePath)
+      if (!dbTask || dbTask.status === 'pending') {
+        if (dbTask) await this.transferService.cancelTask(dbTask.id)
+        this.queue.delete(task.id)
+      }
+    }
+    this.emitQueueUpdated()
+  }
+
+  /**
+   * 清空正在下载的任务（中止并从队列移除）
+   */
+  async clearActiveQueue(): Promise<void> {
+    this.downloadManager.abortAllActive()
+    const activeIds = Array.from(this.activeDownloads)
+    for (const taskId of activeIds) {
+      const task = this.queue.get(taskId)
+      if (task?.savePath) {
+        try { fs.unlinkSync(task.savePath) } catch {}
+      }
+      this.activeDownloads.delete(taskId)
+      this.queue.delete(taskId)
+    }
     this.emitQueueUpdated()
   }
 

@@ -36,13 +36,14 @@ export class DownloadManager {
   async startDownload(
     task: DownloadTaskInput,
     onProgress?: (progress: DownloadProgress) => void
-  ): Promise<void> {
+  ): Promise<string> {
     let dbTask: any = null
+    let finalSavePath: string = task.savePath
 
     try {
       loggerService.info('DownloadManager', `[下载] Step 1: 应用日期子目录逻辑`)
       // 应用日期子目录逻辑
-      const finalSavePath = await this.applyDateFolderLogic(task.savePath, task.fileName)
+      finalSavePath = await this.applyDateFolderLogic(task.savePath, task.fileName)
 
       loggerService.info('DownloadManager', `[下载] Step 2: 开始下载任务 - 文件名: ${task.fileName}, URL: ${task.url}`)
 
@@ -161,6 +162,7 @@ export class DownloadManager {
       }
       throw error
     }
+    return finalSavePath
   }
 
   /**
@@ -406,6 +408,16 @@ export class DownloadManager {
   }
 
   /**
+   * 中止所有活跃的网络请求
+   */
+  abortAllActive(): void {
+    for (const [taskId, request] of this.activeRequests) {
+      try { request.destroy() } catch {}
+      this.activeRequests.delete(taskId)
+    }
+  }
+
+  /**
    * 取消下载
    */
   async cancelDownload(taskId: string | number): Promise<void> {
@@ -482,18 +494,22 @@ export class DownloadManager {
       if (config.autoCreateDateFolder) {
         // 生成 YYYY-MM-DD 格式的子目录
         const now = new Date()
-        const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+        const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 
-        // 从 basePath 中提取目录部分(如果 basePath 包含文件名)
-        const baseDir = path.dirname(basePath)
-        const dateFolder = path.join(baseDir, yearMonth)
+        // 日期插在 defaultPath 之后、网盘子目录之前
+        // basePath = defaultPath/subDir/fileName，需要在 defaultPath 后插入日期
+        const defaultPath = this.getDefaultDownloadPath()
+        const subPath = path.relative(defaultPath, path.dirname(basePath))
+        // basePath 不在 defaultPath 下时，不插入日期子目录
+        if (subPath.startsWith('..')) {
+          return path.join(path.dirname(basePath), fileName)
+        }
+        const dateFolder = path.join(defaultPath, dateStr, subPath)
 
-        // 确保日期子目录存在
         if (!fs.existsSync(dateFolder)) {
           fs.mkdirSync(dateFolder, { recursive: true })
         }
 
-        // 返回完整路径
         return path.join(dateFolder, fileName)
       }
 

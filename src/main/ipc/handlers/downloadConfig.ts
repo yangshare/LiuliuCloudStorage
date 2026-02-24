@@ -78,12 +78,19 @@ export function registerDownloadConfigHandlers(): void {
   // 打开文件所在目录
   ipcMain.handle('downloadConfig:openFileDirectory', async (_event, filePath: string) => {
     try {
-      const dirPath = path.dirname(filePath)
+      let dirPath: string
+      try {
+        const stat = await fs.stat(filePath)
+        dirPath = stat.isDirectory() ? filePath : path.dirname(filePath)
+      } catch {
+        dirPath = path.dirname(filePath)
+      }
       await fs.access(dirPath)
-      await shell.openPath(dirPath)
+      const errMsg = await shell.openPath(dirPath)
+      if (errMsg) return { success: false, error: errMsg }
       return { success: true }
-    } catch (error) {
-      return { success: false, error: '目录不存在' }
+    } catch (error: unknown) {
+      return { success: false, error: error instanceof Error ? error.message : '目录不存在' }
     }
   })
 

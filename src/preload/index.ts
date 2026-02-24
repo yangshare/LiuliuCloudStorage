@@ -11,6 +11,7 @@ const validChannels = [
   'transfer:download-progress', 'transfer:download-completed', 'transfer:download-failed', 'transfer:download-cancelled',
   'transfer:initDownloadQueue', 'transfer:queueDownload', 'transfer:getDownloadQueue',
   'transfer:pauseDownloadQueue', 'transfer:resumeDownloadQueue', 'transfer:clearDownloadQueue',
+  'transfer:clearPendingQueue', 'transfer:clearActiveQueue',
   'transfer:resumeDownload', 'transfer:cancelDownload', 'transfer:cancelAllDownloads',
   'transfer:queue-updated',
   'quota:get', 'quota:update', 'quota:calculate', 'quota:admin-update',
@@ -130,6 +131,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('transfer:resumeDownloadQueue'),
     clearDownloadQueue: () =>
       ipcRenderer.invoke('transfer:clearDownloadQueue'),
+    clearPendingQueue: () =>
+      ipcRenderer.invoke('transfer:clearPendingQueue'),
+    clearActiveQueue: () =>
+      ipcRenderer.invoke('transfer:clearActiveQueue'),
     // 恢复和取消下载
     resumeDownload: (taskId: number) =>
       ipcRenderer.invoke('transfer:resumeDownload', { taskId }),

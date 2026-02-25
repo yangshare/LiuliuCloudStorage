@@ -20,7 +20,8 @@ function unwrapListener(callback: Function): Function {
 
 // 允许的 IPC 通道白名单
 const validChannels = [
-  'auth:login', 'auth:logout', 'auth:check-session', 'auth:complete-onboarding', 'auth:get-current-user', 'auth:get-users', 'auth:get-storage-stats',
+  'auth:login', 'auth:logout', 'auth:check-session', 'auth:get-current-user',
+  'auth:get-users', 'auth:get-storage-stats', 'auth:get-login-preferences',
   'file:list', 'file:mkdir', 'file:delete', 'file:batchDelete', 'file:rename', 'file:getAllFilesInDirectory',
   'transfer:upload', 'transfer:download', 'transfer:saveAs', 'transfer:cancel', 'transfer:list', 'transfer:progress',
   'transfer:add-to-queue', 'transfer:queue-status', 'transfer:restore-queue',
@@ -70,10 +71,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     login: (username: string, password: string, autoLogin: boolean = false) => ipcRenderer.invoke('auth:login', username, password, autoLogin),
     logout: () => ipcRenderer.invoke('auth:logout'),
     checkSession: () => ipcRenderer.invoke('auth:check-session'),
-    completeOnboarding: () => ipcRenderer.invoke('auth:complete-onboarding'),
     getCurrentUser: () => ipcRenderer.invoke('auth:get-current-user'),
     getUsers: (params?: { page?: number; pageSize?: number; search?: string }) => ipcRenderer.invoke('auth:get-users', params),
-    getStorageStats: () => ipcRenderer.invoke('auth:get-storage-stats')
+    getStorageStats: () => ipcRenderer.invoke('auth:get-storage-stats'),
+    getLoginPreferences: () => ipcRenderer.invoke('auth:get-login-preferences')
   },
 
   file: {

@@ -49,7 +49,6 @@ export const useAuthStore = defineStore('auth', () => {
   function initUserFromSession(session: {
     valid: boolean
     username?: string
-    onboardingCompleted?: boolean
   }) {
     if (session.valid && session.username) {
       // 使用专门的 API 获取当前用户信息

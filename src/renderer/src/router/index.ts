@@ -20,11 +20,6 @@ const router = createRouter({
       component: () => import('../views/SetupView.vue')
     },
     {
-      path: '/onboarding',
-      name: 'onboarding',
-      component: () => import('../views/OnboardingView.vue')
-    },
-    {
       path: '/admin',
       name: 'admin',
       component: () => import('../views/AdminView.vue'),
@@ -110,11 +105,7 @@ router.beforeEach(async (to) => {
     authStore.initUserFromSession(session)
   }
 
-  // 5. 检查功能引导
-  if (to.path === '/onboarding') return true
-  if (!session.onboardingCompleted) return '/onboarding'
-
-  // 6. 管理员权限检查
+  // 5. 管理员权限检查
   if (to.meta.requiresAdmin) {
     if (!authStore.isAdmin) {
       // 尝试验证管理员权限

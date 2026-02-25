@@ -154,3 +154,6 @@ app/
 
 # Claude Code temporary files
 tmpclaude-*
+
+# Playwright test results
+test-results/

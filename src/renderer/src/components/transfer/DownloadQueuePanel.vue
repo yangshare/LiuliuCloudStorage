@@ -60,19 +60,25 @@
             </el-space>
           </template>
           <el-empty v-if="downloadQueue.length === 0" description="暂无等待任务" />
-          <div v-else class="task-list">
-            <div v-for="task in downloadQueue" :key="task.id" class="task-item">
-              <el-icon :size="20" color="#2080f0">
-                <Clock />
-              </el-icon>
-              <div class="task-content">
-                <div class="task-title">{{ task.fileName }}</div>
-                <el-text type="info" size="small">
-                  {{ formatBytes(task.fileSize) }}
-                </el-text>
+          <template v-else>
+            <div class="task-list">
+              <div v-for="task in pagedPending" :key="task.id" class="task-item">
+                <el-icon :size="20" color="#2080f0"><Clock /></el-icon>
+                <div class="task-content">
+                  <div class="task-title">{{ task.fileName }}</div>
+                  <el-text type="info" size="small">{{ formatBytes(task.fileSize) }}</el-text>
+                </div>
               </div>
             </div>
-          </div>
+            <el-pagination
+              v-if="downloadQueue.length > PAGE_SIZE"
+              v-model:current-page="pendingPage"
+              :page-size="PAGE_SIZE"
+              :total="downloadQueue.length"
+              layout="prev, pager, next"
+              class="task-pagination"
+            />
+          </template>
         </el-tab-pane>
 
         <!-- 下载中 -->
@@ -117,19 +123,25 @@
             </el-space>
           </template>
           <el-empty v-if="completedDownloads.length === 0" description="暂无完成任务" />
-          <div v-else class="task-list">
-            <div v-for="task in completedDownloads" :key="task.id" class="task-item">
-              <el-icon :size="20" color="#67c23a">
-                <Check />
-              </el-icon>
-              <div class="task-content">
-                <div class="task-title">{{ task.fileName }}</div>
-                <el-text type="info" size="small">
-                  {{ formatBytes(task.fileSize) }}
-                </el-text>
+          <template v-else>
+            <div class="task-list">
+              <div v-for="task in pagedCompleted" :key="task.id" class="task-item">
+                <el-icon :size="20" color="#67c23a"><Check /></el-icon>
+                <div class="task-content">
+                  <div class="task-title">{{ task.fileName }}</div>
+                  <el-text type="info" size="small">{{ formatBytes(task.fileSize) }}</el-text>
+                </div>
               </div>
             </div>
-          </div>
+            <el-pagination
+              v-if="completedDownloads.length > PAGE_SIZE"
+              v-model:current-page="completedPage"
+              :page-size="PAGE_SIZE"
+              :total="completedDownloads.length"
+              layout="prev, pager, next"
+              class="task-pagination"
+            />
+          </template>
         </el-tab-pane>
 
         <!-- 失败 -->
@@ -143,19 +155,25 @@
             </el-space>
           </template>
           <el-empty v-if="failedDownloads.length === 0" description="暂无失败任务" />
-          <div v-else class="task-list">
-            <div v-for="task in failedDownloads" :key="task.id" class="task-item">
-              <el-icon :size="20" color="#f56c6c">
-                <CircleClose />
-              </el-icon>
-              <div class="task-content">
-                <div class="task-title">{{ task.fileName }}</div>
-                <el-text type="danger" size="small">
-                  {{ task.error }}
-                </el-text>
+          <template v-else>
+            <div class="task-list">
+              <div v-for="task in pagedFailed" :key="task.id" class="task-item">
+                <el-icon :size="20" color="#f56c6c"><CircleClose /></el-icon>
+                <div class="task-content">
+                  <div class="task-title">{{ task.fileName }}</div>
+                  <el-text type="danger" size="small">{{ task.error }}</el-text>
+                </div>
               </div>
             </div>
-          </div>
+            <el-pagination
+              v-if="failedDownloads.length > PAGE_SIZE"
+              v-model:current-page="failedPage"
+              :page-size="PAGE_SIZE"
+              :total="failedDownloads.length"
+              layout="prev, pager, next"
+              class="task-pagination"
+            />
+          </template>
         </el-tab-pane>
       </el-tabs>
     </el-card>
@@ -163,8 +181,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { ElCard, ElTabs, ElTabPane, ElProgress, ElEmpty, ElButton, ElIcon, ElTag, ElText, ElSpace, ElNotification } from 'element-plus'
+import { computed, ref, watch } from 'vue'
+import { ElCard, ElTabs, ElTabPane, ElProgress, ElEmpty, ElButton, ElIcon, ElTag, ElText, ElSpace, ElNotification, ElPagination } from 'element-plus'
 import { Clock, Download, Check, CircleClose } from '@element-plus/icons-vue'
 import { useTransferStore } from '@/stores/transferStore'
 
@@ -176,6 +194,29 @@ const completedDownloads = computed(() => transferStore.completedDownloads)
 const failedDownloads = computed(() => transferStore.failedDownloads)
 const isDownloadQueuePaused = computed(() => transferStore.isDownloadQueuePaused)
 const downloadProgressMap = computed(() => transferStore.downloadProgressMap)
+
+const PAGE_SIZE = 20
+const pendingPage = ref(1)
+const completedPage = ref(1)
+const failedPage = ref(1)
+
+// 页码越界时修正（避免数据减少后停留在空白页）
+function clampPage(len: number, page: { value: number }) {
+  const max = Math.ceil(len / PAGE_SIZE) || 1
+  if (page.value > max) page.value = max
+}
+watch(() => downloadQueue.value.length, (len) => clampPage(len, pendingPage))
+watch(() => completedDownloads.value.length, (len) => clampPage(len, completedPage))
+watch(() => failedDownloads.value.length, (len) => clampPage(len, failedPage))
+
+function paginate<T>(list: T[], page: number) {
+  const start = (page - 1) * PAGE_SIZE
+  return list.slice(start, start + PAGE_SIZE)
+}
+
+const pagedPending = computed(() => paginate(downloadQueue.value, pendingPage.value))
+const pagedCompleted = computed(() => paginate(completedDownloads.value, completedPage.value))
+const pagedFailed = computed(() => paginate(failedDownloads.value, failedPage.value))
 
 // 从进度 Map 获取任务进度信息
 function getTaskProgress(taskId: string): number {
@@ -450,6 +491,11 @@ function formatSpeed(bytesPerSecond: number): string {
 :deep(.el-progress-bar__inner) {
   background: linear-gradient(90deg, var(--netease-red) 0%, var(--netease-red-light) 100%) !important;
   border-radius: 4px !important;
+}
+
+.task-pagination {
+  margin-top: 12px;
+  justify-content: center;
 }
 
 /* 空状态 */

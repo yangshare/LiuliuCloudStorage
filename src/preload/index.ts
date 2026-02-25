@@ -9,7 +9,7 @@ const validChannels = [
   'transfer:completed', 'transfer:failed', 'transfer:cancelled',
   'transfer:resume', 'transfer:auto-retry-all',
   'transfer:download-progress', 'transfer:download-completed', 'transfer:download-failed', 'transfer:download-cancelled',
-  'transfer:initDownloadQueue', 'transfer:queueDownload', 'transfer:getDownloadQueue',
+  'transfer:initDownloadQueue', 'transfer:queueDownload', 'transfer:batchQueueDownload', 'transfer:getDownloadQueue',
   'transfer:pauseDownloadQueue', 'transfer:resumeDownloadQueue', 'transfer:clearDownloadQueue',
   'transfer:clearPendingQueue', 'transfer:clearActiveQueue',
   'transfer:resumeDownload', 'transfer:cancelDownload', 'transfer:cancelAllDownloads',
@@ -123,6 +123,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('transfer:initDownloadQueue', params),
     queueDownload: (task: { id: string; remotePath: string; fileName: string; savePath?: string; userId: number; userToken: string; username: string; priority?: number }) =>
       ipcRenderer.invoke('transfer:queueDownload', task),
+    batchQueueDownload: (params: { remotePaths: string[] }) =>
+      ipcRenderer.invoke('transfer:batchQueueDownload', params),
     getDownloadQueue: () =>
       ipcRenderer.invoke('transfer:getDownloadQueue'),
     pauseDownloadQueue: () =>

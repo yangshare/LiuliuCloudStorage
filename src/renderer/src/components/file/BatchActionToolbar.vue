@@ -73,23 +73,10 @@ async function handleBatchDownload() {
 
   ElMessage.info(`正在添加 ${totalFiles} 个文件到下载队列...`)
 
-  // 批量添加到下载队列
-  const downloadPromises = filePaths.map(async (remotePath) => {
-    // 从完整路径中提取文件名
-    const fileName = remotePath.split('/').pop() || 'unknown'
-    try {
-      const result = await transferStore.queueDownload(remotePath, fileName)
-      if (result?.success) {
-        successCount++
-      } else {
-        failedCount++
-      }
-    } catch (error) {
-      failedCount++
-    }
-  })
-
-  await Promise.all(downloadPromises)
+  // 使用批量入队：先立即显示在等待列表，再分批获取下载链接
+  const result = await transferStore.batchQueueDownload(filePaths)
+  successCount = result.successCount
+  failedCount = result.failedCount + failedCount
 
   // 清空选中状态
   fileStore.clearSelection()

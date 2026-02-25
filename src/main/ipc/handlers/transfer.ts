@@ -16,9 +16,9 @@ export function registerTransferHandlers(): void {
   // 直接上传（保留原有逻辑，用于单文件上传）
   ipcMain.handle('transfer:upload', async (_event, { filePath, remotePath, userId, userToken, username, localTaskId }) => {
     try {
-      alistService.setToken(userToken)
+      if (userToken) alistService.setToken(userToken)
       alistService.setBasePath('/alist/')
-      alistService.setUserId(userId)
+      if (userId) alistService.setUserId(userId)
 
       const fileStats = fs.statSync(filePath)
       const fileName = path.basename(filePath)
@@ -98,9 +98,9 @@ export function registerTransferHandlers(): void {
   // 下载文件
   ipcMain.handle('transfer:download', async (_event, { remotePath, fileName, userId, userToken, username, savePath: customSavePath }) => {
     try {
-      alistService.setToken(userToken)
+      if (userToken) alistService.setToken(userToken)
       alistService.setBasePath('/alist/')
-      alistService.setUserId(userId)
+      if (userId) alistService.setUserId(userId)
 
       const downloadManager = new DownloadManager()
 
@@ -268,6 +268,9 @@ export function registerTransferHandlers(): void {
   // 初始化下载队列管理器
   ipcMain.handle('transfer:initDownloadQueue', async (_event, { userId, userToken, username }) => {
     try {
+      // 保存凭证供后续下载使用
+      downloadQueueManager.setCredentials(userId, userToken, username)
+
       // 恢复队列中的任务
       const restoredCount = await downloadQueueManager.restoreQueue(userId, userToken, username)
 
@@ -285,87 +288,55 @@ export function registerTransferHandlers(): void {
   // 添加到下载队列
   ipcMain.handle('transfer:queueDownload', async (_event, taskData) => {
     try {
-      console.log('[transfer:queueDownload] 开始处理下载请求')
-
-      // 从后端 session 获取 token（前端传递的 token 可能为空）
       const session = getCurrentSession()
-      console.log('[transfer:queueDownload] Session 状态:', session ? '已登录' : '未登录')
-
       if (!session) {
         return { success: false, error: '用户未登录' }
       }
 
-      const userToken = session.token
-      const username = session.username
-      const userId = session.userId
-
-      console.log('[transfer:queueDownload] 用户信息:', {
-        userId,
-        username,
-        tokenLength: userToken ? userToken.length : 0,
-        tokenPreview: userToken ? userToken.substring(0, 20) + '...' : 'empty'
-      })
-
-      // 获取下载链接
-      alistService.setToken(userToken)
-      // TODO: basePath 应该从用户配置获取，默认使用 /alist/
-      alistService.setBasePath('/alist/')
-      alistService.setUserId(userId)
-
-      console.log('[transfer:queueDownload] AlistService 配置完成，准备获取下载链接')
-      console.log('[transfer:queueDownload] 请求路径:', taskData.remotePath)
-
-      const downloadResult = await alistService.getDownloadUrl(taskData.remotePath)
-
-      console.log('[transfer:queueDownload] 下载链接获取结果:', {
-        success: downloadResult.success,
-        hasRawUrl: !!downloadResult.rawUrl,
-        fileName: downloadResult.fileName,
-        fileSize: downloadResult.fileSize,
-        error: downloadResult.error
-      })
-
-      if (!downloadResult.success) {
-        return { success: false, error: downloadResult.error }
-      }
-
-      // 确定保存路径：保留 remotePath 的目录结构
-      const downloadManager = new DownloadManager()
-      const defaultPath = downloadManager.getDefaultDownloadPath()
-      let savePath = taskData.savePath
-      if (!savePath) {
-        const remoteDir = path.posix.dirname(taskData.remotePath)
-        const RESERVED = /^(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])$/i
-        const sanitize = (seg: string) => {
-          let s = seg.replace(/[\\/:*?"<>|]/g, '_').replace(/[\s.]+$/, '')
-          if (RESERVED.test(s)) s = '_' + s
-          return s || '_'
-        }
-        const subDir = remoteDir === '/' ? '' : remoteDir.split('/').filter(Boolean).map(sanitize).join(path.sep)
-        savePath = path.join(defaultPath, subDir, taskData.fileName)
-      }
-
-      // 构建完整任务
       const task: DownloadQueueTask = {
-        ...taskData,
         id: taskData.id || `download_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        url: downloadResult.rawUrl!,
-        savePath,
-        fileSize: downloadResult.fileSize || taskData.fileSize,
+        fileName: taskData.fileName,
+        fileSize: taskData.fileSize || 0,
+        remotePath: taskData.remotePath,
+        savePath: taskData.savePath,
         priority: taskData.priority || 0,
-        userId,
-        userToken,
-        username
+        userId: session.userId,
+        userToken: session.token,
+        username: session.username
       }
 
-      console.log('[transfer:queueDownload] 构建任务:', { id: task.id, url: task.url?.substring(0, 50) + '...', savePath: task.savePath })
-
-      // 添加到队列
       await downloadQueueManager.addToQueue(task)
 
       return { success: true, taskId: task.id }
     } catch (error: any) {
       return { success: false, error: error.message || '添加到下载队列失败' }
+    }
+  })
+
+  // 批量添加到下载队列
+  ipcMain.handle('transfer:batchQueueDownload', async (_event, { remotePaths }: { remotePaths: string[] }) => {
+    try {
+      const session = getCurrentSession()
+      if (!session) {
+        return { success: false, error: '用户未登录' }
+      }
+
+      const tasks: DownloadQueueTask[] = remotePaths.map((remotePath, i) => ({
+        id: `download_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 9)}`,
+        fileName: remotePath.split('/').pop() || 'unknown',
+        fileSize: 0,
+        remotePath,
+        priority: i,
+        userId: session.userId,
+        userToken: session.token,
+        username: session.username
+      }))
+
+      const dbIds = await downloadQueueManager.addBatchToQueue(tasks)
+
+      return { success: true, successCount: dbIds.length, failedCount: 0 }
+    } catch (error: any) {
+      return { success: false, error: error.message || '批量添加到下载队列失败' }
     }
   })
 

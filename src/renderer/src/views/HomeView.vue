@@ -29,15 +29,10 @@ const showQueueDrawer = ref(false)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
 const uploadQueue = computed(() => transferStore.uploadQueue)
-const downloadQueue = computed(() => transferStore.downloadQueue)
 
-// 计算活跃下载数量（用于徽章显示）
+// 计算待下载+下载中数量（用于徽章显示）
 const activeDownloadsCount = computed(() => {
-  const activeCount = transferStore.activeDownloads.length
-  const pendingCount = transferStore.downloadQueue.filter(
-    t => t.status === 'in_progress' || t.status === 'pending'
-  ).length
-  return activeCount + pendingCount
+  return transferStore.downloadQueue.length + transferStore.activeDownloads.length
 })
 
 const showOverlay = ref(false)

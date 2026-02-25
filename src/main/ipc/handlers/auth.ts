@@ -218,6 +218,9 @@ export function registerAuthHandlers(): void {
           loggerService.info('AuthHandler', `[login] 本地用户ID: ${userId}`)
           saveSession(userId, username, result.token, basePath)
           
+          // 记录最近登录用户名（用于登录页面回填）
+          preferencesService.setValue('last_login_username', username)
+
           // 处理自动登录设置
           if (autoLogin) {
             preferencesService.setValue(`auto_login_${username}`, 'true')
@@ -253,6 +256,24 @@ export function registerAuthHandlers(): void {
     }
   })
 
+  // 获取上次登录的用户名、自动登录状态和密码（用于登录页面回填）
+  ipcMain.handle('auth:get-login-preferences', async () => {
+    const username = preferencesService.getValue('last_login_username')
+    if (!username) return { username: '', password: '', autoLogin: false }
+
+    const autoLogin = preferencesService.getValue(`auto_login_${username}`) === 'true'
+    let password = ''
+    if (autoLogin) {
+      const encrypted = preferencesService.getValue(`auth_password_${username}`)
+      if (encrypted) {
+        try { password = cryptoService.decrypt(encrypted) } catch (e) {
+          loggerService.warn('AuthHandler', `解密登录密码失败: ${e}`)
+        }
+      }
+    }
+    return { username, password, autoLogin }
+  })
+
   ipcMain.handle('auth:logout', async () => {
     const userId = currentSession?.userId
     const username = currentSession?.username
@@ -277,22 +298,10 @@ export function registerAuthHandlers(): void {
     const session = await restoreSession()
     if (!session) return { valid: false }
 
-    const db = getDatabase()
-    const user = db.prepare('SELECT onboarding_completed FROM users WHERE id = ?').get(session.userId) as { onboarding_completed: number } | undefined
-
     return {
       valid: true,
-      username: session.username,
-      onboardingCompleted: user?.onboarding_completed === 1
+      username: session.username
     }
-  })
-
-  ipcMain.handle('auth:complete-onboarding', async () => {
-    if (!currentSession) return { success: false }
-    const db = getDatabase()
-    db.prepare('UPDATE users SET onboarding_completed = 1, updated_at = ? WHERE id = ?')
-      .run(Date.now(), currentSession.userId)
-    return { success: true }
   })
 
   /**

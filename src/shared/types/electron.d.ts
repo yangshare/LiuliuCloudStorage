@@ -37,11 +37,11 @@ export interface ElectronAPI {
   auth: {
     login: (username: string, password: string, autoLogin?: boolean) => Promise<{ success: boolean; message?: string; token?: string }>
     logout: () => Promise<{ success: boolean }>
-    checkSession: () => Promise<{ valid: boolean; username?: string; onboardingCompleted?: boolean }>
-    completeOnboarding: () => Promise<{ success: boolean }>
+    checkSession: () => Promise<{ valid: boolean; username?: string }>
     getCurrentUser: () => Promise<any>
     getUsers: (params?: { page?: number; pageSize?: number; search?: string }) => Promise<any>
     getStorageStats: () => Promise<any>
+    getLoginPreferences: () => Promise<{ username: string; password: string; autoLogin: boolean }>
   }
   file: {
     list: (path: string) => Promise<FileListResult>

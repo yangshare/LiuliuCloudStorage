@@ -8,7 +8,6 @@ export const users = sqliteTable('users', {
   quotaTotal: integer('quota_total').default(10737418240), // 10GB
   quotaUsed: integer('quota_used').default(0),
   isAdmin: integer('is_admin', { mode: 'boolean' }).default(false),
-  onboardingCompleted: integer('onboarding_completed', { mode: 'boolean' }).default(false),
   alistToken: text('alist_token'),
   tokenExpiresAt: integer('token_expires_at', { mode: 'timestamp' }),
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),

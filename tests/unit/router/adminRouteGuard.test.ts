@@ -22,10 +22,9 @@ describe('路由守卫 - 管理员权限控制', () => {
     vi.clearAllMocks()
     setActivePinia(createPinia())
 
-    // 默认mock: 用户已登录且完成引导
+    // 默认mock: 用户已登录
     mockCheckSession.mockResolvedValue({
-      valid: true,
-      onboardingCompleted: true
+      valid: true
     })
   })
 
@@ -78,8 +77,7 @@ describe('路由守卫 - 管理员权限控制', () => {
       const authStore = useAuthStore()
       authStore.user = null
       mockCheckSession.mockResolvedValueOnce({
-        valid: false,
-        onboardingCompleted: false
+        valid: false
       })
 
       // Act

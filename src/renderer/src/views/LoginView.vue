@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
@@ -9,6 +9,19 @@ const router = useRouter()
 const formData = ref({ username: '', password: '' })
 const autoLogin = ref(false)
 const loading = ref(false)
+
+onMounted(async () => {
+  try {
+    const prefs = await window.electronAPI.auth.getLoginPreferences()
+    if (prefs.username) {
+      formData.value.username = prefs.username
+      formData.value.password = prefs.password || ''
+      autoLogin.value = prefs.autoLogin
+    }
+  } catch (e) {
+    console.warn('获取登录偏好失败:', e)
+  }
+})
 
 async function handleLogin() {
   if (!formData.value.username || !formData.value.password) {

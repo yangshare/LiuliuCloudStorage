@@ -15,7 +15,6 @@ CREATE TABLE IF NOT EXISTS users (
   quota_total INTEGER DEFAULT 10737418240,
   quota_used INTEGER DEFAULT 0,
   is_admin INTEGER DEFAULT 0,
-  onboarding_completed INTEGER DEFAULT 0,
   alist_token TEXT,
   token_expires_at INTEGER,
   created_at INTEGER,

@@ -22,10 +22,9 @@ describe('集成测试 - 完整的管理员权限控制流程', () => {
     vi.clearAllMocks()
     setActivePinia(createPinia())
 
-    // 默认mock: 用户已登录且完成引导
+    // 默认mock: 用户已登录
     mockCheckSession.mockResolvedValue({
-      valid: true,
-      onboardingCompleted: true
+      valid: true
     })
   })
 
@@ -96,8 +95,7 @@ describe('集成测试 - 完整的管理员权限控制流程', () => {
       const authStore = useAuthStore()
       authStore.user = null
       mockCheckSession.mockResolvedValue({
-        valid: false,
-        onboardingCompleted: false
+        valid: false
       })
 
       // Act - 尝试访问admin路由

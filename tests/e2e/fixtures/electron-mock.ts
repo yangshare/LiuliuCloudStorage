@@ -21,8 +21,7 @@ window.electronAPI = {
     },
     logout: () => Promise.resolve({ success: true }),
     register: () => Promise.resolve({ success: true }),
-    checkSession: () => Promise.resolve({ valid: true, onboardingCompleted: true, user: { id: 1, username: 'testuser', isAdmin: false } }),
-    completeOnboarding: () => Promise.resolve({ success: true }),
+    checkSession: () => Promise.resolve({ valid: true, user: { id: 1, username: 'testuser', isAdmin: false } }),
     getCurrentUser: () => Promise.resolve({ success: true, user: { id: 1, username: 'testuser', isAdmin: false } }),
     getUsers: () => Promise.resolve({ success: true, users: [] }),
     getStorageStats: () => Promise.resolve({ success: true, stats: { totalQuota: 1000000, usedQuota: 500000 } })

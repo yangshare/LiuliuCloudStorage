@@ -153,31 +153,13 @@ describe('Auto Login Feature', () => {
       })
       mockPreferencesService.getValue.mockReturnValue('true') // auto_login enabled
 
-      // Mock user query for onboarding status
-      mockDb.prepare.mockImplementation((sql) => {
-        if (sql.includes('SELECT onboarding_completed')) {
-          return { get: vi.fn().mockReturnValue({ onboarding_completed: 1 }) }
-        }
-        // Default for session query
-        return {
-           get: vi.fn().mockReturnValue({
-            user_id: 1,
-            token_encrypted: 'encrypted_token',
-            expires_at: Date.now() + 10000,
-            username: 'testuser',
-            base_path: '/'
-          })
-        }
-      })
-
       // Act
       const result = await handlers['auth:check-session']()
 
       // Assert
-      expect(result).toEqual({ 
-        valid: true, 
-        username: 'testuser', 
-        onboardingCompleted: true 
+      expect(result).toEqual({
+        valid: true,
+        username: 'testuser'
       })
       expect(mockAlistService.setToken).toHaveBeenCalledWith('token')
     })
@@ -200,7 +182,6 @@ describe('Auto Login Feature', () => {
         if (sql.includes('SELECT s.user_id')) return sessionQueryMock
         if (sql.includes('DELETE FROM sessions')) return { run: vi.fn() }
         if (sql.includes('INSERT INTO sessions')) return { run: vi.fn() }
-        if (sql.includes('SELECT onboarding_completed')) return { get: vi.fn().mockReturnValue({ onboarding_completed: 1 }) }
         return { get: vi.fn(), run: vi.fn() }
       })
 
@@ -229,10 +210,9 @@ describe('Auto Login Feature', () => {
       // console.log('Logger calls:', mockLoggerService.info.mock.calls)
 
       // Assert
-      expect(result).toEqual({ 
-        valid: true, 
-        username: 'testuser', 
-        onboardingCompleted: true 
+      expect(result).toEqual({
+        valid: true,
+        username: 'testuser'
       })
       
       // Verify decrypt was called

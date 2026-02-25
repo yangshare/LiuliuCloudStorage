@@ -37,6 +37,7 @@ export const useFileStore = defineStore('file', () => {
   const selectedFiles = ref<FileItem[]>([]) // 多选文件列表
   const lastClickedIndex = ref<number>(-1) // 最后点击的文件索引，用于范围选择
   const viewMode = ref<'list' | 'grid'>('list') // 视图模式
+  const searchKeyword = ref('') // 当前目录搜索关键词
   const gridDensity = ref<GridDensity>('comfortable') // 网格密度
 
   // 网络状态监听
@@ -58,12 +59,18 @@ export const useFileStore = defineStore('file', () => {
     })
   })
 
+  const filteredFiles = computed(() => {
+    const kw = searchKeyword.value.trim().toLowerCase()
+    if (!kw) return sortedFiles.value
+    return sortedFiles.value.filter(f => f.name.toLowerCase().includes(kw))
+  })
+
   const isAllSelected = computed(() => {
-    return files.value.length > 0 && selectedFiles.value.length === files.value.length
+    return filteredFiles.value.length > 0 && selectedFiles.value.length === filteredFiles.value.length
   })
 
   const isPartialSelected = computed(() => {
-    return selectedFiles.value.length > 0 && selectedFiles.value.length < files.value.length
+    return selectedFiles.value.length > 0 && selectedFiles.value.length < filteredFiles.value.length
   })
 
   // 网格密度相关计算属性
@@ -79,6 +86,7 @@ export const useFileStore = defineStore('file', () => {
 
   // Actions
   async function fetchFiles(path: string = '/') {
+    searchKeyword.value = ''
     // 防止重复请求
     if (isNavigating.value) {
       return
@@ -228,7 +236,7 @@ export const useFileStore = defineStore('file', () => {
 
     // 使用 Set 优化去重性能
     const selectedNames = new Set(selectedFiles.value.map(f => f.name))
-    const filesToSelect = files.value.slice(start, end + 1)
+    const filesToSelect = filteredFiles.value.slice(start, end + 1)
 
     filesToSelect.forEach(file => {
       if (!selectedNames.has(file.name)) {
@@ -247,7 +255,7 @@ export const useFileStore = defineStore('file', () => {
   }
 
   function selectAll() {
-    selectedFiles.value = [...sortedFiles.value]
+    selectedFiles.value = [...filteredFiles.value]
   }
 
   function deselectAll() {
@@ -293,6 +301,8 @@ export const useFileStore = defineStore('file', () => {
     isLoadingFiles,
     filesError,
     sortedFiles,
+    filteredFiles,
+    searchKeyword,
     selectedFile,
     isOnline,
     cacheTime,

@@ -188,6 +188,10 @@ export function initDatabase(): Database.Database {
   return db
 }
 
+export function isDatabaseOpen(): boolean {
+  return db !== null
+}
+
 export function getDatabase(): Database.Database {
   if (!db) {
     throw new Error('Database not initialized. Call initDatabase() first.')

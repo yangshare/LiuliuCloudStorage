@@ -1,5 +1,23 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+// 回调映射：用于正确移除 IPC 监听器（解决匿名包装函数导致的内存泄漏）
+const listenerMap = new Map<Function, Function>()
+
+function wrapListener(callback: Function): (...args: any[]) => void {
+  const wrapped = (_event: any, ...args: any[]) => (callback as any)(...args)
+  listenerMap.set(callback, wrapped)
+  return wrapped
+}
+
+function unwrapListener(callback: Function): Function {
+  const wrapped = listenerMap.get(callback)
+  if (wrapped) {
+    listenerMap.delete(callback)
+    return wrapped
+  }
+  return callback
+}
+
 // 允许的 IPC 通道白名单
 const validChannels = [
   'auth:login', 'auth:logout', 'auth:check-session', 'auth:complete-onboarding', 'auth:get-current-user', 'auth:get-users', 'auth:get-storage-stats',
@@ -8,7 +26,7 @@ const validChannels = [
   'transfer:add-to-queue', 'transfer:queue-status', 'transfer:restore-queue',
   'transfer:completed', 'transfer:failed', 'transfer:cancelled',
   'transfer:resume', 'transfer:auto-retry-all',
-  'transfer:download-progress', 'transfer:download-completed', 'transfer:download-failed', 'transfer:download-cancelled',
+  'transfer:download-progress', 'transfer:download-completed', 'transfer:download-failed', 'transfer:download-cancelled', 'transfer:download-auth-failed',
   'transfer:initDownloadQueue', 'transfer:queueDownload', 'transfer:batchQueueDownload', 'transfer:getDownloadQueue',
   'transfer:pauseDownloadQueue', 'transfer:resumeDownloadQueue', 'transfer:clearDownloadQueue',
   'transfer:clearPendingQueue', 'transfer:clearActiveQueue',
@@ -40,12 +58,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   on: (channel: string, callback: (...args: unknown[]) => void) => {
     if (validChannels.includes(channel)) {
-      ipcRenderer.on(channel, (_event, ...args) => callback(...args))
+      ipcRenderer.on(channel, wrapListener(callback))
     }
   },
 
   removeListener: (channel: string, callback: (...args: unknown[]) => void) => {
-    ipcRenderer.removeListener(channel, callback as never)
+    ipcRenderer.removeListener(channel, unwrapListener(callback) as never)
   },
 
   auth: {
@@ -70,8 +88,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   transfer: {
     upload: (filePath: string, remotePath: string, userId: number, userToken: string, username: string, localTaskId: string) =>
       ipcRenderer.invoke('transfer:upload', { filePath, remotePath, userId, userToken, username, localTaskId }),
-    download: (remotePath: string, fileName: string, userId: number, userToken: string, username: string) =>
-      ipcRenderer.invoke('transfer:download', { remotePath, fileName, userId, userToken, username }),
+    download: (remotePath: string, fileName: string, userId: number, userToken: string, username: string, savePath?: string) =>
+      ipcRenderer.invoke('transfer:download', { remotePath, fileName, userId, userToken, username, savePath }),
     saveAs: (fileName: string, userId: number) =>
       ipcRenderer.invoke('transfer:saveAs', { fileName, userId }),
     addToQueue: (task: { id: number; filePath: string; remotePath: string; userId: number; userToken: string; username: string; fileName: string; fileSize: number }) =>
@@ -87,37 +105,41 @@ contextBridge.exposeInMainWorld('electronAPI', {
     cancel: (taskId: number) =>
       ipcRenderer.invoke('transfer:cancel', taskId),
     onProgress: (callback: (data: { taskId: string | number, progress: number }) => void) =>
-      ipcRenderer.on('transfer:progress', (_event, data) => callback(data)),
+      ipcRenderer.on('transfer:progress', wrapListener(callback)),
     removeProgressListener: (callback: (data: { taskId: string | number, progress: number }) => void) =>
-      ipcRenderer.removeListener('transfer:progress', callback as never),
+      ipcRenderer.removeListener('transfer:progress', unwrapListener(callback) as never),
     onCompleted: (callback: (data: { taskId: string | number, fileName: string }) => void) =>
-      ipcRenderer.on('transfer:completed', (_event, data) => callback(data)),
+      ipcRenderer.on('transfer:completed', wrapListener(callback)),
     onFailed: (callback: (data: { taskId: string | number, fileName: string, error: string }) => void) =>
-      ipcRenderer.on('transfer:failed', (_event, data) => callback(data)),
+      ipcRenderer.on('transfer:failed', wrapListener(callback)),
     onCancelled: (callback: (data: { taskId: string | number, fileName: string }) => void) =>
-      ipcRenderer.on('transfer:cancelled', (_event, data) => callback(data)),
+      ipcRenderer.on('transfer:cancelled', wrapListener(callback)),
     onDownloadProgress: (callback: (data: { taskId: string, fileName: string, progress: number, downloadedBytes: number, totalBytes: number, speed: number }) => void) =>
-      ipcRenderer.on('transfer:download-progress', (_event, data) => callback(data)),
+      ipcRenderer.on('transfer:download-progress', wrapListener(callback)),
     onDownloadCompleted: (callback: (data: { taskId: string, fileName: string, savePath: string }) => void) =>
-      ipcRenderer.on('transfer:download-completed', (_event, data) => callback(data)),
+      ipcRenderer.on('transfer:download-completed', wrapListener(callback)),
     onDownloadFailed: (callback: (data: { taskId: string, fileName: string, error: string }) => void) =>
-      ipcRenderer.on('transfer:download-failed', (_event, data) => callback(data)),
+      ipcRenderer.on('transfer:download-failed', wrapListener(callback)),
     removeCompletedListener: (callback: (data: { taskId: string | number, fileName: string }) => void) =>
-      ipcRenderer.removeListener('transfer:completed', callback as never),
+      ipcRenderer.removeListener('transfer:completed', unwrapListener(callback) as never),
     removeFailedListener: (callback: (data: { taskId: string | number, fileName: string, error: string }) => void) =>
-      ipcRenderer.removeListener('transfer:failed', callback as never),
+      ipcRenderer.removeListener('transfer:failed', unwrapListener(callback) as never),
     removeCancelledListener: (callback: (data: { taskId: string | number, fileName: string }) => void) =>
-      ipcRenderer.removeListener('transfer:cancelled', callback as never),
+      ipcRenderer.removeListener('transfer:cancelled', unwrapListener(callback) as never),
     removeDownloadProgressListener: (callback: (data: { taskId: string, fileName: string, progress: number, downloadedBytes: number, totalBytes: number, speed: number }) => void) =>
-      ipcRenderer.removeListener('transfer:download-progress', callback as never),
+      ipcRenderer.removeListener('transfer:download-progress', unwrapListener(callback) as never),
     removeDownloadCompletedListener: (callback: (data: { taskId: string, fileName: string, savePath: string }) => void) =>
-      ipcRenderer.removeListener('transfer:download-completed', callback as never),
+      ipcRenderer.removeListener('transfer:download-completed', unwrapListener(callback) as never),
     removeDownloadFailedListener: (callback: (data: { taskId: string, fileName: string, error: string }) => void) =>
-      ipcRenderer.removeListener('transfer:download-failed', callback as never),
+      ipcRenderer.removeListener('transfer:download-failed', unwrapListener(callback) as never),
     onDownloadCancelled: (callback: (data: { taskId: string | number }) => void) =>
-      ipcRenderer.on('transfer:download-cancelled', (_event, data) => callback(data)),
+      ipcRenderer.on('transfer:download-cancelled', wrapListener(callback)),
     removeDownloadCancelledListener: (callback: (data: { taskId: string | number }) => void) =>
-      ipcRenderer.removeListener('transfer:download-cancelled', callback as never),
+      ipcRenderer.removeListener('transfer:download-cancelled', unwrapListener(callback) as never),
+    onDownloadAuthFailed: (callback: (data: { error: string }) => void) =>
+      ipcRenderer.on('transfer:download-auth-failed', wrapListener(callback)),
+    removeDownloadAuthFailedListener: (callback: (data: { error: string }) => void) =>
+      ipcRenderer.removeListener('transfer:download-auth-failed', unwrapListener(callback) as never),
     // 下载队列管理
     initDownloadQueue: (params: { userId: number; userToken: string; username: string }) =>
       ipcRenderer.invoke('transfer:initDownloadQueue', params),
@@ -145,9 +167,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     cancelAllDownloads: (userId: number) =>
       ipcRenderer.invoke('transfer:cancelAllDownloads', { userId }),
     onQueueUpdated: (callback: (data: { pending: any[]; active: any[]; completed: any[]; failed: any[] }) => void) =>
-      ipcRenderer.on('transfer:queue-updated', (_event, data) => callback(data)),
+      ipcRenderer.on('transfer:queue-updated', wrapListener(callback)),
     removeQueueUpdatedListener: (callback: (data: { pending: any[]; active: any[]; completed: any[]; failed: any[] }) => void) =>
-      ipcRenderer.removeListener('transfer:queue-updated', callback as never)
+      ipcRenderer.removeListener('transfer:queue-updated', unwrapListener(callback) as never)
   },
 
   dialog: {
@@ -167,7 +189,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     showWindow: () => ipcRenderer.invoke('tray:show-window'),
     hideWindow: () => ipcRenderer.invoke('tray:hide-window'),
     // Story 8.3: 监听托盘快速上传消息
-    onTrayQuickUpload: (callback: () => void) => ipcRenderer.on('tray-quick-upload', () => callback())
+    onTrayQuickUpload: (callback: () => void) => ipcRenderer.on('tray-quick-upload', wrapListener(callback))
   },
 
   notification: {
@@ -213,15 +235,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     installNow: () => ipcRenderer.invoke('update:install-now'),
     installOnQuit: () => ipcRenderer.invoke('update:install-on-quit'),
     onAvailable: (callback: (info: any) => void) =>
-      ipcRenderer.on('update:available', (_, info) => callback(info)),
+      ipcRenderer.on('update:available', wrapListener(callback)),
     onNotAvailable: (callback: () => void) =>
-      ipcRenderer.on('update:not-available', () => callback()),
+      ipcRenderer.on('update:not-available', wrapListener(callback)),
     onDownloadProgress: (callback: (progress: any) => void) =>
-      ipcRenderer.on('update:download-progress', (_, progress) => callback(progress)),
+      ipcRenderer.on('update:download-progress', wrapListener(callback)),
     onDownloaded: (callback: () => void) =>
-      ipcRenderer.on('update:downloaded', () => callback()),
+      ipcRenderer.on('update:downloaded', wrapListener(callback)),
     onError: (callback: (message: string) => void) =>
-      ipcRenderer.on('update:error', (_, message) => callback(message))
+      ipcRenderer.on('update:error', wrapListener(callback))
   },
 
   shareTransfer: {

@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia'
 import { ref, computed, h } from 'vue'
-import { useNotification, useMessage } from 'naive-ui'
 import { throttle } from 'lodash-es'
 import { useQuotaStore } from './quotaStore'
 
@@ -75,6 +74,8 @@ export const useTransferStore = defineStore('transfer', () => {
   let uploadNotifyTimer: ReturnType<typeof setTimeout> | null = null
   const pendingDownloadNotifications = ref<Array<{ fileName: string; savePath: string }>>([])
   let downloadNotifyTimer: ReturnType<typeof setTimeout> | null = null
+  const pendingDownloadFailNotifications = ref<string[]>([])
+  let downloadFailNotifyTimer: ReturnType<typeof setTimeout> | null = null
 
   function scheduleDownloadNotification() {
     if (downloadNotifyTimer) clearTimeout(downloadNotifyTimer)
@@ -184,6 +185,17 @@ export const useTransferStore = defineStore('transfer', () => {
       })
     }
     window.electronAPI?.notification?.show({ title: '溜溜网盘', body: `${files.length} 个文件下载完成` })
+  }
+
+  function flushDownloadFailNotifications() {
+    const files = pendingDownloadFailNotifications.value.splice(0)
+    if (files.length === 0 || !isNotificationsEnabled()) return
+    const title = '下载失败'
+    const content = files.length === 1
+      ? `文件 "${files[0]}" 下载失败`
+      : `${files.length} 个文件下载失败`
+    window.$notification?.error({ title, content, duration: 5000 })
+    window.electronAPI?.notification?.show({ title, body: content })
   }
 
   // Getters
@@ -362,8 +374,7 @@ export const useTransferStore = defineStore('transfer', () => {
 
       // 显示应用内失败通知（失败通知不合并，让用户知道哪个失败）
       if (isNotificationsEnabled()) {
-        const notification = useNotification()
-        notification.error({
+        window.$notification?.error({
           title: '上传失败',
           content: `文件 "${data.fileName}" 上传失败：${data.error}`,
           duration: 5000
@@ -433,6 +444,9 @@ export const useTransferStore = defineStore('transfer', () => {
     if (typeof window !== 'undefined' && window.electronAPI?.transfer?.removeDownloadCancelledListener) {
       window.electronAPI.transfer.removeDownloadCancelledListener(downloadCancelledHandler)
     }
+    if (typeof window !== 'undefined' && window.electronAPI?.transfer?.removeDownloadAuthFailedListener) {
+      window.electronAPI.transfer.removeDownloadAuthFailedListener(downloadAuthFailedHandler)
+    }
   }
 
   // 恢复单个上传任务
@@ -481,8 +495,7 @@ export const useTransferStore = defineStore('transfer', () => {
     window.addEventListener('online', async () => {
       isOnline.value = true
       if (isNotificationsEnabled()) {
-        const notification = useNotification()
-        notification.success({
+        window.$notification?.success({
           title: '网络已恢复',
           content: '正在重试失败的上传任务...',
           duration: 3000
@@ -495,8 +508,7 @@ export const useTransferStore = defineStore('transfer', () => {
     window.addEventListener('offline', () => {
       isOnline.value = false
       if (isNotificationsEnabled()) {
-        const notification = useNotification()
-        notification.warning({
+        window.$notification?.warning({
           title: '网络已断开',
           content: '上传任务已暂停，等待网络恢复...',
           duration: 5000
@@ -570,8 +582,9 @@ export const useTransferStore = defineStore('transfer', () => {
   // 获取总下载速度
   const totalDownloadSpeed = computed(() => {
     const progressArray = Array.from(downloadProgressMap.value.values())
-    const totalSpeed = progressArray.reduce((sum, p) => sum + p.speed, 0)
-    return totalSpeed
+    return progressArray
+      .filter(p => p.status === 'in_progress')
+      .reduce((sum, p) => sum + p.speed, 0)
   })
 
   // 获取总下载进度百分比
@@ -642,7 +655,7 @@ export const useTransferStore = defineStore('transfer', () => {
       const userToken = authStore.user.token
       const username = authStore.user.username
 
-      const taskId = `download_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      const taskId = `download_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
 
       const result = await window.electronAPI.transfer.queueDownload?.({
         id: taskId,
@@ -814,18 +827,10 @@ export const useTransferStore = defineStore('transfer', () => {
     // 清理进度数据
     downloadProgressMap.value.delete(data.taskId)
 
-    // 显示应用内失败通知（失败通知不合并）
-    if (isNotificationsEnabled()) {
-      window.$notification?.error({
-        title: '下载失败',
-        content: `文件 "${data.fileName}" 下载失败：${data.error}`,
-        duration: 5000
-      })
-      window.electronAPI?.notification?.show({
-        title: '下载失败',
-        body: `文件 ${data.fileName} 下载失败：${data.error}`
-      })
-    }
+    // 批量合并失败通知
+    pendingDownloadFailNotifications.value.push(data.fileName)
+    if (downloadFailNotifyTimer) clearTimeout(downloadFailNotifyTimer)
+    downloadFailNotifyTimer = setTimeout(flushDownloadFailNotifications, 1500)
   }
 
   // 下载取消处理函数
@@ -855,6 +860,21 @@ export const useTransferStore = defineStore('transfer', () => {
 
   if (typeof window !== 'undefined' && window.electronAPI?.transfer?.onDownloadCancelled) {
     window.electronAPI.transfer.onDownloadCancelled(downloadCancelledHandler)
+  }
+
+  // 认证失败处理：Alist token 过期时显示一次性通知
+  const downloadAuthFailedHandler = (data: { error: string } | undefined) => {
+    if (!data) return
+    isDownloadQueuePaused.value = true
+    window.$notification?.error({
+      title: 'Alist 认证失效',
+      content: data.error,
+      duration: 0  // 不自动关闭
+    })
+  }
+
+  if (typeof window !== 'undefined' && window.electronAPI?.transfer?.onDownloadAuthFailed) {
+    window.electronAPI.transfer.onDownloadAuthFailed(downloadAuthFailedHandler)
   }
 
   // ========== 另存为下载 ==========

@@ -42,6 +42,7 @@ class DownloadQueueManager {
   private userId: number = 0
   private userToken: string = ''
   private username: string = ''
+  private authFailedNotified: boolean = false  // 防止重复发送认证失败通知
 
   constructor() {
     this.transferService = new TransferService()
@@ -247,14 +248,16 @@ class DownloadQueueManager {
         // 发送进度到渲染进程
         const windows = BrowserWindow.getAllWindows()
         windows.forEach(win => {
-          win.webContents.send('transfer:download-progress', {
-            taskId: task.id,
-            fileName: task.fileName,
-            progress: progress.percentage,
-            downloadedBytes: progress.downloadedBytes,
-            totalBytes: progress.totalBytes,
-            speed: progress.speed
-          })
+          if (win && !win.isDestroyed()) {
+            win.webContents.send('transfer:download-progress', {
+              taskId: task.id,
+              fileName: task.fileName,
+              progress: progress.percentage,
+              downloadedBytes: progress.downloadedBytes,
+              totalBytes: progress.totalBytes,
+              speed: progress.speed
+            })
+          }
         })
       })
 
@@ -288,20 +291,40 @@ class DownloadQueueManager {
       // 发送完成事件
       const windows = BrowserWindow.getAllWindows()
       windows.forEach(win => {
-        win.webContents.send('transfer:download-completed', {
-          taskId: task.id,
-          fileName: task.fileName,
-          savePath: actualSavePath
-        })
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('transfer:download-completed', {
+            taskId: task.id,
+            fileName: task.fileName,
+            savePath: actualSavePath
+          })
+        }
       })
 
       // 处理队列中的下一个任务
       await this.processQueue()
 
     } catch (error: any) {
-      // 下载失败 - DownloadManager 已经标记了失败状态
       // 从活跃集合移除
       this.activeDownloads.delete(task.id)
+
+      // 检测认证失败（401 / Guest user），暂停队列避免大量弹窗
+      const errMsg: string = error.message || ''
+      const isAuthError = errMsg.includes('401') || errMsg.toLowerCase().includes('guest user')
+      if (isAuthError && !this.authFailedNotified) {
+        this.authFailedNotified = true
+        this.pauseQueue()
+        loggerService.error('DownloadQueueManager', 'Alist 认证失效，已暂停下载队列')
+
+        // 只发一次认证失败通知
+        const windows = BrowserWindow.getAllWindows()
+        windows.forEach(win => {
+          if (win && !win.isDestroyed()) {
+            win.webContents.send('transfer:download-auth-failed', {
+              error: 'Alist 登录已过期，请重新登录后恢复下载'
+            })
+          }
+        })
+      }
 
       // 通知前端队列状态变更
       this.emitQueueUpdated()
@@ -309,15 +332,19 @@ class DownloadQueueManager {
       // 发送失败事件
       const windows = BrowserWindow.getAllWindows()
       windows.forEach(win => {
-        win.webContents.send('transfer:download-failed', {
-          taskId: task.id,
-          fileName: task.fileName,
-          error: error.message
-        })
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('transfer:download-failed', {
+            taskId: task.id,
+            fileName: task.fileName,
+            error: isAuthError ? 'Alist 登录已过期' : errMsg
+          })
+        }
       })
 
-      // 处理队列中的下一个任务
-      await this.processQueue()
+      // 仅非认证错误时继续处理队列
+      if (!isAuthError) {
+        await this.processQueue()
+      }
     }
   }
 
@@ -467,14 +494,17 @@ class DownloadQueueManager {
     const remotePaths = tasks.map(task => task.remotePath)
     const taskStatusMap = await this.transferService.getTasksByRemotePaths(remotePaths, 'download')
 
+    const dbIdsToCancel: number[] = []
     for (const task of tasks) {
       if (this.activeDownloads.has(task.id)) continue
       const dbTask = taskStatusMap.get(task.remotePath)
       if (!dbTask || dbTask.status === 'pending') {
-        if (dbTask) await this.transferService.cancelTask(dbTask.id)
+        if (dbTask) dbIdsToCancel.push(dbTask.id)
         this.queue.delete(task.id)
       }
     }
+    // 同时清理数据库中残留的 pending 下载记录（应用异常退出时可能遗留）
+    await this.transferService.cancelAllIncompleteDownloads()
     this.emitQueueUpdated()
   }
 
@@ -483,15 +513,17 @@ class DownloadQueueManager {
    */
   async clearActiveQueue(): Promise<void> {
     this.downloadManager.abortAllActive()
-    const activeIds = Array.from(this.activeDownloads)
-    for (const taskId of activeIds) {
+    for (const taskId of this.activeDownloads) {
       const task = this.queue.get(taskId)
       if (task?.savePath) {
-        try { fs.unlinkSync(task.savePath) } catch {}
+        try { fs.unlinkSync(task.savePath) } catch (e: any) {
+          if (e?.code !== 'ENOENT') loggerService.error('DownloadQueueManager', `清理文件失败: ${task.savePath} - ${e}`)
+        }
       }
-      this.activeDownloads.delete(taskId)
       this.queue.delete(taskId)
     }
+    this.activeDownloads.clear()
+    await this.transferService.cancelAllIncompleteDownloads()
     this.emitQueueUpdated()
   }
 
@@ -506,6 +538,7 @@ class DownloadQueueManager {
    * 恢复队列
    */
   resumeQueue(): void {
+    this.authFailedNotified = false
     this.maxConcurrent = MAX_CONCURRENT_DOWNLOADS
     this.processQueue()
   }

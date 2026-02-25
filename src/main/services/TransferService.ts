@@ -1,6 +1,6 @@
 import { getDatabase } from '../database'
 import { transferQueue, type TransferQueue, type NewTransferQueue } from '../database/schema'
-import { eq, and, or } from 'drizzle-orm'
+import { eq, and, or, inArray } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 
 export class TransferService {
@@ -202,6 +202,14 @@ export class TransferService {
         updatedAt: new Date()
       })
       .where(eq(transferQueue.id, taskId))
+      .run()
+  }
+
+  async cancelTasks(taskIds: number[]): Promise<void> {
+    if (taskIds.length === 0) return
+    this.db.update(transferQueue)
+      .set({ status: 'cancelled', updatedAt: new Date() })
+      .where(inArray(transferQueue.id, taskIds))
       .run()
   }
 

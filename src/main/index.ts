@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu } from 'electron'
+import { app, BrowserWindow, Menu, nativeTheme } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
 
@@ -109,6 +109,9 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
+  // 强制使用 light 主题，不跟随系统
+  nativeTheme.themeSource = 'light'
+
   // 移除默认菜单栏
   Menu.setApplicationMenu(null)
 

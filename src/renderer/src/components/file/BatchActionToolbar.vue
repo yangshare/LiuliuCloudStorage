@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { ElText, ElButton, ElIcon, ElDialog, ElSpace, ElMessage } from 'element-plus'
-import { Download, Delete, Refresh } from '@element-plus/icons-vue'
+import { ElText, ElButton, ElIcon, ElDialog, ElSpace, ElMessage, ElInput } from 'element-plus'
+import { Download, Delete, Refresh, Search } from '@element-plus/icons-vue'
 import { useFileStore } from '../../stores/fileStore'
 import { useTransferStore } from '../../stores/transferStore'
 
@@ -75,8 +75,8 @@ async function handleBatchDownload() {
 
   // 使用批量入队：先立即显示在等待列表，再分批获取下载链接
   const result = await transferStore.batchQueueDownload(filePaths)
-  successCount = result.successCount
-  failedCount = result.failedCount + failedCount
+  successCount = result.successCount ?? 0
+  failedCount = (result.failedCount ?? 0) + failedCount
 
   // 清空选中状态
   fileStore.clearSelection()
@@ -150,21 +150,31 @@ function getDeleteConfirmContent() {
 </script>
 
 <template>
-  <el-space v-if="fileStore.selectedFiles.length > 0" align="center" class="batch-toolbar" :size="8">
-    <el-text>已选择 {{ fileStore.selectedFiles.length }} 项</el-text>
-    <el-button @click="handleBatchDownload" :icon="Download">
-      批量下载
-    </el-button>
-    <!-- 批量删除功能暂不开放
-    <el-button type="danger" @click="handleBatchDelete" :icon="Delete">
-      批量删除
-    </el-button>
-    -->
-    <el-button @click="handleInvertSelection" :icon="Refresh">
-      反选
-    </el-button>
-    <el-button @click="handleCancelSelection">取消选择</el-button>
-  </el-space>
+  <div class="batch-toolbar-wrapper">
+    <el-space v-if="fileStore.selectedFiles.length > 0" align="center" :size="8">
+      <el-text>已选择 {{ fileStore.selectedFiles.length }} 项</el-text>
+      <el-button @click="handleBatchDownload" :icon="Download">
+        批量下载
+      </el-button>
+      <!-- 批量删除功能暂不开放
+      <el-button type="danger" @click="handleBatchDelete" :icon="Delete">
+        批量删除
+      </el-button>
+      -->
+      <el-button @click="handleInvertSelection" :icon="Refresh">
+        反选
+      </el-button>
+      <el-button @click="handleCancelSelection">取消选择</el-button>
+    </el-space>
+    <div class="batch-toolbar-spacer"></div>
+    <el-input
+      v-model="fileStore.searchKeyword"
+      class="search-input"
+      placeholder="搜索当前目录"
+      clearable
+      :prefix-icon="Search"
+    />
+  </div>
 
   <!-- 批量删除确认对话框 -->
   <el-dialog
@@ -182,10 +192,18 @@ function getDeleteConfirmContent() {
 </template>
 
 <style scoped>
-.batch-toolbar {
-  padding: 8px 16px;
-  background-color: var(--el-fill-color-light);
-  border-radius: 4px;
+.batch-toolbar-wrapper {
+  display: flex;
+  align-items: center;
+  padding: 8px 0;
   margin-bottom: 8px;
+}
+
+.batch-toolbar-spacer {
+  flex: 1;
+}
+
+.search-input {
+  width: 180px;
 }
 </style>

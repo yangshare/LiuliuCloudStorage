@@ -1,4 +1,4 @@
-import { getDatabase } from '../database'
+import { getDatabase, isDatabaseOpen } from '../database'
 import { transferQueue, type TransferQueue, type NewTransferQueue } from '../database/schema'
 import { eq, and, or, inArray } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
@@ -25,6 +25,7 @@ export class TransferService {
   }
 
   async updateProgress(taskId: number, transferredSize: number): Promise<void> {
+    if (!isDatabaseOpen()) return
     this.db.update(transferQueue)
       .set({ transferredSize, updatedAt: new Date() })
       .where(eq(transferQueue.id, taskId))
@@ -153,14 +154,18 @@ export class TransferService {
   }
 
   /**
-   * 根据远程路径获取任务
+   * 根据远程路径获取未完成的任务（pending 或 in_progress）
    */
   async getTaskByRemotePath(remotePath: string, taskType: 'upload' | 'download'): Promise<TransferQueue | undefined> {
     return this.db.select()
       .from(transferQueue)
       .where(and(
         eq(transferQueue.remotePath, remotePath),
-        eq(transferQueue.taskType, taskType)
+        eq(transferQueue.taskType, taskType),
+        or(
+          eq(transferQueue.status, 'pending'),
+          eq(transferQueue.status, 'in_progress')
+        )
       ))
       .get()
   }
@@ -233,13 +238,11 @@ export class TransferService {
       return new Map()
     }
 
-    // 使用 or 条件批量查询
     const tasks = this.db.select()
       .from(transferQueue)
       .where(and(
         eq(transferQueue.taskType, taskType),
-        // eslint-disable-next-line
-        or(...remotePaths.map(path => eq(transferQueue.remotePath, path)))
+        inArray(transferQueue.remotePath, remotePaths)
       ))
       .all()
 
@@ -250,6 +253,22 @@ export class TransferService {
     }
 
     return taskMap
+  }
+
+  /**
+   * 取消所有未完成的下载任务（包括数据库中残留的）
+   */
+  async cancelAllIncompleteDownloads(): Promise<void> {
+    this.db.update(transferQueue)
+      .set({ status: 'cancelled', updatedAt: new Date() })
+      .where(and(
+        eq(transferQueue.taskType, 'download'),
+        or(
+          eq(transferQueue.status, 'pending'),
+          eq(transferQueue.status, 'in_progress')
+        )
+      ))
+      .run()
   }
 
   /**

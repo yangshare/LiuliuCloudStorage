@@ -379,7 +379,7 @@ async function handleDownloadToPath(savePath: string) {
       <el-button size="small" @click="handleRetry">重试</el-button>
     </el-alert>
 
-    <el-empty v-if="fileStore.sortedFiles.length === 0 && !fileStore.isLoadingFiles" description="暂无文件" />
+    <el-empty v-if="fileStore.filteredFiles.length === 0 && !fileStore.isLoadingFiles" description="暂无文件" />
 
     <!-- 列表视图 -->
     <div v-else-if="fileStore.viewMode === 'list'" class="list-view">
@@ -400,7 +400,7 @@ async function handleDownloadToPath(savePath: string) {
       </div>
 
       <div
-        v-for="(file, index) in fileStore.sortedFiles"
+        v-for="(file, index) in fileStore.filteredFiles"
         :key="file.name"
         class="list-item"
         :class="{ 'selected': fileStore.isSelected(file), 'is-dir': file.isDir }"
@@ -478,7 +478,7 @@ async function handleDownloadToPath(savePath: string) {
       </div>
 
       <div
-        v-for="(file, index) in fileStore.sortedFiles"
+        v-for="(file, index) in fileStore.filteredFiles"
         :key="file.name"
         class="grid-item"
         :class="{ 'selected': fileStore.isSelected(file), 'is-dir': file.isDir }"

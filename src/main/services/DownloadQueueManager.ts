@@ -503,7 +503,8 @@ class DownloadQueueManager {
         this.queue.delete(task.id)
       }
     }
-    await this.transferService.cancelTasks(dbIdsToCancel)
+    // 同时清理数据库中残留的 pending 下载记录（应用异常退出时可能遗留）
+    await this.transferService.cancelAllIncompleteDownloads()
     this.emitQueueUpdated()
   }
 
@@ -512,17 +513,17 @@ class DownloadQueueManager {
    */
   async clearActiveQueue(): Promise<void> {
     this.downloadManager.abortAllActive()
-    const activeIds = Array.from(this.activeDownloads)
-    for (const taskId of activeIds) {
+    for (const taskId of this.activeDownloads) {
       const task = this.queue.get(taskId)
       if (task?.savePath) {
-        try { fs.unlinkSync(task.savePath) } catch (e) {
-          loggerService.error('DownloadQueueManager', `清理文件失败: ${task.savePath} - ${e}`)
+        try { fs.unlinkSync(task.savePath) } catch (e: any) {
+          if (e?.code !== 'ENOENT') loggerService.error('DownloadQueueManager', `清理文件失败: ${task.savePath} - ${e}`)
         }
       }
-      this.activeDownloads.delete(taskId)
       this.queue.delete(taskId)
     }
+    this.activeDownloads.clear()
+    await this.transferService.cancelAllIncompleteDownloads()
     this.emitQueueUpdated()
   }
 

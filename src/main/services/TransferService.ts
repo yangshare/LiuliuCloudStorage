@@ -13,6 +13,10 @@ export class TransferService {
     return result
   }
 
+  async createBatch(tasks: NewTransferQueue[]): Promise<TransferQueue[]> {
+    return this.db.insert(transferQueue).values(tasks).returning().all()
+  }
+
   async updateStatus(taskId: number, status: string): Promise<void> {
     this.db.update(transferQueue)
       .set({ status, updatedAt: new Date() })

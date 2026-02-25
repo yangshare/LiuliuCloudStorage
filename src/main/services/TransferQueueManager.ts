@@ -57,9 +57,13 @@ class TransferQueueManager {
       await this.transferService.updateStatus(task.id, 'in_progress')
 
       // 配置 AlistService
-      alistService.setToken(task.userToken)
+      if (task.userToken) {
+        alistService.setToken(task.userToken)
+      }
       alistService.setBasePath('/alist/')
-      alistService.setUserId(task.userId)
+      if (task.userId) {
+        alistService.setUserId(task.userId)
+      }
 
       // 获取任务信息（支持断点续传）
       const taskInfo = await this.transferService.getTask(task.id)

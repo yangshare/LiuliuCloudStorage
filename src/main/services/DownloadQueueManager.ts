@@ -1,15 +1,17 @@
 import { TransferService } from './TransferService'
-import { DownloadManager, type DownloadProgress } from './DownloadManager'
+import { DownloadManager } from './DownloadManager'
 import { alistService } from './AlistService'
 import { activityService, ActionType } from './ActivityService'
 import { loggerService } from './LoggerService'
 import { BrowserWindow } from 'electron'
 import * as fs from 'fs'
+import * as path from 'path'
+import { MAX_CONCURRENT_DOWNLOADS } from '../../shared/constants'
 
 export interface DownloadQueueTask {
   id: string
-  url: string
-  savePath: string
+  url?: string
+  savePath?: string
   fileName: string
   fileSize: number
   userId: number
@@ -33,10 +35,13 @@ class DownloadQueueManager {
   private queue: Map<string, DownloadQueueTask> = new Map()
   private activeDownloads: Set<string> = new Set()
   private recentlyCompleted: Set<string> = new Set()  // 跟踪最近完成的任务
-  private maxConcurrent: number = 5
+  private maxConcurrent: number = MAX_CONCURRENT_DOWNLOADS
   private transferService: TransferService
   private downloadManager: DownloadManager
   private onProgressCallback: DownloadProgressCallback | null = null
+  private userId: number = 0
+  private userToken: string = ''
+  private username: string = ''
 
   constructor() {
     this.transferService = new TransferService()
@@ -47,16 +52,41 @@ class DownloadQueueManager {
     this.onProgressCallback = callback
   }
 
+  setCredentials(userId: number, userToken: string, username: string): void {
+    this.userId = userId
+    this.userToken = userToken
+    this.username = username
+  }
+
+  /**
+   * 检查 remotePath 是否已在队列中（内存或数据库中有未完成的任务）
+   */
+  private async isDuplicate(remotePath: string): Promise<boolean> {
+    // 检查内存队列
+    for (const t of this.queue.values()) {
+      if (t.remotePath === remotePath) return true
+    }
+    // 检查数据库中未完成的任务
+    const existing = await this.transferService.getTaskByRemotePath(remotePath, 'download')
+    return !!existing && (existing.status === 'pending' || existing.status === 'in_progress')
+  }
+
   /**
    * 添加下载任务到队列
    */
   async addToQueue(task: DownloadQueueTask): Promise<number> {
+    // 去重检查
+    if (await this.isDuplicate(task.remotePath)) {
+      loggerService.info('DownloadQueueManager', `跳过重复任务: ${task.fileName} (${task.remotePath})`)
+      return -1
+    }
+
     // 创建数据库记录
     const dbTask = await this.transferService.create({
       userId: task.userId,
       taskType: 'download',
       fileName: task.fileName,
-      filePath: task.savePath,
+      filePath: task.savePath || '',
       remotePath: task.remotePath,
       fileSize: task.fileSize,
       status: 'pending',
@@ -77,6 +107,41 @@ class DownloadQueueManager {
     this.emitQueueUpdated()
 
     return dbTask.id
+  }
+
+  /**
+   * 批量添加下载任务到队列
+   */
+  async addBatchToQueue(tasks: DownloadQueueTask[]): Promise<number[]> {
+    // 批量去重：过滤掉已在队列中的任务
+    const uniqueTasks: DownloadQueueTask[] = []
+    for (const task of tasks) {
+      if (!(await this.isDuplicate(task.remotePath))) {
+        uniqueTasks.push(task)
+      } else {
+        loggerService.info('DownloadQueueManager', `跳过重复任务: ${task.fileName} (${task.remotePath})`)
+      }
+    }
+    if (uniqueTasks.length === 0) return []
+
+    const records = uniqueTasks.map(task => ({
+      userId: task.userId,
+      taskType: 'download' as const,
+      fileName: task.fileName,
+      filePath: task.savePath || '',
+      remotePath: task.remotePath,
+      fileSize: task.fileSize,
+      status: 'pending' as const,
+      transferredSize: 0,
+      resumable: false
+    }))
+    const dbTasks = await this.transferService.createBatch(records)
+    dbTasks.forEach((dbTask, i) => {
+      this.queue.set(uniqueTasks[i].id, { ...uniqueTasks[i], dbId: dbTask.id })
+    })
+    await this.processQueue()
+    this.emitQueueUpdated()
+    return dbTasks.map(t => t.id)
   }
 
   /**
@@ -119,7 +184,7 @@ class DownloadQueueManager {
 
     for (let i = 0; i < Math.min(slotsAvailable, pendingTasks.length); i++) {
       const task = pendingTasks[i]
-      await this.startDownload(task)
+      this.startDownload(task)
     }
   }
 
@@ -134,8 +199,39 @@ class DownloadQueueManager {
     this.emitQueueUpdated()
 
     try {
+      // 获取下载链接（如果还没有）
+      if (!task.url) {
+        if (this.userToken) {
+          alistService.setToken(this.userToken)
+        }
+        alistService.setBasePath('/alist/')
+        if (this.userId) {
+          alistService.setUserId(this.userId)
+        }
+        const dlResult = await alistService.getDownloadUrl(task.remotePath)
+        if (!dlResult.success || !dlResult.rawUrl) {
+          throw new Error(dlResult.error || '获取下载链接失败')
+        }
+        task.url = dlResult.rawUrl
+        task.fileSize = dlResult.fileSize || task.fileSize
+      }
+
+      // 计算 savePath（如果还没有）
+      if (!task.savePath) {
+        const defaultPath = this.downloadManager.getDefaultDownloadPath()
+        const remoteDir = path.posix.dirname(task.remotePath)
+        const RESERVED = /^(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])$/i
+        const sanitize = (seg: string) => {
+          let s = seg.replace(/[\\/:*?"<>|]/g, '_').replace(/[\s.]+$/, '')
+          if (RESERVED.test(s)) s = '_' + s
+          return s || '_'
+        }
+        const subDir = remoteDir === '/' ? '' : remoteDir.split('/').filter(Boolean).map(sanitize).join(path.sep)
+        task.savePath = path.join(defaultPath, subDir, task.fileName)
+      }
+
       // 开始下载(传递 dbId 以避免创建重复的数据库记录)
-      const actualSavePath = await this.downloadManager.startDownload({ ...task, dbId: task.dbId }, (progress) => {
+      const actualSavePath = await this.downloadManager.startDownload({ ...task, url: task.url!, savePath: task.savePath!, dbId: task.dbId }, (progress) => {
         // 发送进度更新事件
         if (this.onProgressCallback) {
           this.onProgressCallback({
@@ -176,6 +272,9 @@ class DownloadQueueManager {
       // 从活跃集合移除
       this.activeDownloads.delete(task.id)
 
+      // 通知前端队列状态变更
+      this.emitQueueUpdated()
+
       // 添加到最近完成集合，防止立即重新启动
       this.recentlyCompleted.add(task.id)
       loggerService.info('DownloadQueueManager', `[队列] 任务完成，添加到最近完成集合: ${task.id}`)
@@ -203,6 +302,9 @@ class DownloadQueueManager {
       // 下载失败 - DownloadManager 已经标记了失败状态
       // 从活跃集合移除
       this.activeDownloads.delete(task.id)
+
+      // 通知前端队列状态变更
+      this.emitQueueUpdated()
 
       // 发送失败事件
       const windows = BrowserWindow.getAllWindows()
@@ -289,48 +391,28 @@ class DownloadQueueManager {
    * 应用启动时恢复队列
    */
   async restoreQueue(userId: number, userToken: string, username: string): Promise<number> {
+    // 保存凭证
+    this.setCredentials(userId, userToken, username)
+
     // 从数据库读取未完成的任务
     const incompleteTasks = await this.transferService.getIncompleteDownloads(userId)
 
-    // 初始化 AlistService 用于获取下载 URL
-    const alistService = new AlistService(userToken, username)
-    alistService.setUserId(userId)
-
     let restoredCount = 0
     for (const dbTask of incompleteTasks) {
-      try {
-        // 重新获取下载 URL
-        const downloadResult = await alistService.getDownloadUrl(dbTask.remotePath)
-
-        if (!downloadResult.success || !downloadResult.rawUrl) {
-          loggerService.error('DownloadQueueManager', `无法获取下载 URL: ${dbTask.fileName}, error=${downloadResult.error}`)
-          // 标记任务为失败状态
-          await this.transferService.markAsFailed(dbTask.id, '无法获取下载 URL', 0)
-          continue
-        }
-
-        // 重建任务对象
-        const task: DownloadQueueTask = {
-          id: `download_${dbTask.id}`,
-          url: downloadResult.rawUrl,  // 使用重新获取的 URL
-          savePath: dbTask.filePath,
-          fileName: dbTask.fileName,
-          fileSize: dbTask.fileSize,
-          userId: dbTask.userId,
-          userToken,
-          username,
-          remotePath: dbTask.remotePath,
-          priority: restoredCount,
-          dbId: dbTask.id  // 添加数据库 ID
-        }
-
-        this.queue.set(task.id, task)
-        restoredCount++
-      } catch (error: any) {
-        loggerService.error('DownloadQueueManager', `恢复任务失败: ${dbTask.fileName}, error=${error}`)
-        // 标记任务为失败状态
-        await this.transferService.markAsFailed(dbTask.id, error.message, 0)
+      const task: DownloadQueueTask = {
+        id: `download_${dbTask.id}`,
+        savePath: dbTask.filePath || undefined,
+        fileName: dbTask.fileName,
+        fileSize: dbTask.fileSize,
+        userId: dbTask.userId,
+        userToken,
+        username,
+        remotePath: dbTask.remotePath,
+        priority: restoredCount,
+        dbId: dbTask.id
       }
+      this.queue.set(task.id, task)
+      restoredCount++
     }
 
     // 处理队列
@@ -424,7 +506,7 @@ class DownloadQueueManager {
    * 恢复队列
    */
   resumeQueue(): void {
-    this.maxConcurrent = 5
+    this.maxConcurrent = MAX_CONCURRENT_DOWNLOADS
     this.processQueue()
   }
 

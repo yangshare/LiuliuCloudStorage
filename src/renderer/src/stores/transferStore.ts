@@ -76,6 +76,23 @@ export const useTransferStore = defineStore('transfer', () => {
   const pendingDownloadNotifications = ref<Array<{ fileName: string; savePath: string }>>([])
   let downloadNotifyTimer: ReturnType<typeof setTimeout> | null = null
 
+  function scheduleDownloadNotification() {
+    if (downloadNotifyTimer) clearTimeout(downloadNotifyTimer)
+    // 队列中还有活跃或等待中的任务时，延长等待
+    const hasRemaining = activeDownloads.value.length > 0 || downloadQueue.value.length > 0
+    if (!hasRemaining) {
+      flushDownloadNotifications()
+      return
+    }
+    downloadNotifyTimer = setTimeout(() => {
+      if (activeDownloads.value.length > 0 || downloadQueue.value.length > 0) {
+        scheduleDownloadNotification()
+        return
+      }
+      flushDownloadNotifications()
+    }, 3000)
+  }
+
   function flushUploadNotifications() {
     const files = pendingUploadNotifications.value.splice(0)
     if (files.length === 0 || !isNotificationsEnabled()) return
@@ -124,16 +141,19 @@ export const useTransferStore = defineStore('transfer', () => {
     } else {
       const content = `${files.length} 个文件下载完成`
       const dirs = files.map(f => (f.savePath || '').replace(/[\\/][^\\/]+$/, '').replace(/\\/g, '/'))
-      const commonDir = dirs.reduce((a, b) => {
-        const pa = a.split('/'), pb = b.split('/')
-        const common: string[] = []
-        for (let i = 0; i < Math.min(pa.length, pb.length); i++) {
-          if (pa[i] === pb[i]) common.push(pa[i])
-          else break
-        }
-        return common.join('/')
-      })
-      const lastSavePath = commonDir.replace(/\//g, '\\')
+      const validDirs = dirs.filter(d => d.length > 0)
+      const commonDir = validDirs.length > 0
+        ? validDirs.reduce((a, b) => {
+            const pa = a.split('/'), pb = b.split('/')
+            const common: string[] = []
+            for (let i = 0; i < Math.min(pa.length, pb.length); i++) {
+              if (pa[i] === pb[i]) common.push(pa[i])
+              else break
+            }
+            return common.join('/')
+          })
+        : ''
+      const lastSavePath = (commonDir || validDirs[0] || '').replace(/\//g, '\\')
       window.$notification?.success({
         title,
         content,
@@ -491,6 +511,7 @@ export const useTransferStore = defineStore('transfer', () => {
   const activeDownloads = ref<DownloadTask[]>([])
   const completedDownloads = ref<DownloadTask[]>([])
   const failedDownloads = ref<DownloadTask[]>([])
+
   const isDownloadQueuePaused = ref(false)
 
   // UI 状态：进度面板折叠状态（持久化到 localStorage）
@@ -646,6 +667,16 @@ export const useTransferStore = defineStore('transfer', () => {
     }
   }
 
+  // 批量添加到下载队列：一次 IPC 调用
+  async function batchQueueDownload(filePaths: string[]) {
+    try {
+      const result = await window.electronAPI.transfer.batchQueueDownload?.({ remotePaths: filePaths })
+      return result || { success: false, successCount: 0, failedCount: filePaths.length, error: '批量下载功能未实现' }
+    } catch (error: any) {
+      return { success: false, successCount: 0, failedCount: filePaths.length, error: error.message || '批量添加到队列失败' }
+    }
+  }
+
   // 暂停下载队列
   async function pauseDownloadQueue() {
     try {
@@ -723,45 +754,6 @@ export const useTransferStore = defineStore('transfer', () => {
     }
   }
 
-  // 开始下载
-  async function startDownload(remotePath: string, fileName: string, userId: number, userToken: string, username: string) {
-    const taskId = `download_${Date.now()}`
-    const task: DownloadTask = {
-      id: taskId,
-      fileName,
-      remotePath,
-      savePath: '',
-      fileSize: 0,
-      downloadedBytes: 0,
-      status: 'in_progress',
-      progress: 0,
-      speed: 0,
-      createdAt: new Date()
-    }
-
-    downloadQueue.value.push(task)
-
-    try {
-      const result = await window.electronAPI.transfer.download(
-        remotePath,
-        fileName,
-        userId,
-        userToken,
-        username
-      )
-
-      if (result?.success) {
-        task.savePath = result.savePath
-      } else {
-        task.status = 'failed'
-        task.error = result?.error || '下载失败'
-      }
-    } catch (error: any) {
-      task.status = 'failed'
-      task.error = error.message || '下载失败'
-    }
-  }
-
   // 下载进度处理函数（节流优化）
   const downloadProgressHandler = (data: { taskId: string, fileName: string, progress: number, downloadedBytes: number, totalBytes: number, speed: number } | undefined) => {
     // 数据有效性检查
@@ -772,27 +764,11 @@ export const useTransferStore = defineStore('transfer', () => {
 
     // 使用节流函数更新进度
     throttledProgressUpdate(data)
-
-    // 同时更新队列中的任务
-    const task = downloadQueue.value.find(t => t.id === data.taskId)
-    if (task) {
-      task.progress = data.progress
-      task.downloadedBytes = data.downloadedBytes
-      task.fileSize = data.totalBytes
-      task.speed = data.speed
-    }
-
-    // 也更新 activeDownloads
-    const activeTask = activeDownloads.value.find(t => t.id === data.taskId)
-    if (activeTask) {
-      activeTask.progress = data.progress
-      activeTask.downloadedBytes = data.downloadedBytes
-      activeTask.fileSize = data.totalBytes
-      activeTask.speed = data.speed
-    }
   }
 
   // 下载完成处理函数
+  const notifiedDownloadTaskIds = new Set<string>()
+
   const downloadCompletedHandler = (data: { taskId: string, fileName: string, savePath: string } | undefined) => {
     // 数据有效性检查
     if (!data || !data.taskId) {
@@ -800,13 +776,10 @@ export const useTransferStore = defineStore('transfer', () => {
       return
     }
 
-    const task = downloadQueue.value.find(t => t.id === data.taskId)
-    if (task) {
-      task.status = 'completed'
-      task.progress = 100
-      task.downloadedBytes = task.fileSize
-      task.savePath = data.savePath
-    }
+    // 去重：同一个 taskId 只处理一次通知
+    if (notifiedDownloadTaskIds.has(data.taskId)) return
+    notifiedDownloadTaskIds.add(data.taskId)
+    setTimeout(() => notifiedDownloadTaskIds.delete(data.taskId), 10000)
 
     // 更新进度Map
     const progress = downloadProgressMap.value.get(data.taskId)
@@ -827,8 +800,7 @@ export const useTransferStore = defineStore('transfer', () => {
 
     // 批量合并下载完成通知
     pendingDownloadNotifications.value.push({ fileName: data.fileName, savePath: data.savePath })
-    if (downloadNotifyTimer) clearTimeout(downloadNotifyTimer)
-    downloadNotifyTimer = setTimeout(flushDownloadNotifications, 1500)
+    scheduleDownloadNotification()
   }
 
   // 下载失败处理函数
@@ -839,23 +811,20 @@ export const useTransferStore = defineStore('transfer', () => {
       return
     }
 
-    const task = downloadQueue.value.find(t => t.id === data.taskId)
-    if (task) {
-      task.status = 'failed'
-      task.error = data.error
+    // 清理进度数据
+    downloadProgressMap.value.delete(data.taskId)
 
-      // 显示应用内失败通知（失败通知不合并）
-      if (isNotificationsEnabled()) {
-        window.$notification?.error({
-          title: '下载失败',
-          content: `文件 "${data.fileName}" 下载失败：${data.error}`,
-          duration: 5000
-        })
-        window.electronAPI?.notification?.show({
-          title: '下载失败',
-          body: `文件 ${data.fileName} 下载失败：${data.error}`
-        })
-      }
+    // 显示应用内失败通知（失败通知不合并）
+    if (isNotificationsEnabled()) {
+      window.$notification?.error({
+        title: '下载失败',
+        content: `文件 "${data.fileName}" 下载失败：${data.error}`,
+        duration: 5000
+      })
+      window.electronAPI?.notification?.show({
+        title: '下载失败',
+        body: `文件 ${data.fileName} 下载失败：${data.error}`
+      })
     }
   }
 
@@ -867,11 +836,8 @@ export const useTransferStore = defineStore('transfer', () => {
       return
     }
 
-    const task = downloadQueue.value.find(t => t.id === data.taskId.toString())
-    if (task) {
-      task.status = 'cancelled'
-      task.error = '下载已取消'
-    }
+    // 清理进度数据
+    downloadProgressMap.value.delete(data.taskId.toString())
   }
 
   // 注册下载监听器
@@ -939,13 +905,6 @@ export const useTransferStore = defineStore('transfer', () => {
         throw new Error(result?.error || '恢复下载失败')
       }
 
-      // 更新本地状态
-      const task = downloadQueue.value.find(t => t.id === taskId.toString())
-      if (task) {
-        task.status = 'in_progress'
-        task.error = undefined
-      }
-
       return result
     } catch (error: any) {
       console.error('恢复下载失败:', error)
@@ -963,14 +922,6 @@ export const useTransferStore = defineStore('transfer', () => {
 
       if (!result?.success) {
         throw new Error(result?.error || '取消下载失败')
-      }
-
-      // 更新本地状态
-      const id = typeof taskId === 'string' ? taskId : taskId.toString()
-      const index = downloadQueue.value.findIndex(t => t.id === id)
-
-      if (index !== -1) {
-        downloadQueue.value.splice(index, 1)
       }
 
       // 显示成功通知
@@ -1001,9 +952,6 @@ export const useTransferStore = defineStore('transfer', () => {
       if (!result?.success) {
         throw new Error(result?.error || '取消所有下载失败')
       }
-
-      // 清空本地队列
-      downloadQueue.value = []
 
       window.$message?.success('所有下载已取消')
 
@@ -1048,13 +996,13 @@ export const useTransferStore = defineStore('transfer', () => {
     autoRetryFailedTasks,
     initDownloadQueue,
     queueDownload,
+    batchQueueDownload,
     pauseDownloadQueue,
     resumeDownloadQueue,
     clearDownloadQueue,
     clearPendingQueue,
     clearActiveQueue,
     fetchDownloadQueueState,
-    startDownload,
     downloadWithSaveAs,
     resumeDownload,
     cancelDownload,

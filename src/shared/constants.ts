@@ -41,3 +41,4 @@ export const API_TIMEOUT = 10 * 1000
  * 单位：毫秒
  */
 export const PROGRESS_UPDATE_INTERVAL = 1 * 1000
+

@@ -85,12 +85,6 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="alistPath" label="Alist路径" show-overflow-tooltip>
-              <template #default="{ row }">
-                <span v-if="row.alistPath" class="alist-path">{{ row.alistPath }}</span>
-                <span v-else class="empty-text">-</span>
-              </template>
-            </el-table-column>
             <el-table-column prop="createdAt" label="创建时间" width="180">
               <template #default="{ row }">
                 {{ formatDate(row.createdAt) }}
@@ -99,12 +93,11 @@
             <el-table-column label="操作" width="180">
               <template #default="{ row }">
                 <el-button
-                  v-if="row.alistPath"
                   link
-                  type="primary"
-                  @click="handleCopyPath(row.alistPath)"
+                  type="warning"
+                  @click="transferForm.url = row.shareUrl"
                 >
-                  复制路径
+                  重新转存
                 </el-button>
                 <el-button
                   link
@@ -365,18 +358,6 @@ function handleSelectionChange(selection: any[]) {
 }
 
 /**
- * 复制 Alist 路径
- */
-async function handleCopyPath(path: string) {
-  try {
-    await navigator.clipboard.writeText(path)
-    ElMessage.success('路径已复制到剪贴板')
-  } catch (error) {
-    ElMessage.error('复制失败')
-  }
-}
-
-/**
  * 删除记录
  */
 async function handleDelete(id: number) {
@@ -533,16 +514,6 @@ onMounted(() => {
 .share-url {
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: 12px;
-}
-
-.alist-path {
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 12px;
-  color: var(--netease-red);
-}
-
-.empty-text {
-  color: var(--netease-gray-4);
 }
 
 /* 按钮样式 */

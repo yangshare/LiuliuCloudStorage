@@ -1,6 +1,6 @@
 import { getDatabase, isDatabaseOpen } from '../database'
 import { transferQueue, type TransferQueue, type NewTransferQueue } from '../database/schema'
-import { eq, and, or, inArray } from 'drizzle-orm'
+import { eq, and, or, inArray, desc } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 
 export class TransferService {
@@ -28,6 +28,13 @@ export class TransferService {
     if (!isDatabaseOpen()) return
     this.db.update(transferQueue)
       .set({ transferredSize, updatedAt: new Date() })
+      .where(eq(transferQueue.id, taskId))
+      .run()
+  }
+
+  async updateFileSize(taskId: number, fileSize: number): Promise<void> {
+    this.db.update(transferQueue)
+      .set({ fileSize, updatedAt: new Date() })
       .where(eq(transferQueue.id, taskId))
       .run()
   }
@@ -289,5 +296,59 @@ export class TransferService {
         )
       ))
       .run()
+  }
+
+  /**
+   * 删除已完成的下载任务记录
+   */
+  async deleteCompletedDownloads(): Promise<void> {
+    this.db.delete(transferQueue)
+      .where(and(
+        eq(transferQueue.taskType, 'download'),
+        eq(transferQueue.status, 'completed')
+      ))
+      .run()
+  }
+
+  /**
+   * 删除已失败的下载任务记录
+   */
+  async deleteFailedDownloads(): Promise<void> {
+    this.db.delete(transferQueue)
+      .where(and(
+        eq(transferQueue.taskType, 'download'),
+        eq(transferQueue.status, 'failed')
+      ))
+      .run()
+  }
+
+  /**
+   * 获取最近完成的下载/上传任务
+   */
+  async getRecentCompletedTasks(taskType: 'download' | 'upload', limit: number = 100): Promise<TransferQueue[]> {
+    return this.db.select()
+      .from(transferQueue)
+      .where(and(
+        eq(transferQueue.taskType, taskType),
+        eq(transferQueue.status, 'completed')
+      ))
+      .orderBy(desc(transferQueue.updatedAt))
+      .limit(limit)
+      .all()
+  }
+
+  /**
+   * 获取最近失败的下载/上传任务
+   */
+  async getRecentFailedTasks(taskType: 'download' | 'upload', limit: number = 100): Promise<TransferQueue[]> {
+    return this.db.select()
+      .from(transferQueue)
+      .where(and(
+        eq(transferQueue.taskType, taskType),
+        eq(transferQueue.status, 'failed')
+      ))
+      .orderBy(desc(transferQueue.updatedAt))
+      .limit(limit)
+      .all()
   }
 }

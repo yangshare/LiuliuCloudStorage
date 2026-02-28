@@ -97,8 +97,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('transfer:add-to-queue', task),
     getQueueStatus: () => ipcRenderer.invoke('transfer:queue-status'),
     list: (userId: number) => ipcRenderer.invoke('transfer:list', userId),
-    restoreQueue: (userId: number, userToken: string, username: string) =>
-      ipcRenderer.invoke('transfer:restore-queue', { userId, userToken, username }),
+    restoreQueue: (userId: number, userToken: string) =>
+      ipcRenderer.invoke('transfer:restore-queue', { userId, userToken }),
     resume: (taskId: number, userId: number, userToken: string, username: string) =>
       ipcRenderer.invoke('transfer:resume', { taskId, userId, userToken, username }),
     autoRetryAll: (userId: number, userToken: string, username: string) =>
@@ -142,9 +142,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     removeDownloadAuthFailedListener: (callback: (data: { error: string }) => void) =>
       ipcRenderer.removeListener('transfer:download-auth-failed', unwrapListener(callback) as never),
     // 下载队列管理
-    initDownloadQueue: (params: { userId: number; userToken: string; username: string }) =>
+    initDownloadQueue: (params: { userId: number; userToken: string }) =>
       ipcRenderer.invoke('transfer:initDownloadQueue', params),
-    queueDownload: (task: { id: string; remotePath: string; fileName: string; savePath?: string; userId: number; userToken: string; username: string; priority?: number }) =>
+    queueDownload: (task: { id: string; remotePath: string; fileName: string; savePath?: string; userId: number; userToken: string; priority?: number }) =>
       ipcRenderer.invoke('transfer:queueDownload', task),
     batchQueueDownload: (params: { remotePaths: string[] }) =>
       ipcRenderer.invoke('transfer:batchQueueDownload', params),

@@ -189,8 +189,7 @@ onMounted(() => {
   if (authStore.isLoggedIn && authStore.user) {
     transferStore.initDownloadQueue(
       authStore.user.id,
-      authStore.token,
-      authStore.user.username
+      authStore.token
     )
   }
 

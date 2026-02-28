@@ -16,7 +16,6 @@ export interface DownloadQueueTask {
   fileSize: number
   userId: number
   userToken: string
-  username: string
   remotePath: string
   priority: number  // 优先级（越小越优先）
   dbId?: number  // 数据库记录 ID(可选)
@@ -32,17 +31,16 @@ type DownloadProgressCallback = (data: {
 }) => void
 
 class DownloadQueueManager {
-  private queue: Map<string, DownloadQueueTask> = new Map()
-  private activeDownloads: Set<string> = new Set()
-  private recentlyCompleted: Set<string> = new Set()  // 跟踪最近完成的任务
+  private queue: Map<string, DownloadQueueTask> = new Map()           // 仅存待启动任务
+  private activeDownloads: Map<string, DownloadQueueTask> = new Map() // 仅存执行中任务
   private maxConcurrent: number = MAX_CONCURRENT_DOWNLOADS
   private transferService: TransferService
   private downloadManager: DownloadManager
   private onProgressCallback: DownloadProgressCallback | null = null
   private userId: number = 0
   private userToken: string = ''
-  private username: string = ''
   private authFailedNotified: boolean = false  // 防止重复发送认证失败通知
+  private emitTimer: ReturnType<typeof setTimeout> | null = null  // 防抖定时器
 
   constructor() {
     this.transferService = new TransferService()
@@ -53,18 +51,20 @@ class DownloadQueueManager {
     this.onProgressCallback = callback
   }
 
-  setCredentials(userId: number, userToken: string, username: string): void {
+  setCredentials(userId: number, userToken: string): void {
     this.userId = userId
     this.userToken = userToken
-    this.username = username
   }
 
   /**
    * 检查 remotePath 是否已在队列中（内存或数据库中有未完成的任务）
    */
   private async isDuplicate(remotePath: string): Promise<boolean> {
-    // 检查内存队列
+    // 检查内存中的待启动和执行中任务
     for (const t of this.queue.values()) {
+      if (t.remotePath === remotePath) return true
+    }
+    for (const t of this.activeDownloads.values()) {
       if (t.remotePath === remotePath) return true
     }
     // 检查数据库中未完成的任务
@@ -102,7 +102,7 @@ class DownloadQueueManager {
     this.queue.set(task.id, taskWithDbId)
 
     // 尝试启动任务
-    await this.processQueue()
+    this.processQueue()
 
     // 通知渲染进程队列更新
     this.emitQueueUpdated()
@@ -140,7 +140,7 @@ class DownloadQueueManager {
     dbTasks.forEach((dbTask, i) => {
       this.queue.set(uniqueTasks[i].id, { ...uniqueTasks[i], dbId: dbTask.id })
     })
-    await this.processQueue()
+    this.processQueue()
     this.emitQueueUpdated()
     return dbTasks.map(t => t.id)
   }
@@ -148,43 +148,20 @@ class DownloadQueueManager {
   /**
    * 处理队列（启动等待的任务）
    */
-  private async processQueue(): Promise<void> {
-    // 如果已达到最大并发数，停止
-    if (this.activeDownloads.size >= this.maxConcurrent) {
-      return
-    }
-
-    // 查找等待中的任务（按优先级排序）
-    const allTasks = Array.from(this.queue.values())
-
-    // 批量获取所有任务的数据库状态(性能优化:一次查询替代 N 次查询)
-    const remotePaths = allTasks.map(task => task.remotePath)
-    const taskStatusMap = await this.transferService.getTasksByRemotePaths(remotePaths, 'download')
-
-    const pendingTasks: (DownloadQueueTask & { dbId: number })[] = []
-
-    for (const task of allTasks) {
-      const dbTask = taskStatusMap.get(task.remotePath)
-
-      // 只处理 pending 状态的任务，且：
-      // 1. 有数据库 ID
-      // 2. 不在活跃下载集合中（防止重复启动）
-      // 3. 不在最近完成集合中（防止刚完成的任务被立即重新启动）
-      if (dbTask && dbTask.status === 'pending' && task.dbId &&
-          !this.activeDownloads.has(task.id) &&
-          !this.recentlyCompleted.has(task.id)) {
-        pendingTasks.push(task as DownloadQueueTask & { dbId: number })
-      }
-    }
-
-    // 按优先级排序
-    pendingTasks.sort((a, b) => a.priority - b.priority)
-
-    // 启动最多 (maxConcurrent - active) 个任务
+  private processQueue(): void {
     const slotsAvailable = this.maxConcurrent - this.activeDownloads.size
+    if (slotsAvailable <= 0) return
 
-    for (let i = 0; i < Math.min(slotsAvailable, pendingTasks.length); i++) {
-      const task = pendingTasks[i]
+    // queue 里全是待启动任务，按优先级排序后直接启动
+    const pendingTasks = Array.from(this.queue.values())
+      .filter((t): t is DownloadQueueTask & { dbId: number } => t.dbId !== undefined)
+      .sort((a, b) => a.priority - b.priority)
+      .slice(0, slotsAvailable)
+
+    for (const task of pendingTasks) {
+      // 立即从 queue 移入 activeDownloads，消除竞态
+      this.queue.delete(task.id)
+      this.activeDownloads.set(task.id, task)
       this.startDownload(task)
     }
   }
@@ -193,8 +170,7 @@ class DownloadQueueManager {
    * 启动单个下载任务
    */
   private async startDownload(task: DownloadQueueTask & { dbId: number }): Promise<void> {
-    // 标记为活跃
-    this.activeDownloads.add(task.id)
+    // task 已由 processQueue 放入 activeDownloads，此处无需再操作
 
     // 立即通知渲染进程：任务进入 active 状态
     this.emitQueueUpdated()
@@ -215,6 +191,9 @@ class DownloadQueueManager {
         }
         task.url = dlResult.rawUrl
         task.fileSize = dlResult.fileSize || task.fileSize
+        if (task.fileSize > 0) {
+          await this.transferService.updateFileSize(task.dbId, task.fileSize)
+        }
       }
 
       // 计算 savePath（如果还没有）
@@ -278,16 +257,6 @@ class DownloadQueueManager {
       // 通知前端队列状态变更
       this.emitQueueUpdated()
 
-      // 添加到最近完成集合，防止立即重新启动
-      this.recentlyCompleted.add(task.id)
-      loggerService.info('DownloadQueueManager', `[队列] 任务完成，添加到最近完成集合: ${task.id}`)
-
-      // 5秒后从最近完成集合移除
-      setTimeout(() => {
-        this.recentlyCompleted.delete(task.id)
-        loggerService.info('DownloadQueueManager', `[队列] 从最近完成集合移除: ${task.id}`)
-      }, 5000)
-
       // 发送完成事件
       const windows = BrowserWindow.getAllWindows()
       windows.forEach(win => {
@@ -301,7 +270,7 @@ class DownloadQueueManager {
       })
 
       // 处理队列中的下一个任务
-      await this.processQueue()
+      this.processQueue()
 
     } catch (error: any) {
       // 从活跃集合移除
@@ -343,7 +312,7 @@ class DownloadQueueManager {
 
       // 仅非认证错误时继续处理队列
       if (!isAuthError) {
-        await this.processQueue()
+        this.processQueue()
       }
     }
   }
@@ -357,58 +326,93 @@ class DownloadQueueManager {
     completed: any[]
     failed: any[]
   }> {
-    const tasks = Array.from(this.queue.values())
-
-    // 批量获取所有任务的数据库状态(性能优化:一次查询替代 N 次查询)
-    const remotePaths = tasks.map(task => task.remotePath)
-    const taskStatusMap = await this.transferService.getTasksByRemotePaths(remotePaths, 'download')
-
     const pending: any[] = []
     const active: any[] = []
     const completed: any[] = []
     const failed: any[] = []
 
-    // 转换为前端期望的数据结构
-    const toFrontendTask = (task: DownloadQueueTask, dbTask: any, status: string) => ({
-      id: task.id,
-      fileName: task.fileName,
-      remotePath: task.remotePath,
-      savePath: task.savePath,
-      fileSize: task.fileSize,
-      downloadedBytes: dbTask?.transferredSize || 0,
-      status: status,
-      progress: dbTask?.transferredSize && task.fileSize ? Math.round((dbTask.transferredSize / task.fileSize) * 100) : 0,
-      speed: 0,
-      error: dbTask?.errorMessage,
-      createdAt: dbTask?.createdAt ? new Date(dbTask.createdAt * 1000) : new Date()
-    })
+    // pending：直接从内存 queue 读，批量查 DB 获取进度数据
+    const pendingTasks = Array.from(this.queue.values())
+    if (pendingTasks.length > 0) {
+      const remotePaths = pendingTasks.map(t => t.remotePath)
+      const taskStatusMap = await this.transferService.getTasksByRemotePaths(remotePaths, 'download')
+      for (const task of pendingTasks) {
+        const dbTask = taskStatusMap.get(task.remotePath)
+        pending.push({
+          id: task.id,
+          fileName: task.fileName,
+          remotePath: task.remotePath,
+          savePath: task.savePath,
+          fileSize: task.fileSize,
+          downloadedBytes: dbTask?.transferredSize || 0,
+          status: 'pending',
+          progress: 0,
+          speed: 0,
+          error: null,
+          createdAt: dbTask?.createdAt ? new Date(Number(dbTask.createdAt) * 1000) : new Date()
+        })
+      }
+    }
 
-    for (const task of tasks) {
-      const dbTask = taskStatusMap.get(task.remotePath)
+    // active：直接从内存 activeDownloads 读，无需查 DB
+    for (const task of this.activeDownloads.values()) {
+      active.push({
+        id: task.id,
+        fileName: task.fileName,
+        remotePath: task.remotePath,
+        savePath: task.savePath,
+        fileSize: task.fileSize,
+        downloadedBytes: 0,
+        status: 'in_progress',
+        progress: 0,
+        speed: 0,
+        error: null,
+        createdAt: new Date()
+      })
+    }
 
-      // 优先检查内存中的活跃状态（比数据库状态更实时）
-      if (this.activeDownloads.has(task.id)) {
-        active.push(toFrontendTask(task, dbTask, 'in_progress'))
-        continue
+    // completed / failed：从数据库查历史记录
+    try {
+      const recentCompleted = await this.transferService.getRecentCompletedTasks('download', 100)
+      const recentFailed = await this.transferService.getRecentFailedTasks('download', 100)
+
+      for (const dbTask of recentCompleted) {
+        const fileSize: number = dbTask.fileSize ?? 0
+        const transferredSize: number = dbTask.transferredSize ?? 0
+        completed.push({
+          id: `download_${dbTask.id}`,
+          fileName: dbTask.fileName,
+          remotePath: dbTask.remotePath,
+          savePath: dbTask.filePath,
+          fileSize,
+          downloadedBytes: transferredSize,
+          status: 'completed',
+          progress: fileSize > 0 ? Math.round((transferredSize / fileSize) * 100) : 100,
+          speed: 0,
+          error: null,
+          createdAt: dbTask.createdAt ? new Date(Number(dbTask.createdAt) * 1000) : new Date()
+        })
       }
 
-      if (!dbTask) continue
-
-      switch (dbTask.status) {
-        case 'pending':
-          pending.push(toFrontendTask(task, dbTask, 'pending'))
-          break
-        case 'in_progress':
-          // 如果数据库显示 in_progress 但内存中没有，说明可能是恢复的任务
-          active.push(toFrontendTask(task, dbTask, 'in_progress'))
-          break
-        case 'completed':
-          completed.push(toFrontendTask(task, dbTask, 'completed'))
-          break
-        case 'failed':
-          failed.push(toFrontendTask(task, dbTask, 'failed'))
-          break
+      for (const dbTask of recentFailed) {
+        const fileSize: number = dbTask.fileSize ?? 0
+        const transferredSize: number = dbTask.transferredSize ?? 0
+        failed.push({
+          id: `download_${dbTask.id}`,
+          fileName: dbTask.fileName,
+          remotePath: dbTask.remotePath,
+          savePath: dbTask.filePath,
+          fileSize,
+          downloadedBytes: transferredSize,
+          status: 'failed',
+          progress: fileSize > 0 ? Math.round((transferredSize / fileSize) * 100) : 0,
+          speed: 0,
+          error: dbTask.errorMessage,
+          createdAt: dbTask.createdAt ? new Date(Number(dbTask.createdAt) * 1000) : new Date()
+        })
       }
+    } catch (error) {
+      loggerService.error('DownloadQueueManager', `获取历史任务失败: ${error}`)
     }
 
     return { pending, active, completed, failed }
@@ -417,9 +421,9 @@ class DownloadQueueManager {
   /**
    * 应用启动时恢复队列
    */
-  async restoreQueue(userId: number, userToken: string, username: string): Promise<number> {
+  async restoreQueue(userId: number, userToken: string): Promise<number> {
     // 保存凭证
-    this.setCredentials(userId, userToken, username)
+    this.setCredentials(userId, userToken)
 
     // 从数据库读取未完成的任务
     const incompleteTasks = await this.transferService.getIncompleteDownloads(userId)
@@ -433,7 +437,6 @@ class DownloadQueueManager {
         fileSize: dbTask.fileSize,
         userId: dbTask.userId,
         userToken,
-        username,
         remotePath: dbTask.remotePath,
         priority: restoredCount,
         dbId: dbTask.id
@@ -443,7 +446,7 @@ class DownloadQueueManager {
     }
 
     // 处理队列
-    await this.processQueue()
+    this.processQueue()
 
     return restoredCount
   }
@@ -452,37 +455,29 @@ class DownloadQueueManager {
    * 从队列中移除指定任务
    */
   async removeFromQueue(taskId: string): Promise<void> {
-    // 从内存队列移除
-    this.queue.delete(taskId)
+    // 如果是活跃下载，先中止网络请求
+    if (this.activeDownloads.has(taskId)) {
+      this.downloadManager.cancelDownload(taskId)
+      this.activeDownloads.delete(taskId)
+    }
 
-    // 从活跃下载集合移除
-    this.activeDownloads.delete(taskId)
+    // 从等待队列移除
+    this.queue.delete(taskId)
 
     // 通知队列更新
     this.emitQueueUpdated()
 
     // 尝试启动下一个等待的任务
-    await this.processQueue()
+    this.processQueue()
   }
 
   /**
-   * 清空队列（仅清空已完成和失败的任务）
+   * 清空队列（清空已完成和失败的任务）
    */
   async clearQueue(): Promise<void> {
-    const tasks = Array.from(this.queue.values())
-
-    // 批量获取所有任务的数据库状态(性能优化:一次查询替代 N 次查询)
-    const remotePaths = tasks.map(task => task.remotePath)
-    const taskStatusMap = await this.transferService.getTasksByRemotePaths(remotePaths, 'download')
-
-    for (const task of tasks) {
-      const dbTask = taskStatusMap.get(task.remotePath)
-
-      if (dbTask && (dbTask.status === 'completed' || dbTask.status === 'failed')) {
-        this.queue.delete(task.id)
-      }
-    }
-
+    // 从数据库删除已完成和已失败的下载记录
+    await this.transferService.deleteCompletedDownloads()
+    await this.transferService.deleteFailedDownloads()
     this.emitQueueUpdated()
   }
 
@@ -490,19 +485,8 @@ class DownloadQueueManager {
    * 清空等待中的任务
    */
   async clearPendingQueue(): Promise<void> {
-    const tasks = Array.from(this.queue.values())
-    const remotePaths = tasks.map(task => task.remotePath)
-    const taskStatusMap = await this.transferService.getTasksByRemotePaths(remotePaths, 'download')
-
-    const dbIdsToCancel: number[] = []
-    for (const task of tasks) {
-      if (this.activeDownloads.has(task.id)) continue
-      const dbTask = taskStatusMap.get(task.remotePath)
-      if (!dbTask || dbTask.status === 'pending') {
-        if (dbTask) dbIdsToCancel.push(dbTask.id)
-        this.queue.delete(task.id)
-      }
-    }
+    // queue 里全是 pending，直接清空
+    this.queue.clear()
     // 同时清理数据库中残留的 pending 下载记录（应用异常退出时可能遗留）
     await this.transferService.cancelAllIncompleteDownloads()
     this.emitQueueUpdated()
@@ -513,14 +497,12 @@ class DownloadQueueManager {
    */
   async clearActiveQueue(): Promise<void> {
     this.downloadManager.abortAllActive()
-    for (const taskId of this.activeDownloads) {
-      const task = this.queue.get(taskId)
-      if (task?.savePath) {
+    for (const task of this.activeDownloads.values()) {
+      if (task.savePath) {
         try { fs.unlinkSync(task.savePath) } catch (e: any) {
           if (e?.code !== 'ENOENT') loggerService.error('DownloadQueueManager', `清理文件失败: ${task.savePath} - ${e}`)
         }
       }
-      this.queue.delete(taskId)
     }
     this.activeDownloads.clear()
     await this.transferService.cancelAllIncompleteDownloads()
@@ -556,9 +538,14 @@ class DownloadQueueManager {
   }
 
   /**
-   * 发送队列更新事件
+   * 发送队列更新事件（防抖：合并短时间内的多次调用）
    */
-  private async emitQueueUpdated(): Promise<void> {
+  private emitQueueUpdated(): void {
+    if (this.emitTimer) clearTimeout(this.emitTimer)
+    this.emitTimer = setTimeout(() => this.doEmitQueueUpdated(), 200)
+  }
+
+  private async doEmitQueueUpdated(): Promise<void> {
     try {
       const state = await this.getQueueState()
       // 确保 state 对象包含所有必需的属性

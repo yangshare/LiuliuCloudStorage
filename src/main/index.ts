@@ -69,6 +69,9 @@ function createWindow(): void {
     }
   })
 
+  // 启动时最大化窗口
+  mainWindow.maximize()
+
   // 设置托盘服务的主窗口引用
   trayService.setMainWindow(mainWindow)
 

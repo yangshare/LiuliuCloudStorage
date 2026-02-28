@@ -13,7 +13,6 @@ export interface DownloadTaskInput {
   fileSize: number
   userId: number
   userToken: string
-  username: string
   remotePath: string
   dbId?: number  // 数据库记录 ID(可选,如果提供则不创建新记录)
 }

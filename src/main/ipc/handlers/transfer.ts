@@ -14,7 +14,7 @@ const transferService = new TransferService()
 
 export function registerTransferHandlers(): void {
   // 直接上传（保留原有逻辑，用于单文件上传）
-  ipcMain.handle('transfer:upload', async (_event, { filePath, remotePath, userId, userToken, username, localTaskId }) => {
+  ipcMain.handle('transfer:upload', async (_event, { filePath, remotePath, userId, userToken, username: _username, localTaskId }) => {
     try {
       if (userToken) alistService.setToken(userToken)
       alistService.setBasePath('/alist/')
@@ -96,7 +96,7 @@ export function registerTransferHandlers(): void {
   })
 
   // 下载文件
-  ipcMain.handle('transfer:download', async (_event, { remotePath, fileName, userId, userToken, username, savePath: customSavePath }) => {
+  ipcMain.handle('transfer:download', async (_event, { remotePath, fileName, userId, userToken, username: _username, savePath: customSavePath }) => {
     try {
       if (userToken) alistService.setToken(userToken)
       alistService.setBasePath('/alist/')
@@ -126,7 +126,6 @@ export function registerTransferHandlers(): void {
         fileSize: downloadResult.fileSize!,
         userId,
         userToken,
-        username,
         remotePath
       }, (progress) => {
         // 发送进度更新事件到渲染进程
@@ -266,13 +265,13 @@ export function registerTransferHandlers(): void {
   // ========== 下载队列管理 ==========
 
   // 初始化下载队列管理器
-  ipcMain.handle('transfer:initDownloadQueue', async (_event, { userId, userToken, username }) => {
+  ipcMain.handle('transfer:initDownloadQueue', async (_event, { userId, userToken }) => {
     try {
       // 保存凭证供后续下载使用
-      downloadQueueManager.setCredentials(userId, userToken, username)
+      downloadQueueManager.setCredentials(userId, userToken)
 
       // 恢复队列中的任务
-      const restoredCount = await downloadQueueManager.restoreQueue(userId, userToken, username)
+      const restoredCount = await downloadQueueManager.restoreQueue(userId, userToken)
 
       // 监听队列更新事件并发送到渲染进程
       downloadQueueManager.setProgressCallback((data) => {
@@ -301,8 +300,7 @@ export function registerTransferHandlers(): void {
         savePath: taskData.savePath,
         priority: taskData.priority || 0,
         userId: session.userId,
-        userToken: session.token,
-        username: session.username
+        userToken: session.token
       }
 
       await downloadQueueManager.addToQueue(task)
@@ -328,8 +326,7 @@ export function registerTransferHandlers(): void {
         remotePath,
         priority: i,
         userId: session.userId,
-        userToken: session.token,
-        username: session.username
+        userToken: session.token
       }))
 
       const dbIds = await downloadQueueManager.addBatchToQueue(tasks)

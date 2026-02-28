@@ -58,7 +58,7 @@ export interface ElectronAPI {
     addToQueue: (task: { id: number; filePath: string; remotePath: string; userId: number; userToken: string; username: string; fileName: string; fileSize: number }) => Promise<{ success: boolean }>
     getQueueStatus: () => Promise<any>
     list: (userId: number) => Promise<any[]>
-    restoreQueue: (userId: number, userToken: string, username: string) => Promise<{ restored: number }>
+    restoreQueue: (userId: number, userToken: string) => Promise<{ restored: number }>
     resume: (taskId: number, userId: number, userToken: string, username: string) => Promise<{ success: boolean; error?: string }>
     autoRetryAll: (userId: number, userToken: string, username: string) => Promise<{ success: boolean; retriedCount?: number; error?: string }>
     cancel: (taskId: number) => Promise<{ success: boolean; error?: string }>
@@ -79,8 +79,8 @@ export interface ElectronAPI {
     onDownloadCancelled: (callback: (data: { taskId: string | number }) => void) => void
     removeDownloadCancelledListener: (callback: (data: { taskId: string | number }) => void) => void
     // 下载队列管理
-    initDownloadQueue: (params: { userId: number; userToken: string; username: string }) => Promise<{ success: boolean; restoredCount?: number; error?: string }>
-    queueDownload: (task: { id: string; remotePath: string; fileName: string; savePath?: string; userId: number; userToken: string; username: string; priority?: number }) => Promise<{ success: boolean; taskId?: string; error?: string }>
+    initDownloadQueue: (params: { userId: number; userToken: string }) => Promise<{ success: boolean; restoredCount?: number; error?: string }>
+    queueDownload: (task: { id: string; remotePath: string; fileName: string; savePath?: string; userId: number; userToken: string; priority?: number }) => Promise<{ success: boolean; taskId?: string; error?: string }>
     getDownloadQueue: () => Promise<{ success: boolean; state?: { pending: any[]; active: any[]; completed: any[]; failed: any[] }; error?: string }>
     pauseDownloadQueue: () => Promise<{ success: boolean; error?: string }>
     resumeDownloadQueue: () => Promise<{ success: boolean; error?: string }>

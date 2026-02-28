@@ -603,9 +603,9 @@ export const useTransferStore = defineStore('transfer', () => {
   let queueUpdatedListener: ((data: any) => void) | null = null
 
   // 初始化下载队列（应用启动时调用）
-  async function initDownloadQueue(userId: number, userToken: string, username: string) {
+  async function initDownloadQueue(userId: number, userToken: string) {
     try {
-      const result = await window.electronAPI.transfer.initDownloadQueue?.({ userId, userToken, username })
+      const result = await window.electronAPI.transfer.initDownloadQueue?.({ userId, userToken })
 
       if (result?.success) {
         console.log(`[transferStore] 下载队列初始化完成，恢复了 ${result.restoredCount} 个任务`)
@@ -632,6 +632,9 @@ export const useTransferStore = defineStore('transfer', () => {
         }
         window.electronAPI.transfer.onQueueUpdated(queueUpdatedListener)
       }
+
+      // 主动拉取一次当前队列状态，确保历史记录（已完成/失败）在初始化时就显示出来
+      await fetchDownloadQueueState()
     } catch (error: any) {
       console.error('[transferStore] 初始化下载队列失败:', error)
     }
@@ -653,7 +656,6 @@ export const useTransferStore = defineStore('transfer', () => {
 
       const userId = authStore.user.id
       const userToken = authStore.user.token
-      const username = authStore.user.username
 
       const taskId = `download_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
 
@@ -664,7 +666,6 @@ export const useTransferStore = defineStore('transfer', () => {
         savePath,
         userId,
         userToken,
-        username,
         priority: downloadQueue.value.length
       })
 

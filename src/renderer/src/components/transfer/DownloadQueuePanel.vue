@@ -66,7 +66,9 @@
                 <el-icon :size="20" color="#2080f0"><Clock /></el-icon>
                 <div class="task-content">
                   <div class="task-title">{{ task.fileName }}</div>
-                  <el-text type="info" size="small">{{ formatBytes(task.fileSize) }}</el-text>
+                  <div class="task-meta">
+                    <el-text type="info" size="small">{{ formatBytes(task.fileSize) }}</el-text>
+                  </div>
                 </div>
               </div>
             </div>
@@ -103,10 +105,12 @@
                   :percentage="getTaskProgress(task.id)"
                   :format="() => `${getTaskProgress(task.id)}%`"
                 />
-                <el-text type="info" size="small">
-                  {{ formatBytes(getTaskDownloadedBytes(task.id)) }} / {{ formatBytes(task.fileSize) }}
-                  · {{ formatSpeed(getTaskSpeed(task.id)) }}
-                </el-text>
+                <div class="task-meta">
+                  <el-text type="info" size="small">
+                    {{ formatBytes(getTaskDownloadedBytes(task.id)) }} / {{ formatBytes(task.fileSize) }}
+                  </el-text>
+                  <el-text type="info" size="small">{{ formatSpeed(getTaskSpeed(task.id)) }}</el-text>
+                </div>
               </div>
             </div>
           </div>
@@ -129,7 +133,9 @@
                 <el-icon :size="20" color="#67c23a"><Check /></el-icon>
                 <div class="task-content">
                   <div class="task-title">{{ task.fileName }}</div>
-                  <el-text type="info" size="small">{{ formatBytes(task.fileSize) }}</el-text>
+                  <div class="task-meta">
+                    <el-text type="info" size="small">{{ formatBytes(task.fileSize) }}</el-text>
+                  </div>
                 </div>
               </div>
             </div>
@@ -476,6 +482,17 @@ function formatSpeed(bytesPerSecond: number): string {
   word-break: break-all;
   color: var(--netease-gray-7);
   font-size: 14px;
+}
+
+.task-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* 等待中/已完成只有一个 el-text，推到右边 */
+.task-meta :deep(.el-text):only-child {
+  margin-left: auto;
 }
 
 /* 进度条 - 网易云红 */

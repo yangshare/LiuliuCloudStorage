@@ -60,13 +60,16 @@ class DownloadQueueManager {
    * 检查 remotePath 是否已在队列中（内存或数据库中有未完成的任务）
    */
   private async isDuplicate(remotePath: string): Promise<boolean> {
-    // 检查内存中的待启动和执行中任务
+    // 检查内存中的待启动任务
     for (const t of this.queue.values()) {
       if (t.remotePath === remotePath) return true
     }
+
+    // 检查内存中的执行中任务
     for (const t of this.activeDownloads.values()) {
       if (t.remotePath === remotePath) return true
     }
+
     // 检查数据库中未完成的任务
     const existing = await this.transferService.getTaskByRemotePath(remotePath, 'download')
     return !!existing && (existing.status === 'pending' || existing.status === 'in_progress')
@@ -430,8 +433,27 @@ class DownloadQueueManager {
 
     let restoredCount = 0
     for (const dbTask of incompleteTasks) {
+      const taskId = `download_${dbTask.id}`
+
+      // 检查任务是否已在内存中（通过 taskId 快速检查）
+      if (this.queue.has(taskId) || this.activeDownloads.has(taskId)) {
+        continue
+      }
+
+      // 通过 remotePath 检查是否有相同文件正在下载（复用 isDuplicate 的内存检查部分）
+      let inMemory = false
+      for (const t of this.queue.values()) {
+        if (t.remotePath === dbTask.remotePath) { inMemory = true; break }
+      }
+      if (!inMemory) {
+        for (const t of this.activeDownloads.values()) {
+          if (t.remotePath === dbTask.remotePath) { inMemory = true; break }
+        }
+      }
+      if (inMemory) continue
+
       const task: DownloadQueueTask = {
-        id: `download_${dbTask.id}`,
+        id: taskId,
         savePath: dbTask.filePath || undefined,
         fileName: dbTask.fileName,
         fileSize: dbTask.fileSize,

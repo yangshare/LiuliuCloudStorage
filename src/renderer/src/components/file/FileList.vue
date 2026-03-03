@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { ElCheckbox, ElButton, ElInput, ElMessage, ElEmpty } from 'element-plus'
 import { Download } from '@element-plus/icons-vue'
 import { useFileStore } from '../../stores/fileStore'
@@ -33,6 +33,30 @@ const isRenaming = ref(false)
 // 下载对话框状态
 const showDownloadDialog = ref(false)
 const fileForDownload = ref<FileItem | null>(null)
+
+// 防止重复下载的标记（带自动清理）
+const downloadingFiles = new Set<string>()
+const DOWNLOAD_DEBOUNCE_MS = 30000 // 30 秒后自动清理，允许重新下载
+
+// 清理定时器映射
+const downloadTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+// 清理下载标记的辅助函数
+function clearDownloadMark(remotePath: string) {
+  downloadingFiles.delete(remotePath)
+  const timer = downloadTimers.get(remotePath)
+  if (timer) {
+    clearTimeout(timer)
+    downloadTimers.delete(remotePath)
+  }
+}
+
+// 组件卸载时清理所有定时器
+onUnmounted(() => {
+  downloadTimers.forEach(timer => clearTimeout(timer))
+  downloadTimers.clear()
+  downloadingFiles.clear()
+})
 
 // 离线模式提示
 const offlineModeMessage = computed(() => {
@@ -87,23 +111,34 @@ async function handleDownload(file: FileItem) {
   const currentPath = fileStore.currentPath === '/' ? '' : fileStore.currentPath
   const remotePath = `${currentPath}/${file.name}`
 
-  console.log('[FileList] 开始下载:', { remotePath, fileName: file.name })
+  // 防止重复点击
+  if (downloadingFiles.has(remotePath)) {
+    ElMessage.warning(`文件已在下载队列中: ${file.name}`)
+    return
+  }
+
+  // 标记为下载中
+  downloadingFiles.add(remotePath)
+
+  // 设置自动清理定时器（30秒后允许重新下载）
+  const timer = setTimeout(() => clearDownloadMark(remotePath), DOWNLOAD_DEBOUNCE_MS)
+  downloadTimers.set(remotePath, timer)
 
   ElMessage.info(`正在添加到下载队列: ${file.name}`)
 
   try {
-    console.log('[FileList] 调用 transferStore.queueDownload, remotePath:', remotePath, 'fileName:', file.name)
     const result = await transferStore.queueDownload(remotePath, file.name)
-    console.log('[FileList] queueDownload 返回值类型:', typeof result, '是否为null:', result === null, '值:', result)
     if (result?.success) {
-      console.log('[FileList] 准备显示成功消息')
       ElMessage.success(`已添加到下载队列: ${file.name}`)
+      // 成功后保留标记，等定时器自动清理（防止快速重复添加）
     } else {
-      console.log('[FileList] 准备显示错误消息, error:', result?.error)
+      // 失败时立即清理标记，允许用户重试
+      clearDownloadMark(remotePath)
       ElMessage.error(result?.error || '添加到下载队列失败')
     }
   } catch (error: any) {
-    console.error('[FileList] queueDownload 异常:', error)
+    // 异常时立即清理标记
+    clearDownloadMark(remotePath)
     ElMessage.error(error.message || '下载失败')
   }
 }

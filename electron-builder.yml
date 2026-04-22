@@ -59,6 +59,28 @@ nsis:
 portable:
   artifactName: LiuliuCloudStorage-Portable-${version}.${ext}
 
+mac:
+  icon: build/icon.icns
+  category: public.app-category.utilities
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+  # 代码签名与公证（可选，发布到 Mac 用户时必须配置）
+  # 取消下面注释并配置环境变量即可启用
+  # hardenedRuntime: true
+  # gatekeeperAssess: false
+  # entitlements: build/entitlements.mac.plist
+  # entitlementsInherit: build/entitlements.mac.plist
+
+# dmg:
+#   artifactName: LiuliuCloudStorage-${version}-${arch}.${ext}
+
 # 禁用自动发布，使用 GitHub Actions 的 softprops/action-gh-release 来上传
 # publish:
 #   provider: github

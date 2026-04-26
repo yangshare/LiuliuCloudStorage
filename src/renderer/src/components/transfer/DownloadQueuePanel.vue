@@ -194,7 +194,7 @@ import { computed, ref, watch } from 'vue'
 import { ElCard, ElTabs, ElTabPane, ElProgress, ElEmpty, ElButton, ElIcon, ElTag, ElText, ElSpace, ElNotification, ElPagination } from 'element-plus'
 import { Clock, Download, Check, CircleClose } from '@element-plus/icons-vue'
 import { useTransferStore } from '@/stores/transferStore'
-import { formatFileSize as _formatFileSize, formatSpeed as _formatSpeed } from '@/utils/formatters'
+import { formatFileSizePrecise as formatBytes, formatSpeedPrecise as formatSpeed } from '@/utils/formatters'
 import { openFileDirectory } from '@/utils/openFileDirectory'
 
 const transferStore = useTransferStore()
@@ -307,9 +307,6 @@ async function handleClearActiveQueue() {
     ElNotification.error({ title: '清空失败', message: result.error || '清空下载队列失败' })
   }
 }
-
-const formatBytes = (bytes: number) => _formatFileSize(bytes, 2)
-const formatSpeed = (bytesPerSecond: number) => _formatSpeed(bytesPerSecond, 2)
 
 async function handleOpenFolder(filePath: string) {
   await openFileDirectory(filePath)

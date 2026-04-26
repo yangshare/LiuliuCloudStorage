@@ -123,7 +123,7 @@
 import { ref, computed, watch } from 'vue'
 import { ElDialog, ElForm, ElFormItem, ElInput, ElInputNumber, ElButton, ElDivider, ElProgress, ElTag, ElAlert, ElText, ElRadioGroup, ElRadioButton, ElSpace, type FormInst, type FormRules } from 'element-plus'
 import { adminService, type UserListItem } from '../../services/AdminService'
-import { formatFileSize as _formatFileSize } from '@/utils/formatters'
+import { formatFileSizePrecise as formatBytes } from '@/utils/formatters'
 
 interface Props {
   show: boolean
@@ -215,9 +215,6 @@ const rules = computed(() => {
     ]
   }
 })
-
-// 格式化字节数
-const formatBytes = (bytes: number) => _formatFileSize(bytes, 2)
 
 const getProgressColor = (percentage: number): string => {
   if (percentage > 90) return '#f56c6c'

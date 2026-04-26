@@ -2,7 +2,7 @@
   <div class="transfer-item">
     <div class="file-info">
       <span class="file-name">{{ task.fileName }}</span>
-      <span class="file-size">{{ formatSize(task.transferredSize) }} / {{ formatSize(task.fileSize) }}</span>
+      <span class="file-size">{{ formatBytes(task.transferredSize) }} / {{ formatBytes(task.fileSize) }}</span>
     </div>
 
     <el-progress
@@ -60,7 +60,7 @@ import { ref } from 'vue'
 import { ElProgress, ElButton } from 'element-plus'
 import { ElMessageBox, ElNotification } from 'element-plus'
 import type { UploadTask } from '@/stores/transferStore'
-import { formatFileSize as _formatFileSize, formatSpeed as _formatSpeed, formatTime as _formatTime } from '@/utils/formatters'
+import { formatFileSizePrecise as formatBytes, formatSpeed as _formatSpeed, formatTime as _formatTime } from '@/utils/formatters'
 
 interface Props {
   task: UploadTask
@@ -109,10 +109,6 @@ async function handleCancel() {
   })
 }
 
-function formatSize(bytes: number): string {
-  if (!isFinite(bytes) || bytes < 0) return '0 B'
-  return _formatFileSize(bytes, 2)
-}
 
 function formatSpeed(bytesPerSecond: number): string {
   if (!isFinite(bytesPerSecond) || bytesPerSecond <= 0) return '计算中...'

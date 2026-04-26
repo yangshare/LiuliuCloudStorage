@@ -1,9 +1,13 @@
 export function formatFileSize(bytes: number, precision: number = 1): string {
-  if (bytes === 0) return '0 B'
+  if (!isFinite(bytes) || bytes <= 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
   const k = 1024
   const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), units.length - 1)
   return `${(bytes / Math.pow(k, i)).toFixed(precision)} ${units[i]}`
+}
+
+export function formatFileSizePrecise(bytes: number): string {
+  return formatFileSize(bytes, 2)
 }
 
 export function formatQuotaSize(bytes: number): string {
@@ -21,11 +25,15 @@ export function formatDate(isoString: string): string {
 }
 
 export function formatSpeed(bytesPerSecond: number, precision: number = 1): string {
-  if (bytesPerSecond === 0) return '0 B/s'
+  if (!isFinite(bytesPerSecond) || bytesPerSecond <= 0) return '0 B/s'
   const units = ['B/s', 'KB/s', 'MB/s', 'GB/s', 'TB/s']
   const k = 1024
   const i = Math.min(Math.floor(Math.log(bytesPerSecond) / Math.log(k)), units.length - 1)
   return `${(bytesPerSecond / Math.pow(k, i)).toFixed(precision)} ${units[i]}`
+}
+
+export function formatSpeedPrecise(bytesPerSecond: number): string {
+  return formatSpeed(bytesPerSecond, 2)
 }
 
 export function formatTime(seconds: number): string {

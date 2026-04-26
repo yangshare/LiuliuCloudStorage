@@ -81,6 +81,4 @@ mac:
 
 dmg:
   artifactName: LiuliuCloudStorage-${version}-${arch}-mac.${ext}
-
-# 禁用自动发布，使用 GitHub Actions 的 softprops/action-gh-release 来上传
-# publish:
+publish: never

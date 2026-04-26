@@ -6,53 +6,22 @@ on:
       - 'v*'
 
 jobs:
-  build-win:
-    runs-on: windows-latest
-    permissions:
-      contents: write
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            package-cmd: pnpm package
+            artifact-pattern: |
+              dist/*.exe
+              dist/*.zip
+          - os: macos-latest
+            package-cmd: electron-builder --mac
+            artifact-pattern: |
+              dist/*.dmg
+              dist/*.zip
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 9
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-
-      - name: Update version from tag
-        run: |
-          $TAG = "${{ github.ref_name }}"
-          $VERSION = $TAG -replace '^v', ''
-          npm version $VERSION --no-git-tag-version
-        shell: pwsh
-
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Build application
-        run: pnpm build
-
-      - name: Package Windows
-        run: pnpm package
-
-      - name: Upload to GitHub Releases
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/*.exe
-            dist/*.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-mac:
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: write
 
@@ -76,6 +45,7 @@ jobs:
           TAG="${{ github.ref_name }}"
           VERSION="${TAG#v}"
           npm version "$VERSION" --no-git-tag-version
+        shell: bash
 
       - name: Install dependencies
         run: pnpm install
@@ -83,14 +53,12 @@ jobs:
       - name: Build application
         run: pnpm build
 
-      - name: Package macOS
-        run: pnpm build:mac
+      - name: Package (${{ matrix.os }})
+        run: ${{ matrix.package-cmd }}
 
       - name: Upload to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            dist/*.dmg
-            dist/*.zip
+          files: ${{ matrix.artifact-pattern }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

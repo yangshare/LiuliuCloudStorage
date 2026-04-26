@@ -1,6 +1,6 @@
-import { app, BrowserWindow, Menu, Tray, nativeImage } from 'electron'
+import { app, BrowserWindow, Menu, Tray, nativeImage, NativeImage } from 'electron'
 import { join } from 'path'
-import { readFileSync, existsSync } from 'fs'
+import { existsSync } from 'fs'
 
 /**
  * 托盘服务类
@@ -46,7 +46,7 @@ export class TrayService {
    * 获取托盘图标
    * Story 8.1 CRITICAL FIX: 根据平台和打包状态正确处理图标路径
    */
-  private getTrayIcon(): nativeImage {
+  private getTrayIcon(): NativeImage {
     const iconName = this.isTransferring ? 'tray-active.png' : 'tray-idle.png'
 
     // 尝试多个可能的路径
@@ -78,7 +78,7 @@ export class TrayService {
    * 创建占位图标
    * 当图标文件不存在时使用
    */
-  private createPlaceholderIcon(): nativeImage {
+  private createPlaceholderIcon(): NativeImage {
     const size = 16
     const buffer = Buffer.alloc(size * size * 4, 0)
 

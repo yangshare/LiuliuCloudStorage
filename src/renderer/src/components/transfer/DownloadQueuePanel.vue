@@ -135,6 +135,9 @@
                   <div class="task-title">{{ task.fileName }}</div>
                   <div class="task-meta">
                     <el-text type="info" size="small">{{ formatBytes(task.fileSize) }}</el-text>
+                    <el-button size="small" text type="primary" @click="handleOpenFolder(task.savePath)">
+                      打开文件夹
+                    </el-button>
                   </div>
                 </div>
               </div>
@@ -191,6 +194,8 @@ import { computed, ref, watch } from 'vue'
 import { ElCard, ElTabs, ElTabPane, ElProgress, ElEmpty, ElButton, ElIcon, ElTag, ElText, ElSpace, ElNotification, ElPagination } from 'element-plus'
 import { Clock, Download, Check, CircleClose } from '@element-plus/icons-vue'
 import { useTransferStore } from '@/stores/transferStore'
+import { formatFileSize as _formatFileSize, formatSpeed as _formatSpeed } from '@/utils/formatters'
+import { openFileDirectory } from '@/utils/openFileDirectory'
 
 const transferStore = useTransferStore()
 
@@ -303,16 +308,11 @@ async function handleClearActiveQueue() {
   }
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
-}
+const formatBytes = (bytes: number) => _formatFileSize(bytes, 2)
+const formatSpeed = (bytesPerSecond: number) => _formatSpeed(bytesPerSecond, 2)
 
-function formatSpeed(bytesPerSecond: number): string {
-  return formatBytes(bytesPerSecond) + '/s'
+async function handleOpenFolder(filePath: string) {
+  await openFileDirectory(filePath)
 }
 </script>
 
@@ -430,6 +430,16 @@ function formatSpeed(bytesPerSecond: number): string {
   background: linear-gradient(135deg, var(--netease-red) 0%, var(--netease-red-light) 100%) !important;
   border: none !important;
   border-radius: var(--radius-sm) !important;
+}
+
+:deep(.el-button--primary.is-text) {
+  background: transparent !important;
+  color: var(--netease-red) !important;
+}
+
+:deep(.el-button--primary.is-text:hover) {
+  color: var(--netease-red-light) !important;
+  background: rgba(204, 50, 50, 0.06) !important;
 }
 
 :deep(.el-button--warning) {

@@ -411,17 +411,16 @@ class AlistService {
    */
   async getAllFilesInDirectory(remotePath: string): Promise<string[]> {
     const filePaths: string[] = []
+    const self = this
 
-    async function traverse(path: string): Promise<void> {
+    const traverse = async (path: string): Promise<void> => {
       try {
-        const result = await this.listFiles(path)
+        const result = await self.listFiles(path)
         for (const item of result.content) {
           if (item.isDir) {
-            // 构建子目录完整路径
             const subPath = path === '/' ? `/${item.name}` : `${path}/${item.name}`
-            await traverse.call(this, subPath)
+            await traverse(subPath)
           } else {
-            // 构建文件的相对路径（不包含 storagePath 前缀）
             const filePath = path === '/' ? `/${item.name}` : `${path}/${item.name}`
             filePaths.push(filePath)
           }
@@ -431,7 +430,7 @@ class AlistService {
       }
     }
 
-    await traverse.call(this, remotePath)
+    await traverse(remotePath)
     loggerService.info('AlistService', `getAllFilesInDirectory: 找到 ${filePaths.length} 个文件`)
     return filePaths
   }

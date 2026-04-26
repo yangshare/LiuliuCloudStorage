@@ -44,6 +44,10 @@ export class DownloadManager {
       // 应用日期子目录逻辑
       finalSavePath = await this.applyDateFolderLogic(task.savePath, task.fileName)
 
+      if (task.dbId && finalSavePath !== task.savePath) {
+        await this.transferService.updateFilePath(task.dbId, finalSavePath)
+      }
+
       loggerService.info('DownloadManager', `[下载] Step 2: 开始下载任务 - 文件名: ${task.fileName}, URL: ${task.url}`)
 
       // 检查是否已提供数据库记录 ID
@@ -76,12 +80,12 @@ export class DownloadManager {
       // 检查任务状态，如果已经完成或失败，直接返回
       if (dbTask.status === 'completed') {
         loggerService.info('DownloadManager', `[下载] 任务已完成，跳过 - 任务ID: ${dbTask.id}`)
-        return
+        return finalSavePath
       }
 
       if (dbTask.status === 'failed') {
         loggerService.info('DownloadManager', `[下载] 任务已失败，跳过 - 任务ID: ${dbTask.id}`)
-        return
+        return finalSavePath
       }
 
       // 在更新状态为 in_progress 之前，先检查文件是否已存在
@@ -196,7 +200,7 @@ export class DownloadManager {
       }
 
       // 从断点继续下载，传递文件大小用于检查文件是否已完整
-      await this.downloadFileWithResume(task.url || '', task.filePath, taskId, startPosition, task.fileSize, async (progress) => {
+      await this.downloadFileWithResume((task as any).url || '', task.filePath, taskId, startPosition, task.fileSize, async (progress) => {
         // 更新进度到数据库
         await this.transferService.updateProgress(taskId, progress.downloadedBytes)
 
@@ -342,13 +346,13 @@ export class DownloadManager {
         // 获取总文件大小
         let totalBytes = startPosition
         if (contentRange) {
-          // Content-Range: bytes xxx-xxx/total
-          const match = contentRange.match(/\/(\d+)$/)
+          const rangeStr = String(contentRange)
+          const match = rangeStr.match(/\/(\d+)$/)
           if (match) {
             totalBytes = parseInt(match[1], 10)
           }
         } else {
-          totalBytes = parseInt(response.headers['content-length'] || '0', 10) + startPosition
+          totalBytes = parseInt(String(response.headers['content-length'] || '0'), 10) + startPosition
         }
 
         loggerService.info('DownloadManager', `[下载] 文件总大小: ${totalBytes} bytes`)
@@ -377,7 +381,7 @@ export class DownloadManager {
           resolve()
         })
 
-        response.on('error', (error) => {
+        response.on('error', (error: Error) => {
           loggerService.error('DownloadManager', `[下载] 响应错误 - 任务ID: ${taskId}, 错误: ${error.message}`)
           file.close()
           this.activeRequests.delete(taskId)

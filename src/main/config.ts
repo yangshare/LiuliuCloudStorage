@@ -26,11 +26,6 @@ export interface AppConfig {
 }
 
 /**
- * URL 字段名称（需要验证格式）
- */
-const URL_FIELDS: (keyof AppConfig)[] = ['alistBaseUrl', 'n8nBaseUrl', 'ambApiBaseUrl']
-
-/**
  * 验证 URL 格式（只允许 http/https 协议）
  */
 function isValidUrl(value: string): boolean {
@@ -184,7 +179,8 @@ export function isConfigComplete(): { complete: boolean; missing: string[] } {
   const missing: string[] = []
 
   for (const field of REQUIRED_FIELDS) {
-    if (!config[field] || config[field].trim() === '') {
+    const value = config[field]
+    if (!value || String(value).trim() === '') {
       missing.push(field)
     }
   }

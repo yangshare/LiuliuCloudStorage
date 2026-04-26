@@ -3,6 +3,7 @@ import { join, normalize, resolve } from 'path'
 import { existsSync } from 'fs'
 import { readdir, stat, rm } from 'fs/promises'
 import { loggerService } from './LoggerService'
+import { formatFileSize } from '../../shared/formatters'
 
 /**
  * 缓存清理策略
@@ -90,7 +91,7 @@ class CacheService {
     }
 
     // 获取缓存路径
-    this.cacheDir = app.getPath('cache')
+    this.cacheDir = app.getPath('cache' as any)
 
     // 不在初始化时验证路径，只记录路径信息
     // 路径验证会在手动清理时进行
@@ -101,7 +102,7 @@ class CacheService {
       this.maxSize = options.maxSize
     }
 
-    loggerService.info('CacheService', `缓存大小上限: ${this.formatBytes(this.maxSize)}`)
+    loggerService.info('CacheService', `缓存大小上限: ${formatFileSize(this.maxSize)}`)
     loggerService.info('CacheService', '缓存服务初始化完成')
   }
 
@@ -251,23 +252,12 @@ class CacheService {
     }
 
     const finalSize = await this.getCacheSize()
-    loggerService.info('CacheService', `缓存清理完成，当前缓存大小: ${this.formatBytes(finalSize)}`)
+    loggerService.info('CacheService', `缓存清理完成，当前缓存大小: ${formatFileSize(finalSize)}`)
 
     return deletedCount
   }
 
-  /**
-   * 格式化字节数为可读格式
-   */
-  private formatBytes(bytes: number): string {
-    if (bytes <= 0) return '0 B'
-    const k = 1024
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
-    const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1)
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-  }
-
-  /**
+/**
    * 获取缓存大小（供外部查询）
    */
   async getCacheSizeInfo(): Promise<{ size: number; formatted: string }> {
@@ -278,7 +268,7 @@ class CacheService {
     const size = await this.getCacheSize()
     return {
       size,
-      formatted: this.formatBytes(size)
+      formatted: formatFileSize(size)
     }
   }
 

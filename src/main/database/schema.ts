@@ -67,7 +67,7 @@ export const transferQueue = sqliteTable('transfer_queue', {
 export const activityLogs = sqliteTable('activity_logs', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   userId: integer('user_id').notNull().references(() => users.id),
-  actionType: text('action_type', { enum: ['upload', 'download', 'delete', 'folder_create', 'login', 'logout'] }).notNull(),
+  actionType: text('action_type', { enum: ['upload', 'download', 'delete', 'rename', 'folder_create', 'login', 'logout'] }).notNull(),
   fileCount: integer('file_count').notNull().default(0),
   fileSize: integer('file_size').notNull().default(0),
   ipAddress: text('ip_address'),

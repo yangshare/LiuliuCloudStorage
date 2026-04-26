@@ -3,6 +3,7 @@ import { BrowserWindow, app } from 'electron'
 import { join } from 'path'
 import { loggerService } from './LoggerService'
 import { loadConfig } from '../config'
+import { formatFileSize } from '../../shared/formatters'
 
 class UpdateService {
   private mainWindow: BrowserWindow | null = null
@@ -23,10 +24,10 @@ class UpdateService {
     }
 
     // 配置更新缓存路径：使用用户数据目录，避免权限问题
-    const userDataPath = app.getPath('userData')
-    autoUpdater.cacheDir = join(userDataPath, 'updates')
+    const updaterCacheDir = join(app.getPath('userData'), 'updates')
+    ;(autoUpdater as any).cacheDir = updaterCacheDir
 
-    loggerService.info('UpdateService', `更新缓存目录: ${autoUpdater.cacheDir}`)
+    loggerService.info('UpdateService', `更新缓存目录: ${updaterCacheDir}`)
     loggerService.info('UpdateService', `更新源: github-proxy.yangshare.cn/yangshare/LiuliuCloudStorage`)
 
     // 配置更新源：使用 GitHub provider 配合代理
@@ -62,8 +63,8 @@ class UpdateService {
 
     autoUpdater.on('download-progress', (progress) => {
       const percent = progress.percent.toFixed(2)
-      const transferred = this.formatBytes(progress.transferred)
-      const total = this.formatBytes(progress.total)
+      const transferred = formatFileSize(progress.transferred)
+      const total = formatFileSize(progress.total)
       loggerService.debug('UpdateService', `下载进度: ${percent}% (${transferred}/${total})`)
       this.sendToRenderer('update:download-progress', progress)
     })
@@ -129,18 +130,7 @@ class UpdateService {
     }
   }
 
-  /**
-   * 格式化字节数为可读格式
-   */
-  private formatBytes(bytes: number): string {
-    if (bytes === 0) return '0 B'
-    const k = 1024
-    const sizes = ['B', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-  }
-
-  private sendToRenderer(channel: string, data?: any) {
+private sendToRenderer(channel: string, data?: any) {
     if (!this.mainWindow || this.mainWindow.isDestroyed()) {
       loggerService.warn('UpdateService', `无法发送消息到渲染进程: 窗口不存在或已销毁 (${channel})`)
       return

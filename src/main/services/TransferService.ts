@@ -17,7 +17,7 @@ export class TransferService {
     return this.db.insert(transferQueue).values(tasks).returning().all()
   }
 
-  async updateStatus(taskId: number, status: string): Promise<void> {
+  async updateStatus(taskId: number, status: TransferQueue['status']): Promise<void> {
     this.db.update(transferQueue)
       .set({ status, updatedAt: new Date() })
       .where(eq(transferQueue.id, taskId))
@@ -35,6 +35,14 @@ export class TransferService {
   async updateFileSize(taskId: number, fileSize: number): Promise<void> {
     this.db.update(transferQueue)
       .set({ fileSize, updatedAt: new Date() })
+      .where(eq(transferQueue.id, taskId))
+      .run()
+  }
+
+  async updateFilePath(taskId: number, filePath: string): Promise<void> {
+    if (!isDatabaseOpen()) return
+    this.db.update(transferQueue)
+      .set({ filePath, updatedAt: new Date() })
       .where(eq(transferQueue.id, taskId))
       .run()
   }
@@ -142,8 +150,8 @@ export class TransferService {
   /**
    * 统计下载数量
    */
-  async getDownloadCount(userId: number, status?: string): Promise<number> {
-    const conditions = [
+  async getDownloadCount(userId: number, status?: TransferQueue['status']): Promise<number> {
+    const conditions: ReturnType<typeof eq>[] = [
       eq(transferQueue.userId, userId),
       eq(transferQueue.taskType, 'download')
     ]

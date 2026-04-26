@@ -195,7 +195,7 @@ export class ShareTransferService {
             })
             .where(eq(shareTransferRecords.id, recordId))
         } catch (updateError) {
-          loggerService.error('ShareTransfer', '更新失败状态时出错', updateError)
+          loggerService.error('ShareTransfer', '更新失败状态时出错', updateError as Error)
         }
       }
 

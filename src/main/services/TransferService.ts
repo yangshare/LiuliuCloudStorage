@@ -39,6 +39,14 @@ export class TransferService {
       .run()
   }
 
+  async updateFilePath(taskId: number, filePath: string): Promise<void> {
+    if (!isDatabaseOpen()) return
+    this.db.update(transferQueue)
+      .set({ filePath, updatedAt: new Date() })
+      .where(eq(transferQueue.id, taskId))
+      .run()
+  }
+
   async markAsFailed(taskId: number, errorMessage: string, transferredSize: number): Promise<void> {
     this.db.update(transferQueue)
       .set({

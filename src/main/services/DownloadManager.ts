@@ -44,6 +44,10 @@ export class DownloadManager {
       // 应用日期子目录逻辑
       finalSavePath = await this.applyDateFolderLogic(task.savePath, task.fileName)
 
+      if (task.dbId && finalSavePath !== task.savePath) {
+        await this.transferService.updateFilePath(task.dbId, finalSavePath)
+      }
+
       loggerService.info('DownloadManager', `[下载] Step 2: 开始下载任务 - 文件名: ${task.fileName}, URL: ${task.url}`)
 
       // 检查是否已提供数据库记录 ID

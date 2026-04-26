@@ -135,6 +135,9 @@
                   <div class="task-title">{{ task.fileName }}</div>
                   <div class="task-meta">
                     <el-text type="info" size="small">{{ formatBytes(task.fileSize) }}</el-text>
+                    <el-button size="small" text type="primary" @click="handleOpenFolder(task.savePath)">
+                      打开文件夹
+                    </el-button>
                   </div>
                 </div>
               </div>
@@ -313,6 +316,20 @@ function formatBytes(bytes: number): string {
 
 function formatSpeed(bytesPerSecond: number): string {
   return formatBytes(bytesPerSecond) + '/s'
+}
+
+async function handleOpenFolder(filePath: string) {
+  if (!filePath) {
+    ElNotification.warning({ title: '无法打开', message: '文件保存路径未知' })
+    return
+  }
+  try {
+    const result = await window.electronAPI?.downloadConfig.openFileDirectory(filePath)
+    if (!result?.success) ElNotification.error({ title: '打开失败', message: result?.error || '无法打开目录' })
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : '无法打开目录'
+    ElNotification.error({ title: '打开失败', message: msg })
+  }
 }
 </script>
 

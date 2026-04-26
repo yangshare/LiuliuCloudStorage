@@ -1,21 +1,23 @@
 import { getDatabase } from '../database'
 import { activityLogs, dailyStats } from '../database/schema'
 import type { NewActivityLogs, NewDailyStats } from '../database/schema'
-import { count, desc, eq, gte, lte } from 'drizzle-orm'
+import { count, desc, eq, gte, lte, and, SQL } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 
 /**
- * 操作类型枚举
+ * 操作类型枚举（与数据库 schema 的 action_type enum 保持一致）
  */
-export enum ActionType {
-  UPLOAD = 'upload',
-  DOWNLOAD = 'download',
-  DELETE = 'delete',
-  RENAME = 'rename',
-  FOLDER_CREATE = 'folder_create',
-  LOGIN = 'login',
-  LOGOUT = 'logout'
-}
+export const ActionType = {
+  UPLOAD: 'upload',
+  DOWNLOAD: 'download',
+  DELETE: 'delete',
+  RENAME: 'rename',
+  FOLDER_CREATE: 'folder_create',
+  LOGIN: 'login',
+  LOGOUT: 'logout'
+} as const
+
+export type ActionType = (typeof ActionType)[keyof typeof ActionType]
 
 /**
  * 活动日志服务
@@ -62,7 +64,6 @@ export class ActivityService {
 
       await this.db.insert(activityLogs).values(log)
 
-      // 异步更新每日统计（不等待完成）
       this.updateDailyStats(params.userId, params.actionType, params.fileCount || 0, params.fileSize || 0)
         .catch(error => {
           console.error('[ActivityService] 更新每日统计失败:', error)
@@ -81,26 +82,22 @@ export class ActivityService {
     fileCount: number,
     fileSize: number
   ): Promise<void> {
-    const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD
+    const today = new Date().toISOString().split('T')[0]
 
     try {
-      // 查询今日是否已有统计记录
       const existing = await this.db
         .select()
         .from(dailyStats)
-        .where(eq(dailyStats.userId, userId))
-        .where(eq(dailyStats.date, today))
+        .where(and(eq(dailyStats.userId, userId), eq(dailyStats.date, today)))
         .limit(1)
 
       if (existing.length > 0) {
-        // 更新现有记录
-        const updateData: Partial<Record<string, number>> = {
+        const updateData: Record<string, number | Date> = {
           totalFiles: existing[0].totalFiles + fileCount,
           totalSize: existing[0].totalSize + fileSize,
           updatedAt: new Date()
         }
 
-        // 根据操作类型更新对应字段
         switch (actionType) {
           case ActionType.UPLOAD:
             updateData.uploadCount = existing[0].uploadCount + fileCount
@@ -118,10 +115,9 @@ export class ActivityService {
 
         await this.db
           .update(dailyStats)
-          .set(updateData)
+          .set(updateData as any)
           .where(eq(dailyStats.id, existing[0].id))
       } else {
-        // 创建新记录
         const newStats: NewDailyStats = {
           userId,
           date: today,
@@ -143,7 +139,6 @@ export class ActivityService {
 
   /**
    * 获取用户操作日志
-   * Story 9.3 MEDIUM FIX: 修复 total 计算，使用 count() 获取实际总数
    */
   async getUserLogs(
     userId: number,
@@ -156,8 +151,7 @@ export class ActivityService {
     }
   ): Promise<{ logs: any[]; total: number }> {
     try {
-      // 构建基础查询条件
-      const conditions = [eq(activityLogs.userId, userId)]
+      const conditions: SQL[] = [eq(activityLogs.userId, userId)]
 
       if (options?.actionType) {
         conditions.push(eq(activityLogs.actionType, options.actionType))
@@ -171,15 +165,13 @@ export class ActivityService {
         conditions.push(lte(activityLogs.createdAt, options.endDate))
       }
 
-      // 获取总数 - Story 9.3 FIX: 使用 count() 而非 logs.length
       const countResult = await this.db
         .select({ count: count() })
         .from(activityLogs)
-        .where(...conditions)
+        .where(and(...conditions))
 
       const total = countResult[0]?.count || 0
 
-      // 获取分页数据
       const logs = await this.db
         .select({
           id: activityLogs.id,
@@ -190,7 +182,7 @@ export class ActivityService {
           details: activityLogs.details
         })
         .from(activityLogs)
-        .where(...conditions)
+        .where(and(...conditions))
         .orderBy(desc(activityLogs.createdAt))
         .limit(options?.limit || 50)
         .offset(options?.offset || 0)
@@ -204,7 +196,6 @@ export class ActivityService {
 
   /**
    * 获取所有用户的操作日志（管理员）
-   * Story 9.3 MEDIUM FIX: 修复 total 计算，使用 count() 获取实际总数
    */
   async getAllLogs(options?: {
     limit?: number
@@ -215,8 +206,7 @@ export class ActivityService {
     endDate?: Date
   }): Promise<{ logs: any[]; total: number }> {
     try {
-      // 构建基础查询条件
-      const conditions: any[] = []
+      const conditions: SQL[] = []
 
       if (options?.userId) {
         conditions.push(eq(activityLogs.userId, options.userId))
@@ -234,15 +224,13 @@ export class ActivityService {
         conditions.push(lte(activityLogs.createdAt, options.endDate))
       }
 
-      // 获取总数 - Story 9.3 FIX: 使用 count() 而非 logs.length
       const countResult = await this.db
         .select({ count: count() })
         .from(activityLogs)
-        .where(...conditions)
+        .where(and(...conditions))
 
       const total = countResult[0]?.count || 0
 
-      // 获取分页数据
       const logs = await this.db
         .select({
           id: activityLogs.id,
@@ -254,7 +242,7 @@ export class ActivityService {
           details: activityLogs.details
         })
         .from(activityLogs)
-        .where(...conditions)
+        .where(and(...conditions))
         .orderBy(desc(activityLogs.createdAt))
         .limit(options?.limit || 100)
         .offset(options?.offset || 0)
@@ -268,13 +256,11 @@ export class ActivityService {
 
   /**
    * 获取每日活跃用户数（DAU）
-   * Story 9.3 CRITICAL FIX: 使用 COUNT(DISTINCT user_id) 计算唯一用户数，而非记录数
    */
   async getDailyActiveUsers(date?: string): Promise<number> {
     const targetDate = date || new Date().toISOString().split('T')[0]
 
     try {
-      // Story 9.3 FIX: 从 daily_stats 表统计唯一用户数
       const result = await this.db
         .select({ count: count() })
         .from(dailyStats)
@@ -297,20 +283,20 @@ export class ActivityService {
     totalSize: number
   }> {
     try {
-      let query = this.db
-        .select()
-        .from(dailyStats)
-        .where(eq(dailyStats.userId, userId))
+      const dateConditions: SQL[] = [eq(dailyStats.userId, userId)]
 
       if (startDate) {
-        query = query.where(gte(dailyStats.date, startDate.toISOString().split('T')[0]))
+        dateConditions.push(gte(dailyStats.date, startDate.toISOString().split('T')[0]))
       }
 
       if (endDate) {
-        query = query.where(lte(dailyStats.date, endDate.toISOString().split('T')[0]))
+        dateConditions.push(lte(dailyStats.date, endDate.toISOString().split('T')[0]))
       }
 
-      const stats = await query
+      const stats = await this.db
+        .select()
+        .from(dailyStats)
+        .where(and(...dateConditions))
 
       return {
         totalOperations: stats.reduce((sum, s) => sum + s.totalFiles, 0),

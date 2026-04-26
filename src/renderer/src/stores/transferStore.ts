@@ -738,7 +738,7 @@ export const useTransferStore = defineStore('transfer', () => {
   async function fetchDownloadQueueState() {
     try {
       const result = await window.electronAPI.transfer.getDownloadQueue?.()
-      if (result?.success) {
+      if (result?.success && result.state) {
         downloadQueue.value = result.state.pending
         activeDownloads.value = result.state.active
         completedDownloads.value = result.state.completed

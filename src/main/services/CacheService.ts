@@ -91,7 +91,7 @@ class CacheService {
     }
 
     // 获取缓存路径
-    this.cacheDir = app.getPath('cache')
+    this.cacheDir = app.getPath('cache' as any)
 
     // 不在初始化时验证路径，只记录路径信息
     // 路径验证会在手动清理时进行

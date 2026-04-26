@@ -13,6 +13,8 @@ export interface FileListResult {
   data?: {
     content: FileItem[]
     total: number
+    fromCache?: boolean
+    cachedAt?: string
   }
   error?: string
 }

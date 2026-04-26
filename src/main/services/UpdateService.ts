@@ -24,10 +24,10 @@ class UpdateService {
     }
 
     // 配置更新缓存路径：使用用户数据目录，避免权限问题
-    const userDataPath = app.getPath('userData')
-    autoUpdater.cacheDir = join(userDataPath, 'updates')
+    const updaterCacheDir = join(app.getPath('userData'), 'updates')
+    ;(autoUpdater as any).cacheDir = updaterCacheDir
 
-    loggerService.info('UpdateService', `更新缓存目录: ${autoUpdater.cacheDir}`)
+    loggerService.info('UpdateService', `更新缓存目录: ${updaterCacheDir}`)
     loggerService.info('UpdateService', `更新源: github-proxy.yangshare.cn/yangshare/LiuliuCloudStorage`)
 
     // 配置更新源：使用 GitHub provider 配合代理

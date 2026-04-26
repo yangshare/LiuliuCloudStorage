@@ -1,4 +1,4 @@
-import axios, { AxiosInstance } from 'axios'
+import axios from 'axios'
 import { AppError } from './httpClient'
 
 export interface TaskProgress {

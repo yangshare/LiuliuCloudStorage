@@ -14,11 +14,13 @@ export interface FileListResult {
     cachedAt?: string
   }
   error?: string
+  code?: string
 }
 
 export interface MkdirResult {
   success: boolean
   error?: string
+  shouldRefreshQuota?: boolean
 }
 
 const CACHE_TTL = 60 * 60 * 1000 // 1 hour

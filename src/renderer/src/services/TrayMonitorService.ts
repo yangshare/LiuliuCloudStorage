@@ -34,7 +34,7 @@ export class TrayMonitorService {
         transferStore.uploadQueue.filter(t => t.status === 'in_progress').length,
         transferStore.downloadQueue.filter(t => t.status === 'in_progress').length
       ],
-      ([activeUploads, activeDownloads]) => {
+      ([activeUploads, activeDownloads]: number[]) => {
         this.updateTrayStatus(
           activeUploads > 0 || activeDownloads > 0,
           activeUploads,

@@ -1,4 +1,4 @@
-import { ipcMain, dialog, app } from 'electron'
+import { ipcMain, dialog } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
 import { alistService } from '../../services/AlistService'
@@ -222,7 +222,7 @@ export function registerTransferHandlers(): void {
   })
 
   // 恢复上传任务
-  ipcMain.handle('transfer:resume', async (_event, { taskId, userId, userToken, username }) => {
+  ipcMain.handle('transfer:resume', async (_event, { taskId, userToken, username }) => {
     try {
       const task = await transferService.getTask(taskId)
       if (!task) {
@@ -458,9 +458,6 @@ export function registerTransferHandlers(): void {
   // 取消所有下载（批量取消）
   ipcMain.handle('transfer:cancelAllDownloads', async (_event, { userId }) => {
     try {
-      const downloadManager = new DownloadManager()
-
-      // 取消所有进行中和等待的任务
       await transferService.cancelAllUserTasks(userId, 'download')
 
       // 清空队列

@@ -1,4 +1,4 @@
-import { Notification, BrowserWindow, nativeImage } from 'electron'
+import { Notification, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
 

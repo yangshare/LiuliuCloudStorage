@@ -22,7 +22,7 @@ import { notificationService } from './services/NotificationService'
 import { updateService } from './services/UpdateService'
 import { loggerService } from './services/LoggerService'
 import { cacheService } from './services/CacheService'
-import { loadConfig, getConfigFilePath } from './config'
+import { loadConfig } from './config'
 
 // 加载应用配置（优先级: 环境变量 > config.json）
 const appConfig = loadConfig()

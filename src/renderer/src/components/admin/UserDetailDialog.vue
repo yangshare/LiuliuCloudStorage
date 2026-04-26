@@ -58,6 +58,7 @@
 <script setup lang="ts">
 import { ElDialog, ElDescriptions, ElDescriptionsItem, ElTag, ElProgress, ElButton, ElDivider, ElAlert } from 'element-plus'
 import type { UserListItem } from '../../services/AdminService'
+import { formatFileSize as _formatFileSize, formatDate as _formatDate } from '@/utils/formatters'
 
 interface Props {
   show: boolean
@@ -72,18 +73,8 @@ interface Emits {
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
-const formatBytes = (bytes: number): string => {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`
-}
-
-const formatDate = (dateString: string): string => {
-  const date = new Date(dateString)
-  return date.toLocaleString('zh-CN')
-}
+const formatBytes = (bytes: number) => _formatFileSize(bytes, 2)
+const formatDate = (dateString: string) => _formatDate(dateString)
 
 const getProgressColor = (percentage: number): string => {
   if (percentage > 90) return '#f56c6c'

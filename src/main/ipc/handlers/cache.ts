@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { cacheService } from '../../services/CacheService'
 import { loggerService } from '../../services/LoggerService'
+import { formatFileSize } from '../../../shared/formatters'
 
 /**
  * 注册缓存管理相关的IPC处理器
@@ -51,7 +52,7 @@ export function registerCacheHandlers(): void {
 
       // 计算清理的大小
       const clearedBytes = beforeSize.size - afterSize.size
-      const clearedSize = formatBytes(clearedBytes)
+      const clearedSize = formatFileSize(clearedBytes)
 
       loggerService.info('CacheHandler', `缓存清理完成，清理了 ${clearedSize}，删除了 ${filesDeleted} 个文件`)
 
@@ -69,15 +70,4 @@ export function registerCacheHandlers(): void {
       }
     }
   })
-}
-
-/**
- * 格式化字节数为可读格式
- */
-function formatBytes(bytes: number): string {
-  if (bytes <= 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1)
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }

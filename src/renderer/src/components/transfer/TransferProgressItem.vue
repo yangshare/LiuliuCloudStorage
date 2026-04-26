@@ -60,6 +60,7 @@ import { ref } from 'vue'
 import { ElProgress, ElButton } from 'element-plus'
 import { ElMessageBox, ElNotification } from 'element-plus'
 import type { UploadTask } from '@/stores/transferStore'
+import { formatFileSize as _formatFileSize, formatSpeed as _formatSpeed, formatTime as _formatTime } from '@/utils/formatters'
 
 interface Props {
   task: UploadTask
@@ -110,23 +111,17 @@ async function handleCancel() {
 
 function formatSize(bytes: number): string {
   if (!isFinite(bytes) || bytes < 0) return '0 B'
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+  return _formatFileSize(bytes, 2)
 }
 
 function formatSpeed(bytesPerSecond: number): string {
   if (!isFinite(bytesPerSecond) || bytesPerSecond <= 0) return '计算中...'
-  if (bytesPerSecond < 1024) return `${bytesPerSecond.toFixed(0)} B/s`
-  if (bytesPerSecond < 1024 * 1024) return `${(bytesPerSecond / 1024).toFixed(2)} KB/s`
-  return `${(bytesPerSecond / (1024 * 1024)).toFixed(2)} MB/s`
+  return _formatSpeed(bytesPerSecond, 2)
 }
 
 function formatEstimatedTime(seconds: number): string {
   if (!isFinite(seconds) || seconds <= 0) return '剩余 计算中...'
-  if (seconds < 60) return `剩余 ${Math.floor(seconds)}秒`
-  if (seconds < 3600) return `剩余 ${Math.floor(seconds / 60)}分钟`
-  return `剩余 ${Math.floor(seconds / 3600)}小时`
+  return `剩余 ${_formatTime(seconds)}`
 }
 
 function getStatus(status: string) {

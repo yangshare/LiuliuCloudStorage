@@ -194,6 +194,8 @@ import { computed, ref, watch } from 'vue'
 import { ElCard, ElTabs, ElTabPane, ElProgress, ElEmpty, ElButton, ElIcon, ElTag, ElText, ElSpace, ElNotification, ElPagination } from 'element-plus'
 import { Clock, Download, Check, CircleClose } from '@element-plus/icons-vue'
 import { useTransferStore } from '@/stores/transferStore'
+import { formatFileSize as _formatFileSize, formatSpeed as _formatSpeed } from '@/utils/formatters'
+import { openFileDirectory } from '@/utils/openFileDirectory'
 
 const transferStore = useTransferStore()
 
@@ -306,30 +308,11 @@ async function handleClearActiveQueue() {
   }
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
-}
-
-function formatSpeed(bytesPerSecond: number): string {
-  return formatBytes(bytesPerSecond) + '/s'
-}
+const formatBytes = (bytes: number) => _formatFileSize(bytes, 2)
+const formatSpeed = (bytesPerSecond: number) => _formatSpeed(bytesPerSecond, 2)
 
 async function handleOpenFolder(filePath: string) {
-  if (!filePath) {
-    ElNotification.warning({ title: '无法打开', message: '文件保存路径未知' })
-    return
-  }
-  try {
-    const result = await window.electronAPI?.downloadConfig.openFileDirectory(filePath)
-    if (!result?.success) ElNotification.error({ title: '打开失败', message: result?.error || '无法打开目录' })
-  } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : '无法打开目录'
-    ElNotification.error({ title: '打开失败', message: msg })
-  }
+  await openFileDirectory(filePath)
 }
 </script>
 

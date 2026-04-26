@@ -1,7 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, computed, h } from 'vue'
 import { throttle } from 'lodash-es'
+import { ElNotification, ElMessage } from 'element-plus'
 import { useQuotaStore } from './quotaStore'
+import { openFileDirectory } from '@/utils/openFileDirectory'
 
 // ==================== 常量定义 ====================
 
@@ -101,7 +103,7 @@ export const useTransferStore = defineStore('transfer', () => {
     const content = files.length === 1
       ? `文件 "${files[0]}" 已成功上传`
       : `${files.length} 个文件上传完成`
-    window.$notification?.success({ title, content, duration: 4000 })
+    ElNotification.success({ title, message: content, duration: 4000 })
     window.electronAPI?.notification?.show({ title: '溜溜网盘', body: content })
   }
 
@@ -111,33 +113,16 @@ export const useTransferStore = defineStore('transfer', () => {
     const title = '下载完成'
     if (files.length === 1) {
       const { fileName, savePath } = files[0]
-      window.$notification?.success({
+      ElNotification.success({
         title,
-        content: `文件 "${fileName}" 已成功下载`,
-        duration: 5000,
-        action: () => h(
-          'button',
-          {
-            onClick: async () => {
-              try {
-                const result = await window.electronAPI?.downloadConfig.openFileDirectory(savePath)
-                if (!result?.success) window.$message?.error(result?.error || '无法打开目录')
-              } catch (error: any) {
-                window.$message?.error('打开目录失败: ' + error.message)
-              }
-            },
-            style: {
-              padding: '4px 12px',
-              backgroundColor: '#18a058',
-              color: 'white',
-              border: 'none',
-              borderRadius: '3px',
-              cursor: 'pointer',
-              fontSize: '12px'
-            }
-          },
-          '打开文件夹'
-        )
+        message: h('div', [
+          h('p', { style: 'margin: 0 0 8px' }, `文件 "${fileName}" 已成功下载`),
+          h('button', {
+            onClick: () => openFileDirectory(savePath),
+            style: 'padding: 4px 12px; background-color: #18a058; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px'
+          }, '打开文件夹')
+        ]),
+        duration: 5000
       })
     } else {
       const content = `${files.length} 个文件下载完成`
@@ -155,33 +140,16 @@ export const useTransferStore = defineStore('transfer', () => {
           })
         : ''
       const lastSavePath = (commonDir || validDirs[0] || '').replace(/\//g, '\\')
-      window.$notification?.success({
+      ElNotification.success({
         title,
-        content,
-        duration: 5000,
-        action: () => h(
-          'button',
-          {
-            onClick: async () => {
-              try {
-                const result = await window.electronAPI?.downloadConfig.openFileDirectory(lastSavePath)
-                if (!result?.success) window.$message?.error(result?.error || '无法打开目录')
-              } catch (error: any) {
-                window.$message?.error('打开目录失败: ' + error.message)
-              }
-            },
-            style: {
-              padding: '4px 12px',
-              backgroundColor: '#18a058',
-              color: 'white',
-              border: 'none',
-              borderRadius: '3px',
-              cursor: 'pointer',
-              fontSize: '12px'
-            }
-          },
-          '打开文件夹'
-        )
+        message: h('div', [
+          h('p', { style: 'margin: 0 0 8px' }, content),
+          h('button', {
+            onClick: () => openFileDirectory(lastSavePath),
+            style: 'padding: 4px 12px; background-color: #18a058; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px'
+          }, '打开文件夹')
+        ]),
+        duration: 5000
       })
     }
     window.electronAPI?.notification?.show({ title: '溜溜网盘', body: `${files.length} 个文件下载完成` })
@@ -194,7 +162,7 @@ export const useTransferStore = defineStore('transfer', () => {
     const content = files.length === 1
       ? `文件 "${files[0]}" 下载失败`
       : `${files.length} 个文件下载失败`
-    window.$notification?.error({ title, content, duration: 5000 })
+    ElNotification.error({ title, message: content, duration: 5000 })
     window.electronAPI?.notification?.show({ title, body: content })
   }
 
@@ -374,9 +342,9 @@ export const useTransferStore = defineStore('transfer', () => {
 
       // 显示应用内失败通知（失败通知不合并，让用户知道哪个失败）
       if (isNotificationsEnabled()) {
-        window.$notification?.error({
+        ElNotification.error({
           title: '上传失败',
-          content: `文件 "${data.fileName}" 上传失败：${data.error}`,
+          message: `文件 "${data.fileName}" 上传失败：${data.error}`,
           duration: 5000
         })
         window.electronAPI?.notification?.show({
@@ -447,6 +415,16 @@ export const useTransferStore = defineStore('transfer', () => {
     if (typeof window !== 'undefined' && window.electronAPI?.transfer?.removeDownloadAuthFailedListener) {
       window.electronAPI.transfer.removeDownloadAuthFailedListener(downloadAuthFailedHandler)
     }
+
+    // 清理网络状态监听器
+    if (onlineHandler) {
+      window.removeEventListener('online', onlineHandler)
+      onlineHandler = null
+    }
+    if (offlineHandler) {
+      window.removeEventListener('offline', offlineHandler)
+      offlineHandler = null
+    }
   }
 
   // 恢复单个上传任务
@@ -489,32 +467,35 @@ export const useTransferStore = defineStore('transfer', () => {
 
   // 网络状态监听
   const isOnline = ref(navigator.onLine)
+  let onlineHandler: (() => void) | null = null
+  let offlineHandler: (() => void) | null = null
 
   // 监听网络状态变化
   if (typeof window !== 'undefined') {
-    window.addEventListener('online', async () => {
+    onlineHandler = async () => {
       isOnline.value = true
       if (isNotificationsEnabled()) {
-        window.$notification?.success({
+        ElNotification.success({
           title: '网络已恢复',
-          content: '正在重试失败的上传任务...',
+          message: '正在重试失败的上传任务...',
           duration: 3000
         })
       }
-      // TODO: 这里需要获取用户信息，暂时跳过
-      // await autoRetryFailedTasks(userId, userToken, username)
-    })
+    }
 
-    window.addEventListener('offline', () => {
+    offlineHandler = () => {
       isOnline.value = false
       if (isNotificationsEnabled()) {
-        window.$notification?.warning({
+        ElNotification.warning({
           title: '网络已断开',
-          content: '上传任务已暂停，等待网络恢复...',
+          message: '上传任务已暂停，等待网络恢复...',
           duration: 5000
         })
       }
-    })
+    }
+
+    window.addEventListener('online', onlineHandler)
+    window.addEventListener('offline', offlineHandler)
   }
 
   // ========== 下载功能 ==========
@@ -867,10 +848,10 @@ export const useTransferStore = defineStore('transfer', () => {
   const downloadAuthFailedHandler = (data: { error: string } | undefined) => {
     if (!data) return
     isDownloadQueuePaused.value = true
-    window.$notification?.error({
+    ElNotification.error({
       title: 'Alist 认证失效',
-      content: data.error,
-      duration: 0  // 不自动关闭
+      message: data.error,
+      duration: 0
     })
   }
 
@@ -929,7 +910,7 @@ export const useTransferStore = defineStore('transfer', () => {
       return result
     } catch (error: any) {
       console.error('恢复下载失败:', error)
-      window.$message?.error(error.message || '恢复下载失败')
+      ElMessage.error(error.message || '恢复下载失败')
       throw error
     }
   }
@@ -946,12 +927,12 @@ export const useTransferStore = defineStore('transfer', () => {
       }
 
       // 显示成功通知
-      window.$message?.success('下载已取消')
+      ElMessage.success('下载已取消')
 
       return result
     } catch (error: any) {
       console.error('取消下载失败:', error)
-      window.$message?.error(error.message || '取消下载失败')
+      ElMessage.error(error.message || '取消下载失败')
       throw error
     }
   }
@@ -963,7 +944,7 @@ export const useTransferStore = defineStore('transfer', () => {
     const authStore = (await import('./authStore')).useAuthStore()
 
     if (!authStore.user) {
-      window.$message?.error('请先登录')
+      ElMessage.error('请先登录')
       return
     }
 
@@ -974,12 +955,12 @@ export const useTransferStore = defineStore('transfer', () => {
         throw new Error(result?.error || '取消所有下载失败')
       }
 
-      window.$message?.success('所有下载已取消')
+      ElMessage.success('所有下载已取消')
 
       return result
     } catch (error: any) {
       console.error('取消所有下载失败:', error)
-      window.$message?.error(error.message || '取消下载失败')
+      ElMessage.error(error.message || '取消下载失败')
       throw error
     }
   }

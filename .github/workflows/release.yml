@@ -6,24 +6,17 @@ on:
       - 'v*'
 
 jobs:
+  # 不在此阶段上传 Release，避免两个平台同时写入同一 Release 产生竞态冲突
   build:
     strategy:
       matrix:
         include:
           - os: windows-latest
             package-cmd: pnpm package
-            artifact-pattern: |
-              dist/*.exe
-              dist/*.zip
           - os: macos-latest
             package-cmd: electron-builder --mac
-            artifact-pattern: |
-              dist/*.dmg
-              dist/*.zip
 
     runs-on: ${{ matrix.os }}
-    permissions:
-      contents: write
 
     steps:
       - name: Checkout code
@@ -56,9 +49,34 @@ jobs:
       - name: Package (${{ matrix.os }})
         run: ${{ matrix.package-cmd }}
 
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.os }}
+          path: |
+            dist/*.exe
+            dist/*.zip
+            dist/*.dmg
+          if-no-files-found: error
+          retention-days: 1
+
+  # 使用 ubuntu-latest 仅因为它是最便宜的 runner，不产生任何 Linux 产物
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
       - name: Upload to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ matrix.artifact-pattern }}
+          files: dist/**
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

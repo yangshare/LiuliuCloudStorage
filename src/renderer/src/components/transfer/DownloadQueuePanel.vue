@@ -449,6 +449,16 @@ async function handleOpenFolder(filePath: string) {
   border-radius: var(--radius-sm) !important;
 }
 
+:deep(.el-button--primary.is-text) {
+  background: transparent !important;
+  color: var(--netease-red) !important;
+}
+
+:deep(.el-button--primary.is-text:hover) {
+  color: var(--netease-red-light) !important;
+  background: rgba(204, 50, 50, 0.06) !important;
+}
+
 :deep(.el-button--warning) {
   background: linear-gradient(135deg, #FA8C16 0%, #F9A825 100%) !important;
   border: none !important;

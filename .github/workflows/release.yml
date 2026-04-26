@@ -41,8 +41,6 @@ jobs:
 
       - name: Package Windows
         run: pnpm package
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload to GitHub Releases
         uses: softprops/action-gh-release@v2
@@ -87,8 +85,6 @@ jobs:
 
       - name: Package macOS
         run: pnpm build:mac
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload to GitHub Releases
         uses: softprops/action-gh-release@v2

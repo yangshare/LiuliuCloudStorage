@@ -29,6 +29,9 @@ const fs = require('fs')
 // ── 配置 ──────────────────────────────────────────────
 const REMOTE_PREFIX = 'LiuliuCloudStorage/win/x64'
 const LOCAL_CONFIG_PATH = path.resolve(__dirname, '..', '.qiniu.local.json')
+const DEFAULT_PART_SIZE_MB = 16
+const MIN_PART_SIZE_MB = 1
+const MAX_PART_SIZE_MB = 1024
 const ZONE_MAP = {
   z0: 'Zone_z0',
   'cn-east-2': 'Zone_cn_east_2',
@@ -55,10 +58,11 @@ function formatFileSize(bytes) {
   return `${value.toFixed(fixed)} ${units[unitIndex]}`
 }
 
-function createProgressReporter(fileName, totalBytes) {
+function createProgressReporter(fileName, totalBytes, options = {}) {
   let lastPercent = -1
   let lastLogTime = 0
   let hasDrawn = false
+  const useTTYProgressBar = process.stdout.isTTY && !options.forceLineMode
 
   return {
     update(uploadedBytes, realTotalBytes) {
@@ -77,7 +81,7 @@ function createProgressReporter(fileName, totalBytes) {
       const uploadedText = formatFileSize(uploadedBytes)
       const totalText = formatFileSize(total)
 
-      if (process.stdout.isTTY) {
+      if (useTTYProgressBar) {
         const barWidth = 24
         const filled = Math.min(barWidth, Math.round((percent / 100) * barWidth))
         const bar = `${'='.repeat(filled)}${'-'.repeat(barWidth - filled)}`
@@ -89,15 +93,62 @@ function createProgressReporter(fileName, totalBytes) {
       hasDrawn = true
     },
     finish() {
-      if (hasDrawn && process.stdout.isTTY) {
+      if (hasDrawn && useTTYProgressBar) {
         process.stdout.write('\n')
       }
     },
     fail() {
-      if (hasDrawn && process.stdout.isTTY) {
+      if (hasDrawn && useTTYProgressBar) {
         process.stdout.write('\n')
       }
     }
+  }
+}
+
+function parseBooleanEnv(name, defaultValue) {
+  const raw = process.env[name]
+  if (raw === undefined) {
+    return { value: defaultValue, fromEnv: false }
+  }
+
+  const normalized = String(raw).trim().toLowerCase()
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+    return { value: true, fromEnv: true }
+  }
+  if (['0', 'false', 'no', 'off'].includes(normalized)) {
+    return { value: false, fromEnv: true }
+  }
+
+  console.error(`${name} 的值无效：${raw}`)
+  console.error('可选值：true/false、1/0、yes/no、on/off')
+  process.exit(1)
+}
+
+function parsePartSizeMb() {
+  const raw = process.env.QINIU_PART_SIZE_MB
+  if (raw === undefined || raw === '') {
+    return { value: DEFAULT_PART_SIZE_MB, fromEnv: false }
+  }
+
+  const value = Number.parseInt(raw, 10)
+  if (!Number.isInteger(value) || value < MIN_PART_SIZE_MB || value > MAX_PART_SIZE_MB) {
+    console.error(`QINIU_PART_SIZE_MB 的值无效：${raw}`)
+    console.error(`允许范围：${MIN_PART_SIZE_MB} - ${MAX_PART_SIZE_MB}（单位 MB）`)
+    process.exit(1)
+  }
+
+  return { value, fromEnv: true }
+}
+
+function resolveUploadTuning() {
+  const accelerate = parseBooleanEnv('QINIU_ACCELERATE_UPLOADING', true)
+  const partSize = parsePartSizeMb()
+
+  return {
+    accelerateUploading: accelerate.value,
+    accelerateUploadingFromEnv: accelerate.fromEnv,
+    partSizeMb: partSize.value,
+    partSizeBytes: partSize.value * 1024 * 1024
   }
 }
 
@@ -251,10 +302,71 @@ function checkLocalFiles(version, distDir) {
   return files
 }
 
+function createUploader(qiniu, zone, accelerateUploading) {
+  const config = new qiniu.conf.Config({
+    useHttpsDomain: true,
+    accelerateUploading
+  })
+  config.zone = resolveZone(qiniu, zone)
+  if (!config.zone) {
+    console.error(`无效的 zone: ${zone}，可选值：z0(华东) z1(华北) z2(华南) na0(北美) as0(东南亚)`)
+    process.exit(1)
+  }
+
+  return new qiniu.resume_up.ResumeUploader(config)
+}
+
+function splitUploadFiles(files) {
+  const metadataFile = files.find((file) => file.name === 'latest.yml')
+  const binaryFiles = files.filter((file) => file.name !== 'latest.yml')
+
+  if (!metadataFile) {
+    console.error('缺少 latest.yml，无法继续上传自动更新文件')
+    process.exit(1)
+  }
+
+  return { binaryFiles, metadataFile }
+}
+
+async function uploadSingleFile(qiniu, uploader, mac, bucket, bucketDomain, file, options = {}) {
+  const key = `${REMOTE_PREFIX}/${file.name}`
+  const fileSize = fs.statSync(file.local).size
+  const progressReporter = createProgressReporter(file.name, fileSize, {
+    forceLineMode: options.forceLineMode
+  })
+  const putExtra = qiniu.resume_up.PutExtra.create()
+  putExtra.partSize = options.partSizeBytes
+  putExtra.progressCallback = (uploadedBytes, totalBytes) => {
+    progressReporter.update(uploadedBytes, totalBytes)
+  }
+
+  console.log(`上传中: ${file.name} → ${key}`)
+
+  try {
+    await new Promise((resolve, reject) => {
+      const token = new qiniu.rs.PutPolicy({ scope: `${bucket}:${key}` }).uploadToken(mac)
+      uploader.putFileV2(token, key, file.local, putExtra, (err, body, info) => {
+        if (err) return reject(err)
+        if (!info || info.statusCode !== 200) {
+          return reject(new Error(`上传失败 (${info ? info.statusCode : 'unknown'}): ${JSON.stringify(body)}`))
+        }
+        resolve(body)
+      })
+    })
+    progressReporter.update(fileSize, fileSize)
+    progressReporter.finish()
+    console.log(`  完成: https://${bucketDomain}/${key}`)
+  } catch (err) {
+    progressReporter.fail()
+    throw new Error(`${file.name}: ${err.message}`)
+  }
+}
+
 // ── 主流程 ────────────────────────────────────────────
 async function main() {
   const qiniuConfig = loadQiniuConfig()
   const { version, distDir } = parseArgs()
+  const tuning = resolveUploadTuning()
 
   console.log(`版本号: ${version}`)
   console.log(`dist 目录: ${distDir}`)
@@ -268,46 +380,30 @@ async function main() {
   const { accessKey, secretKey, bucket, bucketDomain, zone } = qiniuConfig
 
   console.log(`Bucket: ${bucket}`)
+  console.log(`上传加速: ${tuning.accelerateUploading ? '开启' : '关闭'}${tuning.accelerateUploadingFromEnv ? '（来自环境变量）' : '（默认）'}`)
+  console.log(`分片大小: ${tuning.partSizeMb} MB`)
 
   const mac = new qiniu.auth.digest.Mac(accessKey, secretKey)
-  const config = new qiniu.conf.Config()
-  config.zone = resolveZone(qiniu, zone)
-  if (!config.zone) {
-    console.error(`无效的 zone: ${zone}，可选值：z0(华东) z1(华北) z2(华南) na0(北美) as0(东南亚)`)
-    process.exit(1)
-  }
-  const uploader = new qiniu.resume_up.ResumeUploader(config)
+  const uploader = createUploader(qiniu, zone, tuning.accelerateUploading)
+  const { binaryFiles, metadataFile } = splitUploadFiles(files)
 
-  // 上传顺序固定：.exe → .blockmap → latest.yml
-  for (const file of files) {
-    const key = `${REMOTE_PREFIX}/${file.name}`
-    const fileSize = fs.statSync(file.local).size
-    const progressReporter = createProgressReporter(file.name, fileSize)
-    const putExtra = qiniu.resume_up.PutExtra.create()
-    putExtra.progressCallback = (uploadedBytes, totalBytes) => {
-      progressReporter.update(uploadedBytes, totalBytes)
-    }
-
-    console.log(`上传中: ${file.name} → ${key}`)
-
-    try {
-      await new Promise((resolve, reject) => {
-        const token = new qiniu.rs.PutPolicy({ scope: `${bucket}:${key}` }).uploadToken(mac)
-        uploader.putFile(token, key, file.local, putExtra, (err, body, info) => {
-          if (err) return reject(err)
-          if (info.statusCode !== 200) return reject(new Error(`上传失败 (${info.statusCode}): ${JSON.stringify(body)}`))
-          resolve(body)
-        })
+  try {
+    console.log('并发上传二进制文件：安装包和 blockmap')
+    await Promise.all(binaryFiles.map((file) =>
+      uploadSingleFile(qiniu, uploader, mac, bucket, bucketDomain, file, {
+        partSizeBytes: tuning.partSizeBytes,
+        forceLineMode: true
       })
-      progressReporter.update(fileSize, fileSize)
-      progressReporter.finish()
-      console.log(`  完成: https://${bucketDomain}/${key}`)
-    } catch (err) {
-      progressReporter.fail()
-      console.error(`  失败: ${err.message}`)
-      console.error('上传中断，请修复后重新运行')
-      process.exit(1)
-    }
+    ))
+
+    console.log('上传更新元数据：latest.yml')
+    await uploadSingleFile(qiniu, uploader, mac, bucket, bucketDomain, metadataFile, {
+      partSizeBytes: tuning.partSizeBytes
+    })
+  } catch (err) {
+    console.error(`  失败: ${err.message}`)
+    console.error('上传中断，请修复后重新运行')
+    process.exit(1)
   }
 
   console.log('')

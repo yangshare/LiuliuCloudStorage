@@ -70,6 +70,9 @@ web_modules/
 .env.*
 !.env.example
 
+# Local qiniu upload config
+.qiniu.local.json
+
 # Application config files (keep example)
 config.json
 !config.example.json

@@ -5,6 +5,8 @@ import { loggerService } from './LoggerService'
 import { loadConfig } from '../config'
 import { formatFileSize } from '../../shared/formatters'
 
+const WINDOWS_UPDATE_URL = 'https://qiniu.yangshare.com/LiuliuCloudStorage/win/x64'
+
 class UpdateService {
   private mainWindow: BrowserWindow | null = null
   private updateDownloaded = false
@@ -27,16 +29,18 @@ class UpdateService {
     const updaterCacheDir = join(app.getPath('userData'), 'updates')
     ;(autoUpdater as any).cacheDir = updaterCacheDir
 
-    loggerService.info('UpdateService', `更新缓存目录: ${updaterCacheDir}`)
-    loggerService.info('UpdateService', `更新源: github-proxy.yangshare.cn/yangshare/LiuliuCloudStorage`)
+    if (process.platform !== 'win32') {
+      loggerService.info('UpdateService', `当前平台 ${process.platform} 暂不支持自动更新，跳过初始化`)
+      return
+    }
 
-    // 配置更新源：使用 GitHub provider 配合代理
-    // 代理脚本已修复，现在支持 /api/v3/ 路径
+    loggerService.info('UpdateService', `更新缓存目录: ${updaterCacheDir}`)
+    loggerService.info('UpdateService', `更新源: ${WINDOWS_UPDATE_URL}`)
+
+    // 配置更新源：使用七牛静态更新目录（Windows）
     autoUpdater.setFeedURL({
-      provider: 'github',
-      owner: 'yangshare',
-      repo: 'LiuliuCloudStorage',
-      host: 'github-proxy.yangshare.cn'
+      provider: 'generic',
+      url: WINDOWS_UPDATE_URL
     })
 
     // 配置：不自动下载，手动控制
@@ -98,6 +102,12 @@ class UpdateService {
 
   async checkForUpdates() {
     try {
+      if (process.platform !== 'win32') {
+        loggerService.info('UpdateService', `当前平台 ${process.platform} 暂不支持自动更新，跳过检查`)
+        this.sendToRenderer('update:not-available', undefined)
+        return
+      }
+
       // 开发环境：未启用测试模式时跳过更新检查
       const config = loadConfig()
       if (!app.isPackaged && config.testUpdate !== true) {

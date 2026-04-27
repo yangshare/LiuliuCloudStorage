@@ -81,4 +81,3 @@ mac:
 
 dmg:
   artifactName: LiuliuCloudStorage-${version}-${arch}-mac.${ext}
-publish: never

@@ -13,9 +13,9 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            package-cmd: pnpm package
+            package-cmd: pnpm exec electron-builder --win --publish never
           - os: macos-latest
-            package-cmd: electron-builder --mac
+            package-cmd: pnpm exec electron-builder --mac --publish never
 
     runs-on: ${{ matrix.os }}
 

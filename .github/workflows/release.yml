@@ -33,6 +33,16 @@ jobs:
           node-version: '22'
           cache: 'pnpm'
 
+      - name: Cache Electron binary
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}/electron-cache
+            ${{ runner.temp }}/electron-builder-cache
+          key: electron-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            electron-${{ runner.os }}-
+
       - name: Update version from tag
         run: |
           TAG="${{ github.ref_name }}"
@@ -42,6 +52,8 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install
+        env:
+          ELECTRON_CACHE: ${{ runner.temp }}/electron-cache
 
       - name: Build application
         run: pnpm build

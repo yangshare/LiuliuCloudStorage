@@ -9,6 +9,7 @@ jobs:
   # 不在此阶段上传 Release，避免两个平台同时写入同一 Release 产生竞态冲突
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
@@ -51,9 +52,10 @@ jobs:
         shell: bash
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile --child-concurrency=1
         env:
           ELECTRON_CACHE: ${{ runner.temp }}/electron-cache
+          ELECTRON_BUILDER_CACHE: ${{ runner.temp }}/electron-builder-cache
 
       - name: Build application
         run: pnpm build

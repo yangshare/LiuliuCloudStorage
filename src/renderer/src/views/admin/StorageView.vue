@@ -90,6 +90,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { ElCard, ElStatistic, ElText, ElDivider, ElProgress, ElAlert, ElIcon, ElSpace, ElTable, ElTableColumn, ElSkeleton } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import { adminService, type StorageStats } from '../../services/AdminService'
+import { formatFileSizePrecise as formatBytes } from '@/utils/formatters'
 
 const loading = ref(false)
 const stats = ref<StorageStats>({
@@ -114,15 +115,6 @@ const loadStorageStats = async () => {
   } finally {
     loading.value = false
   }
-}
-
-// 格式化字节数
-const formatBytes = (bytes: number): string => {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`
 }
 
 // 组件挂载时加载数据并启动定时刷新

@@ -6,10 +6,18 @@ on:
       - 'v*'
 
 jobs:
-  build-win:
-    runs-on: windows-latest
-    permissions:
-      contents: write
+  # 不在此阶段上传 Release，避免两个平台同时写入同一 Release 产生竞态冲突
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            package-cmd: pnpm exec electron-builder --win --publish never
+          - os: macos-latest
+            package-cmd: pnpm exec electron-builder --mac --publish never
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout code
@@ -26,71 +34,63 @@ jobs:
           node-version: '22'
           cache: 'pnpm'
 
-      - name: Update version from tag
-        run: |
-          $TAG = "${{ github.ref_name }}"
-          $VERSION = $TAG -replace '^v', ''
-          npm version $VERSION --no-git-tag-version
-        shell: pwsh
-
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Build application
-        run: pnpm build
-
-      - name: Package Windows
-        run: pnpm package
-
-      - name: Upload to GitHub Releases
-        uses: softprops/action-gh-release@v2
+      - name: Cache Electron binary
+        uses: actions/cache@v4
         with:
-          files: |
-            dist/*.exe
-            dist/*.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-mac:
-    runs-on: macos-latest
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 9
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
+          path: |
+            ${{ runner.temp }}/electron-cache
+            ${{ runner.temp }}/electron-builder-cache
+          key: electron-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            electron-${{ runner.os }}-
 
       - name: Update version from tag
         run: |
           TAG="${{ github.ref_name }}"
           VERSION="${TAG#v}"
           npm version "$VERSION" --no-git-tag-version
+        shell: bash
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile --child-concurrency=1
+        env:
+          ELECTRON_CACHE: ${{ runner.temp }}/electron-cache
+          ELECTRON_BUILDER_CACHE: ${{ runner.temp }}/electron-builder-cache
 
       - name: Build application
         run: pnpm build
 
-      - name: Package macOS
-        run: pnpm build:mac
+      - name: Package (${{ matrix.os }})
+        run: ${{ matrix.package-cmd }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.os }}
+          path: |
+            dist/*.exe
+            dist/*.zip
+            dist/*.dmg
+          if-no-files-found: error
+          retention-days: 1
+
+  # 使用 ubuntu-latest 仅因为它是最便宜的 runner，不产生任何 Linux 产物
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
 
       - name: Upload to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            dist/*.dmg
-            dist/*.zip
+          files: dist/**
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

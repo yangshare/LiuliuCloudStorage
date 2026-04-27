@@ -78,6 +78,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElCard, ElCheckbox, ElSelect, ElOption, ElText, ElButton, ElProgress, ElTag, ElSpace, ElTable, ElTableColumn } from 'element-plus'
 import { adminService, type UserListItem } from '../../services/AdminService'
+import { formatFileSizePrecise as formatBytes } from '@/utils/formatters'
 import QuotaAdjustDialog from '../../components/admin/QuotaAdjustDialog.vue'
 
 const loading = ref(false)
@@ -119,15 +120,6 @@ const filteredUsers = computed(() => {
 
   return users
 })
-
-// 格式化字节数
-const formatBytes = (bytes: number): string => {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`
-}
 
 // 处理排序变化
 const handleSortChange = () => {

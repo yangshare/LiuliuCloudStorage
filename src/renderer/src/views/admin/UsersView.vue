@@ -94,6 +94,7 @@ import { ref, onMounted } from 'vue'
 import { ElCard, ElInput, ElText, ElIcon, ElProgress, ElTag, ElSpace, ElTable, ElTableColumn, ElPagination } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { adminService, type UserListItem } from '../../services/AdminService'
+import { formatFileSizePrecise as formatBytes } from '@/utils/formatters'
 import UserDetailDialog from '../../components/admin/UserDetailDialog.vue'
 import QuotaAdjustDialog from '../../components/admin/QuotaAdjustDialog.vue'
 
@@ -158,15 +159,6 @@ const handleAdjustQuotaFromDetail = (user: UserListItem) => {
 // 配额调整成功后重新加载
 const handleQuotaAdjusted = () => {
   loadUsers()
-}
-
-// 格式化字节数
-const formatBytes = (bytes: number): string => {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`
 }
 
 // 格式化日期

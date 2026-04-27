@@ -1,13 +1,12 @@
 # 溜溜网盘
 
-一个基于 Electron 的桌面端网盘工具，核心功能是**某度网盘分享链接批量转存**后高速下载。
+一个基于 Electron 的桌面端网盘工具，核心功能是**某度网盘分享链接批量转存**后不限速下载。
 
 ## 安装
 
 从以下地址下载最新版本：
 
-- [GitHub Releases](https://github.com/yangshare/LiuliuCloudStorage/releases)（原站）
-- [国内镜像](https://github-proxy.yangshare.cn/yangshare/LiuliuCloudStorage/releases/download/v2.0.9/LiuliuCloudStorage-Setup-2.0.9.exe)（推荐）
+- [GitHub Releases](https://github.com/yangshare/LiuliuCloudStorage/releases)
 
 | 版本 | 说明 |
 |------|------|
@@ -73,8 +72,7 @@
 {
   "alistBaseUrl": "http://your-server:5244",
   "ambApiUrl": "http://your-server:8080",
-  "ambTransferToken": "your-token",
-  "n8nBaseUrl": "http://your-server:5678"
+  "ambTransferToken": "your-token"
 }
 ```
 
@@ -83,7 +81,6 @@
 | alistBaseUrl | Alist 文件存储服务地址 | 是 |
 | ambApiUrl | AMB 分享转存 API 地址 | 是 |
 | ambTransferToken | 转存认证令牌 | 否 |
-| n8nBaseUrl | N8N 工作流地址 | 否 |
 
 ## 开发环境
 

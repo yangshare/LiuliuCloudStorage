@@ -69,6 +69,7 @@
           <el-table
             :data="records"
             :loading="loading"
+            :max-height="recordTableMaxHeight"
             @selection-change="handleSelectionChange"
             style="width: 100%"
           >
@@ -112,14 +113,15 @@
 
           <!-- 分页 -->
           <el-pagination
+            class="records-pagination"
             v-model:current-page="pagination.pageNum"
             v-model:page-size="pagination.pageSize"
-            :page-sizes="[10, 20, 50]"
+            :page-sizes="pageSizeOptions"
             :total="totalRecords"
-            layout="total, sizes, prev, pager, next"
-            @current-change="loadRecords"
+            background
+            layout="total, sizes, prev, pager, next, jumper"
+            @current-change="handlePageChange"
             @size-change="handlePageSizeChange"
-            style="margin-top: 16px; justify-content: flex-end;"
           />
         </div>
       </div>
@@ -163,11 +165,13 @@ const loading = ref(false)
 const records = ref<any[]>([])
 const totalRecords = ref(0)
 const selectedIds = ref<number[]>([])
+const pageSizeOptions = [8, 10, 20, 50]
+const recordTableMaxHeight = 420
 
 // 分页
 const pagination = reactive({
   pageNum: 1,
-  pageSize: 20
+  pageSize: pageSizeOptions[0]
 })
 
 // 状态配置
@@ -345,9 +349,27 @@ async function loadRecords() {
 /**
  * 处理分页大小变化
  */
-function handlePageSizeChange() {
+function handlePageChange(pageNum: number) {
+  pagination.pageNum = pageNum
+  loadRecords()
+}
+
+/**
+ * 处理分页大小变化
+ */
+function handlePageSizeChange(pageSize: number) {
+  pagination.pageSize = pageSize
   pagination.pageNum = 1
   loadRecords()
+}
+
+function moveToPreviousPageIfCurrentPageEmpty(deletedCount = 1) {
+  const remainingTotal = Math.max(totalRecords.value - deletedCount, 0)
+  const maxPage = Math.max(Math.ceil(remainingTotal / pagination.pageSize), 1)
+
+  if (pagination.pageNum > maxPage) {
+    pagination.pageNum = maxPage
+  }
 }
 
 /**
@@ -381,6 +403,7 @@ async function handleDelete(id: number) {
 
     if (result.success) {
       ElMessage.success('删除成功')
+      moveToPreviousPageIfCurrentPageEmpty()
       await loadRecords()
     } else {
       ElMessage.error(result.message || '删除失败')
@@ -416,6 +439,7 @@ async function handleBatchDelete() {
 
     if (result.success) {
       ElMessage.success('批量删除成功')
+      moveToPreviousPageIfCurrentPageEmpty(selectedIds.value.length)
       selectedIds.value = []
       await loadRecords()
     } else {
@@ -440,7 +464,9 @@ onMounted(() => {
   margin: 0 auto;
   padding: 20px;
   background: linear-gradient(135deg, #F5F5F5 0%, #E8E8E8 100%);
-  min-height: 100vh;
+  height: 100vh;
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 
 /* 卡片 - 网易云风格 */
@@ -451,6 +477,10 @@ onMounted(() => {
   background: rgba(255, 255, 255, 0.85) !important;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
+}
+
+:deep(.el-card__body) {
+  min-height: 0;
 }
 
 :deep(.el-card__header) {
@@ -488,6 +518,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-height: 0;
 }
 
 .records-header {
@@ -505,6 +536,10 @@ onMounted(() => {
 /* 表格样式 */
 :deep(.el-table) {
   border-radius: var(--radius-md);
+}
+
+:deep(.el-table__body-wrapper) {
+  scrollbar-width: thin;
 }
 
 :deep(.el-table th) {
@@ -566,8 +601,12 @@ onMounted(() => {
 }
 
 /* 分页样式 */
-:deep(.el-pagination) {
+.records-pagination {
   display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px 0;
+  margin-top: 4px;
 }
 
 :deep(.el-pagination button),

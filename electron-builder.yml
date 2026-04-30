@@ -62,6 +62,7 @@ portable:
 mac:
   icon: build/icon.icns
   category: public.app-category.utilities
+  minimumSystemVersion: "11.0"
   artifactName: LiuliuCloudStorage-${version}-${arch}-mac.${ext}
   target:
     - target: dmg

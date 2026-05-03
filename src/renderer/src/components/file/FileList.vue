@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted } from 'vue'
 import { ElCheckbox, ElButton, ElInput, ElMessage, ElEmpty } from 'element-plus'
-import { Download } from '@element-plus/icons-vue'
+import { CaretBottom, CaretTop, Download } from '@element-plus/icons-vue'
 import { useFileStore } from '../../stores/fileStore'
 import { useTransferStore } from '../../stores/transferStore'
 import { useAuthStore } from '../../stores/authStore'
@@ -70,6 +70,10 @@ const offlineModeMessage = computed(() => {
 
 function handleRetry() {
   fileStore.refresh()
+}
+
+function sortButtonClass(field: 'name' | 'modified') {
+  return ['sortable-header', { active: fileStore.sortField === field }]
 }
 
 // 处理文件/文件夹点击
@@ -428,9 +432,39 @@ async function handleDownloadToPath(savePath: string) {
           />
         </div>
         <div class="header-icon"></div>
-        <div class="header-name">名称</div>
+        <button
+          type="button"
+          :class="[sortButtonClass('name'), 'header-name']"
+          @click="fileStore.toggleSort('name')"
+          title="按名称排序"
+        >
+          <span>名称</span>
+          <el-icon v-if="fileStore.sortField === 'name'" class="sort-icon">
+            <CaretTop v-if="fileStore.sortDirection === 'asc'" />
+            <CaretBottom v-else />
+          </el-icon>
+          <span v-else class="sort-icon inactive-sort-icon" aria-hidden="true">
+            <el-icon><CaretTop /></el-icon>
+            <el-icon><CaretBottom /></el-icon>
+          </span>
+        </button>
         <div class="header-size">大小</div>
-        <div class="header-date">修改日期</div>
+        <button
+          type="button"
+          :class="[sortButtonClass('modified'), 'header-date']"
+          @click="fileStore.toggleSort('modified')"
+          title="按修改日期排序"
+        >
+          <span>修改日期</span>
+          <el-icon v-if="fileStore.sortField === 'modified'" class="sort-icon">
+            <CaretTop v-if="fileStore.sortDirection === 'asc'" />
+            <CaretBottom v-else />
+          </el-icon>
+          <span v-else class="sort-icon inactive-sort-icon" aria-hidden="true">
+            <el-icon><CaretTop /></el-icon>
+            <el-icon><CaretBottom /></el-icon>
+          </span>
+        </button>
         <div class="header-actions">操作</div>
       </div>
 
@@ -686,6 +720,52 @@ async function handleDownloadToPath(savePath: string) {
 .header-actions {
   width: 100px;
   text-align: center;
+}
+
+.sortable-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sortable-header:hover,
+.sortable-header.active {
+  color: var(--netease-red);
+}
+
+.sort-icon {
+  font-size: 12px;
+}
+
+.inactive-sort-icon {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0;
+  width: 12px;
+  height: 14px;
+  color: var(--netease-gray-5);
+  opacity: 0.55;
+  transition: color 0.2s ease, opacity 0.2s ease;
+}
+
+.inactive-sort-icon :deep(.el-icon) {
+  height: 7px;
+  font-size: 10px;
+}
+
+.sortable-header:hover .inactive-sort-icon {
+  color: var(--netease-red);
+  opacity: 0.9;
 }
 
 .list-item {

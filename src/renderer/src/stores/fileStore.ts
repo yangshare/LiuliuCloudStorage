@@ -10,6 +10,8 @@ const ROOT_LABEL = '根目录'
 
 // 网格密度类型
 export type GridDensity = 'compact' | 'comfortable' | 'spacious'
+export type SortField = 'name' | 'modified'
+export type SortDirection = 'asc' | 'desc'
 
 // 网格密度配置 - 紧凑高效风格
 const GRID_DENSITY_CONFIG: Record<GridDensity, { minWidth: string; gap: string; padding: string; iconSize: number }> = {
@@ -39,6 +41,8 @@ export const useFileStore = defineStore('file', () => {
   const viewMode = ref<'list' | 'grid'>('list') // 视图模式
   const searchKeyword = ref('') // 当前目录搜索关键词
   const gridDensity = ref<GridDensity>('comfortable') // 网格密度
+  const sortField = ref<SortField | null>(null)
+  const sortDirection = ref<SortDirection>('asc')
 
   // 网络状态监听
   function handleOnline() { isOnline.value = true }
@@ -51,11 +55,35 @@ export const useFileStore = defineStore('file', () => {
   }
 
   // Getters
+  function compareByName(a: FileItem, b: FileItem): number {
+    return a.name.localeCompare(b.name)
+  }
+
+  function getModifiedTime(file: FileItem): number {
+    const time = Date.parse(file.modified)
+    return Number.isNaN(time) ? 0 : time
+  }
+
   const sortedFiles = computed(() => {
+    const activeSortField = sortField.value ?? 'name'
+    const direction = sortDirection.value === 'asc' ? 1 : -1
+
     return [...files.value].sort((a, b) => {
       if (a.isDir && !b.isDir) return -1
       if (!a.isDir && b.isDir) return 1
-      return a.name.localeCompare(b.name)
+
+      let result = 0
+      if (activeSortField === 'modified') {
+        result = getModifiedTime(a) - getModifiedTime(b)
+      } else {
+        result = compareByName(a, b)
+      }
+
+      if (result === 0) {
+        return compareByName(a, b)
+      }
+
+      return result * direction
     })
   })
 
@@ -267,6 +295,16 @@ export const useFileStore = defineStore('file', () => {
     selectedFiles.value = files.value.filter(f => !currentSelected.has(f.name))
   }
 
+  function toggleSort(field: SortField) {
+    if (sortField.value === field) {
+      sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
+    } else {
+      sortField.value = field
+      sortDirection.value = 'asc'
+    }
+    lastClickedIndex.value = -1
+  }
+
   // 切换视图模式
   function setViewMode(mode: 'list' | 'grid') {
     viewMode.value = mode
@@ -315,6 +353,8 @@ export const useFileStore = defineStore('file', () => {
     isPartialSelected,
     viewMode,
     gridDensity,
+    sortField,
+    sortDirection,
     gridMinWidth,
     gridGap,
     gridRowGap,
@@ -334,6 +374,7 @@ export const useFileStore = defineStore('file', () => {
     selectAll,
     deselectAll,
     invertSelection,
+    toggleSort,
     setViewMode,
     setGridDensity,
     loadGridDensityPreference

@@ -2,6 +2,12 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useFileStore } from '../../../src/renderer/src/stores/fileStore'
 
+vi.mock('vue-router', () => ({
+  useRouter: () => ({
+    push: vi.fn()
+  })
+}))
+
 describe('fileStore - createFolder', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -10,13 +16,22 @@ describe('fileStore - createFolder', () => {
     global.window = {
       electronAPI: {
         file: {
-          mkdir: vi.fn()
+          mkdir: vi.fn(),
+          list: vi.fn().mockResolvedValue({
+            success: true,
+            data: {
+              content: [],
+              total: 0
+            }
+          })
         }
       },
       $message: {
         success: vi.fn(),
         error: vi.fn()
-      }
+      },
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn()
     } as any
   })
 
@@ -56,5 +71,68 @@ describe('fileStore - createFolder', () => {
     invalidNames.forEach(name => {
       expect(pattern.test(name)).toBe(false)
     })
+  })
+})
+
+describe('fileStore - sorting', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+
+    global.window = {
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn()
+    } as any
+  })
+
+  it('第一次点击名称升序，第二次点击名称倒序', () => {
+    const store = useFileStore()
+    store.files = [
+      { name: 'b.txt', size: 1, isDir: false, modified: '2026-05-02T10:00:00Z' },
+      { name: 'z-folder', size: 0, isDir: true, modified: '2026-05-02T10:00:00Z' },
+      { name: 'a.txt', size: 1, isDir: false, modified: '2026-05-01T10:00:00Z' },
+      { name: 'a-folder', size: 0, isDir: true, modified: '2026-05-01T10:00:00Z' }
+    ]
+
+    store.toggleSort('name')
+    expect(store.filteredFiles.map(file => file.name)).toEqual([
+      'a-folder',
+      'z-folder',
+      'a.txt',
+      'b.txt'
+    ])
+
+    store.toggleSort('name')
+    expect(store.filteredFiles.map(file => file.name)).toEqual([
+      'z-folder',
+      'a-folder',
+      'b.txt',
+      'a.txt'
+    ])
+  })
+
+  it('第一次点击修改时间升序，第二次点击修改时间倒序', () => {
+    const store = useFileStore()
+    store.files = [
+      { name: 'new-file.txt', size: 1, isDir: false, modified: '2026-05-03T10:00:00Z' },
+      { name: 'old-folder', size: 0, isDir: true, modified: '2026-05-01T10:00:00Z' },
+      { name: 'old-file.txt', size: 1, isDir: false, modified: '2026-05-01T10:00:00Z' },
+      { name: 'new-folder', size: 0, isDir: true, modified: '2026-05-03T10:00:00Z' }
+    ]
+
+    store.toggleSort('modified')
+    expect(store.filteredFiles.map(file => file.name)).toEqual([
+      'old-folder',
+      'new-folder',
+      'old-file.txt',
+      'new-file.txt'
+    ])
+
+    store.toggleSort('modified')
+    expect(store.filteredFiles.map(file => file.name)).toEqual([
+      'new-folder',
+      'old-folder',
+      'new-file.txt',
+      'old-file.txt'
+    ])
   })
 })

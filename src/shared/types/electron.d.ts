@@ -161,6 +161,35 @@ export interface ElectronAPI {
     delete: (params: { id: number; userId: number }) => Promise<any>
     batchDelete: (params: { ids: number[]; userId: number }) => Promise<any>
   }
+  autoSync: {
+    createPlanAndRun: (params: {
+      userId: number
+      name?: string
+      shareUrl: string
+      localSyncDir: string
+      expiresAt: number
+      autoRunOnStartup?: boolean
+      conflictPolicy?: 'skip_existing' | 'rename_remote' | 'overwrite'
+    }) => Promise<any>
+    listPlans: (params: { userId: number }) => Promise<any>
+    updatePlan: (params: {
+      id: number
+      userId: number
+      updates: {
+        name?: string
+        localSyncDir?: string
+        expiresAt?: number
+        autoRunOnStartup?: boolean
+        conflictPolicy?: 'skip_existing' | 'rename_remote' | 'overwrite'
+      }
+    }) => Promise<any>
+    pausePlan: (params: { id: number; userId: number }) => Promise<any>
+    resumePlan: (params: { id: number; userId: number }) => Promise<any>
+    deletePlan: (params: { id: number; userId: number }) => Promise<any>
+    runPlan: (params: { id: number; userId: number }) => Promise<any>
+    listRuns: (params: { planId: number; userId: number; limit?: number }) => Promise<any>
+    startupRun: (params: { userId: number }) => Promise<any>
+  }
   config: {
     check: () => Promise<any>
     get: () => Promise<any>

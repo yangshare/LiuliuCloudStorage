@@ -3,8 +3,10 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
+import { useAuthStore } from '../stores/authStore'
 
 const router = useRouter()
+const authStore = useAuthStore()
 
 const formData = ref({ username: '', password: '' })
 const autoLogin = ref(false)
@@ -37,6 +39,15 @@ async function handleLogin() {
       autoLogin.value
     )
     if (result.success) {
+      const userResult = await window.electronAPI.auth.getCurrentUser()
+      if (userResult?.success && userResult.data) {
+        authStore.setUser({
+          id: userResult.data.id,
+          username: userResult.data.username,
+          token: '',
+          isAdmin: userResult.data.isAdmin
+        })
+      }
       ElMessage.success('登录成功')
       router.push('/')
     } else {

@@ -127,6 +127,53 @@ CREATE TABLE IF NOT EXISTS share_transfer_records (
 CREATE INDEX IF NOT EXISTS idx_share_transfer_user_id ON share_transfer_records(user_id);
 CREATE INDEX IF NOT EXISTS idx_share_transfer_status ON share_transfer_records(status);
 CREATE INDEX IF NOT EXISTS idx_share_transfer_created_at ON share_transfer_records(created_at);
+
+-- 分享转存自动同步计划表：保存本机自动同步计划
+CREATE TABLE IF NOT EXISTS auto_sync_plans (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  share_url TEXT NOT NULL,
+  share_code TEXT,
+  local_sync_dir TEXT NOT NULL,
+  last_alist_path TEXT,
+  status TEXT NOT NULL DEFAULT 'enabled',
+  expires_at INTEGER NOT NULL,
+  auto_run_on_startup INTEGER NOT NULL DEFAULT 1,
+  conflict_policy TEXT NOT NULL DEFAULT 'skip_existing',
+  last_sync_at INTEGER,
+  last_success_at INTEGER,
+  last_error_message TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_auto_sync_plans_user_id ON auto_sync_plans(user_id);
+CREATE INDEX IF NOT EXISTS idx_auto_sync_plans_status ON auto_sync_plans(status);
+CREATE INDEX IF NOT EXISTS idx_auto_sync_plans_expires_at ON auto_sync_plans(expires_at);
+CREATE INDEX IF NOT EXISTS idx_auto_sync_plans_user_status ON auto_sync_plans(user_id, status);
+
+-- 分享转存自动同步执行记录表
+CREATE TABLE IF NOT EXISTS auto_sync_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  plan_id INTEGER NOT NULL REFERENCES auto_sync_plans(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  trigger_type TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'running',
+  alist_path TEXT,
+  remote_file_count INTEGER NOT NULL DEFAULT 0,
+  local_file_count INTEGER NOT NULL DEFAULT 0,
+  missing_file_count INTEGER NOT NULL DEFAULT 0,
+  queued_download_count INTEGER NOT NULL DEFAULT 0,
+  skipped_count INTEGER NOT NULL DEFAULT 0,
+  failed_count INTEGER NOT NULL DEFAULT 0,
+  error_message TEXT,
+  started_at INTEGER NOT NULL,
+  finished_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_auto_sync_runs_plan_id ON auto_sync_runs(plan_id);
+CREATE INDEX IF NOT EXISTS idx_auto_sync_runs_user_id ON auto_sync_runs(user_id);
+CREATE INDEX IF NOT EXISTS idx_auto_sync_runs_status ON auto_sync_runs(status);
+CREATE INDEX IF NOT EXISTS idx_auto_sync_runs_started_at ON auto_sync_runs(started_at);
 `
 
 // 迁移：添加 base_path 字段到旧数据库

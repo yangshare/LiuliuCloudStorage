@@ -127,6 +127,55 @@ export const shareTransferRecords = sqliteTable('share_transfer_records', {
   index('idx_share_transfer_created_at').on(table.createdAt)
 ])
 
+// 分享转存自动同步计划表
+export const autoSyncPlans = sqliteTable('auto_sync_plans', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: integer('user_id').notNull().references(() => users.id),
+  name: text('name').notNull(),
+  shareUrl: text('share_url').notNull(),
+  shareCode: text('share_code'),
+  localSyncDir: text('local_sync_dir').notNull(),
+  lastAlistPath: text('last_alist_path'),
+  status: text('status', { enum: ['enabled', 'paused', 'syncing', 'expired', 'failed', 'deleted'] }).notNull().default('enabled'),
+  expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+  autoRunOnStartup: integer('auto_run_on_startup', { mode: 'boolean' }).notNull().default(true),
+  conflictPolicy: text('conflict_policy', { enum: ['skip_existing', 'rename_remote', 'overwrite'] }).notNull().default('skip_existing'),
+  lastSyncAt: integer('last_sync_at', { mode: 'timestamp' }),
+  lastSuccessAt: integer('last_success_at', { mode: 'timestamp' }),
+  lastErrorMessage: text('last_error_message'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date())
+}, (table) => [
+  index('idx_auto_sync_plans_user_id').on(table.userId),
+  index('idx_auto_sync_plans_status').on(table.status),
+  index('idx_auto_sync_plans_expires_at').on(table.expiresAt),
+  index('idx_auto_sync_plans_user_status').on(table.userId, table.status)
+])
+
+// 分享转存自动同步执行记录表
+export const autoSyncRuns = sqliteTable('auto_sync_runs', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  planId: integer('plan_id').notNull().references(() => autoSyncPlans.id),
+  userId: integer('user_id').notNull().references(() => users.id),
+  triggerType: text('trigger_type', { enum: ['startup', 'manual', 'created'] }).notNull(),
+  status: text('status', { enum: ['running', 'completed', 'partial_failed', 'failed', 'skipped'] }).notNull().default('running'),
+  alistPath: text('alist_path'),
+  remoteFileCount: integer('remote_file_count').notNull().default(0),
+  localFileCount: integer('local_file_count').notNull().default(0),
+  missingFileCount: integer('missing_file_count').notNull().default(0),
+  queuedDownloadCount: integer('queued_download_count').notNull().default(0),
+  skippedCount: integer('skipped_count').notNull().default(0),
+  failedCount: integer('failed_count').notNull().default(0),
+  errorMessage: text('error_message'),
+  startedAt: integer('started_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+  finishedAt: integer('finished_at', { mode: 'timestamp' })
+}, (table) => [
+  index('idx_auto_sync_runs_plan_id').on(table.planId),
+  index('idx_auto_sync_runs_user_id').on(table.userId),
+  index('idx_auto_sync_runs_status').on(table.status),
+  index('idx_auto_sync_runs_started_at').on(table.startedAt)
+])
+
 // 类型导出
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
@@ -144,3 +193,7 @@ export type DownloadConfig = typeof downloadConfig.$inferSelect
 export type NewDownloadConfig = typeof downloadConfig.$inferInsert
 export type ShareTransferRecord = typeof shareTransferRecords.$inferSelect
 export type NewShareTransferRecord = typeof shareTransferRecords.$inferInsert
+export type AutoSyncPlan = typeof autoSyncPlans.$inferSelect
+export type NewAutoSyncPlan = typeof autoSyncPlans.$inferInsert
+export type AutoSyncRun = typeof autoSyncRuns.$inferSelect
+export type NewAutoSyncRun = typeof autoSyncRuns.$inferInsert

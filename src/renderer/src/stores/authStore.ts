@@ -10,6 +10,7 @@ export interface User {
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
+  const startupAutoSyncTriggered = ref(false)
 
   const isLoggedIn = computed(() => user.value !== null)
   const isAdmin = computed(() => user.value?.isAdmin ?? false)
@@ -33,6 +34,23 @@ export const useAuthStore = defineStore('auth', () => {
         ? userData.isAdmin
         : userData.isAdmin === 1
     }
+    triggerStartupAutoSync()
+  }
+
+  async function triggerStartupAutoSync() {
+    if (startupAutoSyncTriggered.value || !user.value?.id) return
+    startupAutoSyncTriggered.value = true
+
+    try {
+      const result = await window.electronAPI.autoSync.startupRun({
+        userId: user.value.id
+      })
+      if (result?.success && result.executed > 0) {
+        console.log(`[autoSync] 启动自动同步完成: ${result.executed}/${result.total}`)
+      }
+    } catch (error) {
+      console.warn('[autoSync] 启动自动同步失败:', error)
+    }
   }
 
   /**
@@ -40,6 +58,7 @@ export const useAuthStore = defineStore('auth', () => {
    */
   function clearUser() {
     user.value = null
+    startupAutoSyncTriggered.value = false
   }
 
   /**

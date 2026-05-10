@@ -44,6 +44,8 @@ const validChannels = [
   'update:check', 'update:install-now', 'update:install-on-quit',
   'update:available', 'update:not-available', 'update:download-progress', 'update:downloaded', 'update:error',
   'shareTransfer:exec', 'shareTransfer:list', 'shareTransfer:latest', 'shareTransfer:complete', 'shareTransfer:delete', 'shareTransfer:batchDelete',
+  'autoSync:createPlanAndRun', 'autoSync:listPlans', 'autoSync:updatePlan', 'autoSync:pausePlan', 'autoSync:resumePlan',
+  'autoSync:deletePlan', 'autoSync:runPlan', 'autoSync:listRuns', 'autoSync:startupRun',
   'config:check', 'config:get', 'config:save', 'config:reinit'
 ]
 
@@ -260,6 +262,43 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('shareTransfer:delete', params),
     batchDelete: (params: { ids: number[]; userId: number }) =>
       ipcRenderer.invoke('shareTransfer:batchDelete', params)
+  },
+
+  autoSync: {
+    createPlanAndRun: (params: {
+      userId: number
+      name?: string
+      shareUrl: string
+      localSyncDir: string
+      expiresAt: number
+      autoRunOnStartup?: boolean
+      conflictPolicy?: 'skip_existing' | 'rename_remote' | 'overwrite'
+    }) => ipcRenderer.invoke('autoSync:createPlanAndRun', params),
+    listPlans: (params: { userId: number }) =>
+      ipcRenderer.invoke('autoSync:listPlans', params),
+    updatePlan: (params: {
+      id: number
+      userId: number
+      updates: {
+        name?: string
+        localSyncDir?: string
+        expiresAt?: number
+        autoRunOnStartup?: boolean
+        conflictPolicy?: 'skip_existing' | 'rename_remote' | 'overwrite'
+      }
+    }) => ipcRenderer.invoke('autoSync:updatePlan', params),
+    pausePlan: (params: { id: number; userId: number }) =>
+      ipcRenderer.invoke('autoSync:pausePlan', params),
+    resumePlan: (params: { id: number; userId: number }) =>
+      ipcRenderer.invoke('autoSync:resumePlan', params),
+    deletePlan: (params: { id: number; userId: number }) =>
+      ipcRenderer.invoke('autoSync:deletePlan', params),
+    runPlan: (params: { id: number; userId: number }) =>
+      ipcRenderer.invoke('autoSync:runPlan', params),
+    listRuns: (params: { planId: number; userId: number; limit?: number }) =>
+      ipcRenderer.invoke('autoSync:listRuns', params),
+    startupRun: (params: { userId: number }) =>
+      ipcRenderer.invoke('autoSync:startupRun', params)
   },
 
   config: {

@@ -379,10 +379,19 @@ export class AutoSyncService {
   }
 
   async deletePlan(id: number, userId: number): Promise<void> {
+    const t = now()
+    this.db.prepare(`
+      DELETE FROM auto_sync_downloaded_files
+      WHERE plan_id = ?
+        AND EXISTS (
+          SELECT 1 FROM auto_sync_plans
+          WHERE id = ? AND user_id = ?
+        )
+    `).run(id, id, userId)
     this.db.prepare(`
       UPDATE auto_sync_plans SET status = 'deleted', updated_at = ?
       WHERE id = ? AND user_id = ?
-    `).run(now(), id, userId)
+    `).run(t, id, userId)
   }
 
   async runStartupPlans(session: { userId: number; username: string; token: string }): Promise<{
@@ -461,8 +470,20 @@ export class AutoSyncService {
       const remoteRoot = extractRemotePathFromAlistUrl(transfer.alistPath)
       const remoteFiles = await this.scanRemoteFiles(remoteRoot)
       const localFiles = await this.scanLocalDirectory(plan.localSyncDir)
-      const missingFiles = this.diffFiles(remoteFiles, localFiles, plan.localSyncDir, plan.conflictPolicy)
-      const queuedCount = await this.queueMissingFiles(missingFiles, session)
+
+      // 同步已下载文件状态，并构建已完成下载的 Map
+      this.syncDownloadedFileStatuses(planId)
+      const completedDownloads = this.db.prepare(`
+        SELECT relative_path, file_size FROM auto_sync_downloaded_files
+        WHERE plan_id = ? AND status = 'completed'
+      `).all(planId) as Array<{ relative_path: string; file_size: number }>
+      const downloadedFileMap = new Map<string, { fileSize: number }>()
+      for (const row of completedDownloads) {
+        downloadedFileMap.set(row.relative_path, { fileSize: row.file_size })
+      }
+
+      const missingFiles = this.diffFiles(remoteFiles, localFiles, plan.localSyncDir, plan.conflictPolicy, downloadedFileMap)
+      const queuedCount = await this.queueMissingFiles(missingFiles, planId, session)
 
       const status: AutoSyncRunStatus = queuedCount === missingFiles.length ? 'completed' : 'partial_failed'
       const failedCount = missingFiles.length - queuedCount
@@ -511,6 +532,44 @@ export class AutoSyncService {
     } finally {
       this.runningPlans.delete(planId)
     }
+  }
+
+  private syncDownloadedFileStatuses(planId: number): void {
+    const timestamp = Math.floor(Date.now() / 1000)
+
+    // 将 transfer_queue 中已完成的记录同步为 completed
+    this.db.prepare(`
+      UPDATE auto_sync_downloaded_files
+      SET status = 'completed',
+          downloaded_at = COALESCE(downloaded_at, (SELECT tq.updated_at FROM transfer_queue tq WHERE tq.id = transfer_task_id)),
+          updated_at = ?
+      WHERE plan_id = ?
+        AND status = 'pending'
+        AND transfer_task_id IN (SELECT id FROM transfer_queue WHERE status = 'completed')
+    `).run(timestamp, planId)
+
+    // 将 transfer_queue 中失败的记录同步为 failed
+    this.db.prepare(`
+      UPDATE auto_sync_downloaded_files
+      SET status = 'failed',
+          updated_at = ?
+      WHERE plan_id = ?
+        AND status = 'pending'
+        AND transfer_task_id IN (SELECT id FROM transfer_queue WHERE status = 'failed')
+    `).run(timestamp, planId)
+
+    // 处理孤立记录：transfer_task_id 不存在于 transfer_queue 中，或为 NULL
+    this.db.prepare(`
+      UPDATE auto_sync_downloaded_files
+      SET status = 'failed',
+          updated_at = ?
+      WHERE plan_id = ?
+        AND status = 'pending'
+        AND (
+          transfer_task_id IS NULL
+          OR transfer_task_id NOT IN (SELECT id FROM transfer_queue)
+        )
+    `).run(timestamp, planId)
   }
 
   private async scanRemoteFiles(remoteRoot: string): Promise<RemoteFile[]> {
@@ -569,28 +628,41 @@ export class AutoSyncService {
     remoteFiles: RemoteFile[],
     localFiles: LocalFile[],
     localSyncDir: string,
-    conflictPolicy: AutoSyncConflictPolicy
+    conflictPolicy: AutoSyncConflictPolicy,
+    downloadedFileMap: Map<string, { fileSize: number }>
   ): DiffFile[] {
     const localMap = new Map(localFiles.map(file => [file.relativePath, file]))
     const result: DiffFile[] = []
 
     for (const remote of remoteFiles) {
       const local = localMap.get(remote.relativePath)
-      if (!local) {
-        result.push({ ...remote, savePath: buildSafeLocalPath(localSyncDir, remote.relativePath) })
+
+      // Case 1: 本地文件存在，按 conflictPolicy 处理
+      if (local) {
+        if (conflictPolicy === 'rename_remote' && local.fileSize !== remote.fileSize) {
+          result.push({
+            ...remote,
+            savePath: this.buildRenamedRemotePath(localSyncDir, remote.relativePath)
+          })
+        }
+        if (conflictPolicy === 'overwrite') {
+          result.push({ ...remote, savePath: buildSafeLocalPath(localSyncDir, remote.relativePath) })
+        }
         continue
       }
 
-      if (conflictPolicy === 'rename_remote' && local.fileSize !== remote.fileSize) {
-        result.push({
-          ...remote,
-          savePath: this.buildRenamedRemotePath(localSyncDir, remote.relativePath)
-        })
+      // Case 2: 本地不存在，但数据库标记已完成下载
+      const downloaded = downloadedFileMap.get(remote.relativePath)
+      if (downloaded) {
+        // 远程文件大小变化，需要重新下载
+        if (downloaded.fileSize !== remote.fileSize) {
+          result.push({ ...remote, savePath: buildSafeLocalPath(localSyncDir, remote.relativePath) })
+        }
+        continue
       }
 
-      if (conflictPolicy === 'overwrite') {
-        result.push({ ...remote, savePath: buildSafeLocalPath(localSyncDir, remote.relativePath) })
-      }
+      // Case 3: 本地不存在，数据库无记录，真正缺失的文件
+      result.push({ ...remote, savePath: buildSafeLocalPath(localSyncDir, remote.relativePath) })
     }
 
     return result
@@ -605,6 +677,7 @@ export class AutoSyncService {
 
   private async queueMissingFiles(
     missingFiles: DiffFile[],
+    planId: number,
     session: { userId: number; token: string }
   ): Promise<number> {
     if (missingFiles.length === 0) return 0
@@ -621,8 +694,37 @@ export class AutoSyncService {
       priority: index
     }))
 
-    const ids = await downloadQueueManager.addBatchToQueue(tasks)
-    return ids.filter(id => id > 0).length
+    const timestamp = Math.floor(Date.now() / 1000)
+    let queuedCount = 0
+
+    // 记录已入队的文件到跟踪表
+    for (let i = 0; i < tasks.length; i++) {
+      const transferDbId = await downloadQueueManager.addToQueue(tasks[i])
+      if (transferDbId <= 0) continue
+
+      queuedCount++
+      const file = missingFiles[i]
+      try {
+        this.db.prepare(`
+          INSERT OR REPLACE INTO auto_sync_downloaded_files
+            (plan_id, remote_path, relative_path, file_size, transfer_task_id, status, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)
+        `).run(
+          planId,
+          file.remotePath,
+          file.relativePath,
+          file.fileSize,
+          transferDbId,
+          timestamp,
+          timestamp
+        )
+      } catch (err: any) {
+        loggerService.error('AutoSyncService',
+          `记录下载文件跟踪失败: ${file.relativePath} - ${err.message}`)
+      }
+    }
+
+    return queuedCount
   }
 
   private async markExpiredPlans(userId: number): Promise<void> {

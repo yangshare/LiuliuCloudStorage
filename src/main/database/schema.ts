@@ -176,6 +176,25 @@ export const autoSyncRuns = sqliteTable('auto_sync_runs', {
   index('idx_auto_sync_runs_started_at').on(table.startedAt)
 ])
 
+// 自动同步已下载文件跟踪表
+export const autoSyncDownloadedFiles = sqliteTable('auto_sync_downloaded_files', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  planId: integer('plan_id').notNull().references(() => autoSyncPlans.id),
+  remotePath: text('remote_path').notNull(),
+  relativePath: text('relative_path').notNull(),
+  fileSize: integer('file_size').notNull(),
+  transferTaskId: integer('transfer_task_id'),
+  status: text('status', { enum: ['pending', 'completed', 'failed'] }).notNull().default('pending'),
+  downloadedAt: integer('downloaded_at', { mode: 'timestamp' }),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date())
+}, (table) => [
+  index('idx_auto_sync_dl_plan_id').on(table.planId),
+  index('idx_auto_sync_dl_plan_status').on(table.planId, table.status),
+  index('idx_auto_sync_dl_relative_path').on(table.planId, table.relativePath),
+  uniqueIndex('idx_auto_sync_dl_plan_remote').on(table.planId, table.remotePath)
+])
+
 // 类型导出
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
@@ -197,3 +216,5 @@ export type AutoSyncPlan = typeof autoSyncPlans.$inferSelect
 export type NewAutoSyncPlan = typeof autoSyncPlans.$inferInsert
 export type AutoSyncRun = typeof autoSyncRuns.$inferSelect
 export type NewAutoSyncRun = typeof autoSyncRuns.$inferInsert
+export type AutoSyncDownloadedFile = typeof autoSyncDownloadedFiles.$inferSelect
+export type NewAutoSyncDownloadedFile = typeof autoSyncDownloadedFiles.$inferInsert

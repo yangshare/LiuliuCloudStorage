@@ -1,7 +1,17 @@
-import { ipcMain } from 'electron'
-import { autoSyncService, type AutoSyncConflictPolicy } from '../../services/AutoSyncService'
+import { ipcMain, BrowserWindow } from 'electron'
+import { autoSyncService, type AutoSyncConflictPolicy, type AutoSyncProgressEvent } from '../../services/AutoSyncService'
 import { loggerService } from '../../services/LoggerService'
 import { getCurrentSession } from './auth'
+
+function broadcastProgress(planId: number, event: AutoSyncProgressEvent): void {
+  BrowserWindow.getAllWindows().forEach(win => {
+    win.webContents.send('autoSync:progress', { planId, ...event })
+  })
+}
+
+autoSyncService.setProgressCallback((planId, event) => {
+  broadcastProgress(planId, event)
+})
 
 function getSessionOrThrow(): { userId: number; username: string; token: string } {
   const session = getCurrentSession()
@@ -186,6 +196,20 @@ export function registerAutoSyncHandlers(): void {
     } catch (error: any) {
       loggerService.error('AutoSyncHandler', '启动自动同步失败', error)
       return { success: false, message: error.message || '启动自动同步失败' }
+    }
+  })
+
+  ipcMain.handle('autoSync:resetBaseline', async (_event, params: { id: number; userId: number }) => {
+    try {
+      if (!params || !isValidUserId(params.id) || !isValidUserId(params.userId)) {
+        return { success: false, message: '参数无效' }
+      }
+      const session = assertOwnUser(params.userId)
+      const result = await autoSyncService.resetBaseline(params.id, params.userId, session)
+      return result
+    } catch (error: any) {
+      loggerService.error('AutoSyncHandler', '重置同步基线失败', error)
+      return { success: false, message: error.message || '重置同步基线失败' }
     }
   })
 }

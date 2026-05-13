@@ -1,5 +1,4 @@
 import * as fs from 'fs'
-import { readdir, stat } from 'fs/promises'
 import * as path from 'path'
 import { getDatabase } from '../database'
 import { alistService } from './AlistService'
@@ -50,6 +49,23 @@ export interface AutoSyncRunRow {
   finishedAt: number | null
 }
 
+export interface AutoSyncRemoteSnapshot {
+  id: number
+  planId: number
+  relativePath: string
+  fileSize: number
+  firstSeenAt: number
+  lastVerifiedAt: number
+}
+
+export interface AutoSyncProgressEvent {
+  stage: 'transfer' | 'scan' | 'diff' | 'queue' | 'complete'
+  status: 'started' | 'in_progress' | 'completed' | 'failed'
+  message?: string
+  current?: number
+  total?: number
+}
+
 export interface CreateAutoSyncPlanParams {
   userId: number
   name?: string
@@ -74,12 +90,6 @@ interface RemoteFile {
   fileName: string
   fileSize: number
   modified: string
-}
-
-interface LocalFile {
-  relativePath: string
-  fileSize: number
-  modifiedMs: number
 }
 
 interface DiffFile extends RemoteFile {
@@ -193,12 +203,26 @@ export class AutoSyncService {
   private runningPlans = new Set<number>()
   private lastExpiredCheck = 0
   private readonly maxScanDepth = 32
+  private readonly maxScanConcurrency = 3
+  private progressCallback: ((planId: number, event: AutoSyncProgressEvent) => void) | null = null
 
   static getInstance(): AutoSyncService {
     if (!AutoSyncService.instance) {
       AutoSyncService.instance = new AutoSyncService()
     }
     return AutoSyncService.instance
+  }
+
+  setProgressCallback(cb: (planId: number, event: AutoSyncProgressEvent) => void): void {
+    this.progressCallback = cb
+  }
+
+  private notifyProgress(planId: number, event: AutoSyncProgressEvent): void {
+    try {
+      this.progressCallback?.(planId, event)
+    } catch {
+      // 进度回调不应影响主流程
+    }
   }
 
   private get db() {
@@ -242,9 +266,9 @@ export class AutoSyncService {
     session: { userId: number; username: string; token: string }
   ): Promise<{ success: boolean; plan?: AutoSyncPlanRow; run?: AutoSyncRunRow; message?: string }> {
     const plan = await this.createPlan(params)
-    const result = await this.runPlan(plan.id, session, 'created')
+    const result = await this.establishBaseline(plan.id, session)
 
-    if (!result.success && !result.run?.alistPath) {
+    if (!result.success) {
       await this.deletePlan(plan.id, params.userId)
       return {
         success: false,
@@ -253,7 +277,7 @@ export class AutoSyncService {
     }
 
     return {
-      success: result.success,
+      success: true,
       plan: await this.getPlan(plan.id, params.userId) || plan,
       run: result.run,
       message: result.message
@@ -381,9 +405,8 @@ export class AutoSyncService {
 
   async deletePlan(id: number, userId: number): Promise<void> {
     const t = now()
-    const updateFiles = this.db.prepare(`
-      UPDATE auto_sync_downloaded_files
-      SET status = 'deleted', updated_at = ?
+    const deleteSnapshots = this.db.prepare(`
+      DELETE FROM auto_sync_remote_snapshots
       WHERE plan_id = ?
         AND EXISTS (
           SELECT 1 FROM auto_sync_plans
@@ -395,7 +418,7 @@ export class AutoSyncService {
       WHERE id = ? AND user_id = ?
     `)
     this.db.transaction(() => {
-      updateFiles.run(t, id, id, userId)
+      deleteSnapshots.run(id, id, userId)
       updatePlan.run(t, id, userId)
     })()
   }
@@ -474,42 +497,50 @@ export class AutoSyncService {
         WHERE id = ? AND user_id = ?
       `).run(syncStartTs, syncStartTs, planId, session.userId)
 
+      // 阶段 1：转存
+      this.notifyProgress(planId, { stage: 'transfer', status: 'started', message: '开始转存...' })
       const transfer = await shareTransferService.execTransfer(plan.shareUrl, session.userId)
       if (!transfer.success || !transfer.alistPath) {
+        this.notifyProgress(planId, { stage: 'transfer', status: 'failed', message: transfer.message || '转存失败' })
         throw new Error(transfer.message || '转存失败')
       }
+      this.notifyProgress(planId, { stage: 'transfer', status: 'completed', message: '转存成功', current: 30, total: 100 })
 
+      // 阶段 2：扫描远程文件
+      this.notifyProgress(planId, { stage: 'scan', status: 'started', message: '正在扫描远程文件...' })
       const remoteRoot = extractRemotePathFromAlistUrl(transfer.alistPath)
-      const [remoteFiles, localFiles] = await Promise.all([
-        this.scanRemoteFiles(remoteRoot),
-        this.scanLocalDirectory(plan.localSyncDir)
-      ])
+      const remoteFiles = await this.scanRemoteFiles(remoteRoot, (scannedFiles, scannedDirs) => {
+        this.notifyProgress(planId, {
+          stage: 'scan',
+          status: 'in_progress',
+          message: `已扫描 ${scannedDirs} 个目录，发现 ${scannedFiles} 个文件...`,
+          current: 30 + Math.min(scannedFiles, 35),
+          total: 100
+        })
+      })
+      this.notifyProgress(planId, { stage: 'scan', status: 'completed', message: `扫描完成，共 ${remoteFiles.length} 个文件`, current: 65, total: 100 })
 
-      // 同步已下载文件状态，并构建已完成下载的 Map
-      this.syncDownloadedFileStatuses(planId)
-      const completedDownloads = this.db.prepare(`
-        SELECT relative_path, file_size FROM auto_sync_downloaded_files
-        WHERE plan_id = ? AND status = 'completed'
-      `).all(planId) as Array<{ relative_path: string; file_size: number }>
-      const downloadedFileMap = new Map<string, { fileSize: number }>()
-      for (const row of completedDownloads) {
-        downloadedFileMap.set(row.relative_path, { fileSize: row.file_size })
-      }
+      // 阶段 3：对比快照
+      this.notifyProgress(planId, { stage: 'diff', status: 'started', message: '正在对比快照...' })
+      const newFiles = await this.diffFilesIncremental(planId, remoteFiles, plan.localSyncDir)
+      this.notifyProgress(planId, { stage: 'diff', status: 'completed', message: `发现 ${newFiles.length} 个新增文件`, current: 75, total: 100 })
 
-      const missingFiles = this.diffFiles(remoteFiles, localFiles, plan.localSyncDir, plan.conflictPolicy, downloadedFileMap)
-      const queuedCount = await this.queueMissingFiles(missingFiles, planId, session)
+      // 阶段 4：入队下载
+      this.notifyProgress(planId, { stage: 'queue', status: 'started', message: '正在加入下载队列...' })
+      const queuedCount = await this.queueMissingFiles(newFiles, session)
+      this.notifyProgress(planId, { stage: 'queue', status: 'completed', message: `已加入 ${queuedCount} 个下载任务`, current: 90, total: 100 })
 
-      const status: AutoSyncRunStatus = queuedCount === missingFiles.length ? 'completed' : 'partial_failed'
-      const failedCount = missingFiles.length - queuedCount
+      const status: AutoSyncRunStatus = queuedCount === newFiles.length ? 'completed' : 'partial_failed'
+      const failedCount = newFiles.length - queuedCount
       const finishTs = now()
       this.finishRun(runId, {
         status,
         alistPath: transfer.alistPath,
         remoteFileCount: remoteFiles.length,
-        localFileCount: localFiles.length,
-        missingFileCount: missingFiles.length,
+        localFileCount: 0,
+        missingFileCount: newFiles.length,
         queuedDownloadCount: queuedCount,
-        skippedCount: localFiles.length,
+        skippedCount: remoteFiles.length - newFiles.length,
         failedCount,
         errorMessage: failedCount > 0 ? `${failedCount} 个文件加入下载队列失败` : null
       }, finishTs)
@@ -522,11 +553,18 @@ export class AutoSyncService {
       `).run(transfer.alistPath, finishTs, finishTs, planId, session.userId)
 
       const run = this.getRun(runId)
+      this.notifyProgress(planId, {
+        stage: 'complete',
+        status: 'completed',
+        message: newFiles.length === 0 ? '同步完成，没有新增文件' : `同步完成，已加入 ${queuedCount} 个下载任务`,
+        current: 100,
+        total: 100
+      })
       return {
         success: status === 'completed',
         run,
-        message: missingFiles.length === 0
-          ? '同步完成，没有缺少文件'
+        message: newFiles.length === 0
+          ? '同步完成，没有新增文件'
           : `同步完成，已加入 ${queuedCount} 个下载任务`
       }
     } catch (error: any) {
@@ -542,174 +580,109 @@ export class AutoSyncService {
         SET status = 'failed', last_error_message = ?, updated_at = ?
         WHERE id = ? AND user_id = ?
       `).run(message, errorTs, planId, session.userId)
+      this.notifyProgress(planId, { stage: 'complete', status: 'failed', message })
       return { success: false, run: this.getRun(runId), message }
     } finally {
       this.runningPlans.delete(planId)
     }
   }
 
-  private syncDownloadedFileStatuses(planId: number): void {
-    const timestamp = now()
-
-    const updateCompleted = this.db.prepare(`
-      UPDATE auto_sync_downloaded_files
-      SET status = 'completed',
-          downloaded_at = COALESCE(downloaded_at, (SELECT tq.updated_at FROM transfer_queue tq WHERE tq.id = transfer_task_id)),
-          updated_at = ?
-      WHERE plan_id = ?
-        AND status = 'pending'
-        AND transfer_task_id IN (SELECT id FROM transfer_queue WHERE status = 'completed')
-    `)
-
-    const updateFailed = this.db.prepare(`
-      UPDATE auto_sync_downloaded_files
-      SET status = 'failed',
-          updated_at = ?
-      WHERE plan_id = ?
-        AND status = 'pending'
-        AND transfer_task_id IN (SELECT id FROM transfer_queue WHERE status = 'failed')
-    `)
-
-    const updateOrphan = this.db.prepare(`
-      UPDATE auto_sync_downloaded_files
-      SET status = 'failed',
-          updated_at = ?
-      WHERE plan_id = ?
-        AND status = 'pending'
-        AND (
-          transfer_task_id IS NULL
-          OR transfer_task_id NOT IN (SELECT id FROM transfer_queue)
-        )
-    `)
-
-    this.db.transaction(() => {
-      updateCompleted.run(timestamp, planId)
-      updateFailed.run(timestamp, planId)
-      updateOrphan.run(timestamp, planId)
-    })()
-  }
-
-  private async scanRemoteFiles(remoteRoot: string): Promise<RemoteFile[]> {
+  private async scanRemoteFiles(
+    remoteRoot: string,
+    onProgress?: (scannedFiles: number, scannedDirs: number) => void
+  ): Promise<RemoteFile[]> {
     const files: RemoteFile[] = []
     const root = normalizeRemotePath(remoteRoot)
+    const queue: Array<{ current: string; depth: number }> = [{ current: root, depth: 0 }]
+    let queueIndex = 0
+    let scannedDirs = 0
+    let lastProgressFiles = 0
+    let lastProgressTime = 0
 
-    const walk = async (current: string, depth: number): Promise<void> => {
-      if (depth > this.maxScanDepth) {
-        loggerService.warn('AutoSyncService', `远程目录扫描深度超过 ${this.maxScanDepth}: ${current}`)
-        return
-      }
-      const result = await alistService.listFiles(current)
-      const dirs: Array<{ path: string; name: string }> = []
-      for (const item of result.content || []) {
-        const childPath = buildChildRemotePath(current, item.name)
-        if (item.isDir) {
-          dirs.push({ path: childPath, name: item.name })
+    const worker = async (): Promise<void> => {
+      while (true) {
+        const task = queue[queueIndex++]
+        if (!task) break
+
+        if (task.depth > this.maxScanDepth) {
+          loggerService.warn('AutoSyncService', `远程目录扫描深度超过 ${this.maxScanDepth}: ${task.current}`)
           continue
         }
-        files.push({
-          relativePath: path.posix.relative(root, childPath),
-          remotePath: childPath,
-          fileName: item.name,
-          fileSize: item.size || 0,
-          modified: item.modified || ''
-        })
+
+        const result = await alistService.listFiles(task.current)
+        scannedDirs++
+        const dirs: Array<{ path: string; name: string }> = []
+        for (const item of result.content || []) {
+          const childPath = buildChildRemotePath(task.current, item.name)
+          if (item.isDir) {
+            dirs.push({ path: childPath, name: item.name })
+            continue
+          }
+          files.push({
+            relativePath: path.posix.relative(root, childPath),
+            remotePath: childPath,
+            fileName: item.name,
+            fileSize: item.size || 0,
+            modified: item.modified || ''
+          })
+        }
+        for (const d of dirs) {
+          queue.push({ current: d.path, depth: task.depth + 1 })
+        }
+
+        // 节流：每 500ms 或每新增 50 个文件报告一次进度
+        const nowTime = Date.now()
+        if (onProgress && (nowTime - lastProgressTime > 500 || files.length - lastProgressFiles >= 50)) {
+          onProgress(files.length, scannedDirs)
+          lastProgressTime = nowTime
+          lastProgressFiles = files.length
+        }
       }
-      await Promise.all(dirs.map(d => walk(d.path, depth + 1)))
     }
 
-    await walk(root, 0)
+    await Promise.all(Array.from({ length: this.maxScanConcurrency }, () => worker()))
     return files.filter(file => file.relativePath && !file.relativePath.startsWith('..'))
   }
 
-  private async scanLocalDirectory(localDir: string): Promise<LocalFile[]> {
-    ensureDirectoryWritable(localDir)
-    const root = path.resolve(localDir)
-    const files: LocalFile[] = []
-    const visited = new Set<string>()
-
-    const walk = async (current: string, depth: number): Promise<void> => {
-      if (depth > this.maxScanDepth) {
-        loggerService.warn('AutoSyncService', `本地目录扫描深度超过 ${this.maxScanDepth}: ${current}`)
-        return
-      }
-      const entries = await readdir(current, { withFileTypes: true })
-      for (const entry of entries) {
-        const fullPath = path.join(current, entry.name)
-        const resolved = path.resolve(fullPath)
-        if (visited.has(resolved)) continue
-        if (entry.isSymbolicLink()) continue
-        if (entry.isDirectory()) {
-          visited.add(resolved)
-          await walk(fullPath, depth + 1)
-          continue
-        }
-        const s = await stat(fullPath)
-        files.push({
-          relativePath: path.relative(root, fullPath).split(path.sep).join('/'),
-          fileSize: s.size,
-          modifiedMs: s.mtimeMs
+  private async diffFilesIncremental(
+    planId: number,
+    remoteFiles: RemoteFile[],
+    localSyncDir: string
+  ): Promise<DiffFile[]> {
+    const snapshots = this.loadSnapshots(planId)
+    const snapshotMap = new Map(snapshots.map(s => [s.relativePath, s]))
+    const result: DiffFile[] = []
+    const t = now()
+    const idsToUpdate: number[] = []
+    for (const remote of remoteFiles) {
+      const snapshot = snapshotMap.get(remote.relativePath)
+      if (!snapshot) {
+        // 新出现文件：加入下载队列，同时写入快照
+        result.push({
+          ...remote,
+          savePath: buildSafeLocalPath(localSyncDir, remote.relativePath)
         })
+        this.insertSnapshot(planId, remote.relativePath, remote.fileSize, t)
+      } else {
+        // 已有记录：一律跳过，不更新 file_size，只更新验证时间
+        idsToUpdate.push(snapshot.id)
       }
     }
 
-    await walk(root, 0)
-    return files
-  }
-
-  private diffFiles(
-    remoteFiles: RemoteFile[],
-    localFiles: LocalFile[],
-    localSyncDir: string,
-    conflictPolicy: AutoSyncConflictPolicy,
-    downloadedFileMap: Map<string, { fileSize: number }>
-  ): DiffFile[] {
-    const localMap = new Map(localFiles.map(file => [file.relativePath, file]))
-    const result: DiffFile[] = []
-
-    for (const remote of remoteFiles) {
-      const local = localMap.get(remote.relativePath)
-
-      // Case 1: 本地文件存在，按 conflictPolicy 处理
-      if (local) {
-        if (conflictPolicy === 'rename_remote' && local.fileSize !== remote.fileSize) {
-          result.push({
-            ...remote,
-            savePath: this.buildRenamedRemotePath(localSyncDir, remote.relativePath)
-          })
-        }
-        if (conflictPolicy === 'overwrite') {
-          result.push({ ...remote, savePath: buildSafeLocalPath(localSyncDir, remote.relativePath) })
-        }
-        continue
-      }
-
-      // Case 2: 本地不存在，但数据库标记已完成下载
-      const downloaded = downloadedFileMap.get(remote.relativePath)
-      if (downloaded) {
-        // 远程文件大小变化，需要重新下载
-        if (downloaded.fileSize !== remote.fileSize) {
-          result.push({ ...remote, savePath: buildSafeLocalPath(localSyncDir, remote.relativePath) })
-        }
-        continue
-      }
-
-      // Case 3: 本地不存在，数据库无记录，真正缺失的文件
-      result.push({ ...remote, savePath: buildSafeLocalPath(localSyncDir, remote.relativePath) })
+    if (idsToUpdate.length > 0) {
+      const placeholders = idsToUpdate.map(() => '?').join(',')
+      this.db.prepare(`
+        UPDATE auto_sync_remote_snapshots
+        SET last_verified_at = ?
+        WHERE id IN (${placeholders})
+      `).run(t, ...idsToUpdate)
     }
 
     return result
   }
 
-  private buildRenamedRemotePath(localSyncDir: string, relativePath: string): string {
-    const parsed = path.parse(relativePath)
-    const suffix = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)
-    const renamed = path.posix.join(parsed.dir.split(path.sep).join('/'), `${parsed.name}.remote-${suffix}${parsed.ext}`)
-    return buildSafeLocalPath(localSyncDir, renamed)
-  }
-
   private async queueMissingFiles(
     missingFiles: DiffFile[],
-    planId: number,
     session: { userId: number; token: string }
   ): Promise<number> {
     if (missingFiles.length === 0) return 0
@@ -727,33 +700,183 @@ export class AutoSyncService {
     }))
 
     const batchResult = await downloadQueueManager.addBatchToQueue(tasks)
-    if (batchResult.length === 0) return 0
-
-    const timestamp = now()
-    const insertStmt = this.db.prepare(`
-      INSERT OR REPLACE INTO auto_sync_downloaded_files
-        (plan_id, remote_path, relative_path, file_size, transfer_task_id, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)
-    `)
-
-    this.db.transaction(() => {
-      for (const { taskId, dbId } of batchResult) {
-        const idx = tasks.findIndex(t => t.id === taskId)
-        if (idx === -1) continue
-        const file = missingFiles[idx]
-        insertStmt.run(
-          planId,
-          file.remotePath,
-          file.relativePath,
-          file.fileSize,
-          dbId,
-          timestamp,
-          timestamp
-        )
-      }
-    })()
-
     return batchResult.length
+  }
+
+  // 快照 CRUD
+  private loadSnapshots(planId: number): AutoSyncRemoteSnapshot[] {
+    const rows = this.db.prepare(`
+      SELECT id, plan_id, relative_path, file_size, first_seen_at, last_verified_at
+      FROM auto_sync_remote_snapshots
+      WHERE plan_id = ?
+    `).all(planId) as Array<{
+      id: number
+      plan_id: number
+      relative_path: string
+      file_size: number
+      first_seen_at: number
+      last_verified_at: number
+    }>
+    return rows.map(row => ({
+      id: row.id,
+      planId: row.plan_id,
+      relativePath: row.relative_path,
+      fileSize: row.file_size,
+      firstSeenAt: row.first_seen_at,
+      lastVerifiedAt: row.last_verified_at
+    }))
+  }
+
+  private insertSnapshot(planId: number, relativePath: string, fileSize: number, timestamp: number): void {
+    this.db.prepare(`
+      INSERT OR IGNORE INTO auto_sync_remote_snapshots
+        (plan_id, relative_path, file_size, first_seen_at, last_verified_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(planId, relativePath, fileSize, timestamp, timestamp)
+  }
+
+  private insertSnapshotsBatch(planId: number, files: RemoteFile[], timestamp: number): void {
+    if (files.length === 0) return
+    // SQLite 参数上限约 32766，每行 5 个参数，保守按 500 行/批
+    const ROWS_PER_BATCH = 500
+    const VALUES_PLACEHOLDER = '(?, ?, ?, ?, ?)'
+
+    for (let i = 0; i < files.length; i += ROWS_PER_BATCH) {
+      const batch = files.slice(i, i + ROWS_PER_BATCH)
+      const placeholders = batch.map(() => VALUES_PLACEHOLDER).join(', ')
+      const params: (string | number)[] = []
+      for (const file of batch) {
+        params.push(planId, file.relativePath, file.fileSize, timestamp, timestamp)
+      }
+      this.db.prepare(`
+        INSERT OR IGNORE INTO auto_sync_remote_snapshots
+          (plan_id, relative_path, file_size, first_seen_at, last_verified_at)
+        VALUES ${placeholders}
+      `).run(...params)
+    }
+  }
+
+  /**
+   * 首次同步：建立远程文件快照基线，不自动加入下载队列
+   */
+  async establishBaseline(
+    planId: number,
+    session: { userId: number; username: string; token: string }
+  ): Promise<{ success: boolean; run?: AutoSyncRunRow; message?: string }> {
+    if (this.runningPlans.has(planId)) {
+      return { success: false, message: '计划正在同步中' }
+    }
+
+    const plan = await this.getPlan(planId, session.userId)
+    if (!plan) return { success: false, message: '计划不存在' }
+
+    this.runningPlans.add(planId)
+    const runId = await this.insertRun(planId, session.userId, 'created')
+
+    try {
+      const syncStartTs = now()
+      this.db.prepare(`
+        UPDATE auto_sync_plans SET status = 'syncing', last_sync_at = ?, updated_at = ?
+        WHERE id = ? AND user_id = ?
+      `).run(syncStartTs, syncStartTs, planId, session.userId)
+
+      // 阶段 1：转存
+      this.notifyProgress(planId, { stage: 'transfer', status: 'started', message: '开始转存...' })
+      const transfer = await shareTransferService.execTransfer(plan.shareUrl, session.userId)
+      if (!transfer.success || !transfer.alistPath) {
+        this.notifyProgress(planId, { stage: 'transfer', status: 'failed', message: transfer.message || '转存失败' })
+        throw new Error(transfer.message || '转存失败')
+      }
+      this.notifyProgress(planId, { stage: 'transfer', status: 'completed', message: '转存成功', current: 30, total: 100 })
+
+      // 阶段 2：扫描远程文件
+      this.notifyProgress(planId, { stage: 'scan', status: 'started', message: '正在扫描远程文件...' })
+      const remoteRoot = extractRemotePathFromAlistUrl(transfer.alistPath)
+      const remoteFiles = await this.scanRemoteFiles(remoteRoot, (scannedFiles, scannedDirs) => {
+        this.notifyProgress(planId, {
+          stage: 'scan',
+          status: 'in_progress',
+          message: `已扫描 ${scannedDirs} 个目录，发现 ${scannedFiles} 个文件...`,
+          current: 30 + Math.min(scannedFiles, 35),
+          total: 100
+        })
+      })
+      this.notifyProgress(planId, { stage: 'scan', status: 'completed', message: `扫描完成，共 ${remoteFiles.length} 个文件`, current: 65, total: 100 })
+
+      // 阶段 3：建立基线
+      this.notifyProgress(planId, { stage: 'diff', status: 'started', message: '正在建立快照基线...' })
+      const t = now()
+      this.insertSnapshotsBatch(planId, remoteFiles, t)
+      this.notifyProgress(planId, { stage: 'diff', status: 'completed', message: `已记录 ${remoteFiles.length} 个文件`, current: 90, total: 100 })
+
+      const finishTs = now()
+      this.finishRun(runId, {
+        status: 'completed',
+        alistPath: transfer.alistPath,
+        remoteFileCount: remoteFiles.length,
+        localFileCount: 0,
+        missingFileCount: 0,
+        queuedDownloadCount: 0,
+        skippedCount: 0,
+        failedCount: 0,
+        errorMessage: null
+      }, finishTs)
+
+      this.db.prepare(`
+        UPDATE auto_sync_plans
+        SET status = 'enabled', last_alist_path = ?, last_success_at = ?,
+            last_error_message = NULL, updated_at = ?
+        WHERE id = ? AND user_id = ?
+      `).run(transfer.alistPath, finishTs, finishTs, planId, session.userId)
+
+      this.notifyProgress(planId, {
+        stage: 'complete',
+        status: 'completed',
+        message: `首次同步完成，已记录 ${remoteFiles.length} 个文件的快照基线`,
+        current: 100,
+        total: 100
+      })
+      return {
+        success: true,
+        run: this.getRun(runId),
+        message: `首次同步完成，已记录 ${remoteFiles.length} 个文件的快照基线`
+      }
+    } catch (error: any) {
+      const message = error.message || '首次同步失败'
+      const errorTs = now()
+      loggerService.error('AutoSyncService', `计划 ${planId} 建立基线失败: ${message}`)
+      this.finishRun(runId, {
+        status: 'failed',
+        errorMessage: message
+      }, errorTs)
+      this.notifyProgress(planId, { stage: 'complete', status: 'failed', message })
+      this.db.prepare(`
+        UPDATE auto_sync_plans
+        SET status = 'failed', last_error_message = ?, updated_at = ?
+        WHERE id = ? AND user_id = ?
+      `).run(message, errorTs, planId, session.userId)
+      return { success: false, run: this.getRun(runId), message }
+    } finally {
+      this.runningPlans.delete(planId)
+    }
+  }
+
+  /**
+   * 重置基线：清空快照表，重新扫描远程文件建立基线
+   */
+  async resetBaseline(
+    id: number,
+    userId: number,
+    session: { userId: number; username: string; token: string }
+  ): Promise<{ success: boolean; run?: AutoSyncRunRow; message?: string }> {
+    const plan = await this.getPlan(id, userId)
+    if (!plan) throw new Error('计划不存在')
+
+    // 清空该计划的快照
+    this.db.prepare(`DELETE FROM auto_sync_remote_snapshots WHERE plan_id = ?`).run(id)
+
+    // 重新建立基线
+    return this.establishBaseline(id, session)
   }
 
   private async markExpiredPlans(userId: number): Promise<void> {

@@ -189,6 +189,9 @@ export interface ElectronAPI {
     runPlan: (params: { id: number; userId: number }) => Promise<any>
     listRuns: (params: { planId: number; userId: number; limit?: number }) => Promise<any>
     startupRun: (params: { userId: number }) => Promise<any>
+    resetBaseline: (params: { id: number; userId: number }) => Promise<any>
+    onProgress: (callback: (data: { planId: number; stage: string; status: string; message?: string; current?: number; total?: number }) => void) => void
+    removeProgressListener: (callback: (data: { planId: number; stage: string; status: string; message?: string; current?: number; total?: number }) => void) => void
   }
   config: {
     check: () => Promise<any>

@@ -105,7 +105,7 @@ export class ShareTransferService {
         fullUrl,
         requestBody,
         {
-          timeout: 30000,
+          timeout: 120000,
           headers: {
             'Content-Type': 'application/json'
           }

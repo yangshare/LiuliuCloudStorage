@@ -175,26 +175,35 @@ CREATE INDEX IF NOT EXISTS idx_auto_sync_runs_user_id ON auto_sync_runs(user_id)
 CREATE INDEX IF NOT EXISTS idx_auto_sync_runs_status ON auto_sync_runs(status);
 CREATE INDEX IF NOT EXISTS idx_auto_sync_runs_started_at ON auto_sync_runs(started_at);
 
--- 自动同步已下载文件跟踪表
-CREATE TABLE IF NOT EXISTS auto_sync_downloaded_files (
+-- 自动同步远程文件快照表：记录"我们什么时候第一次看到这个文件"
+CREATE TABLE IF NOT EXISTS auto_sync_remote_snapshots (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   plan_id INTEGER NOT NULL REFERENCES auto_sync_plans(id),
-  remote_path TEXT NOT NULL,
   relative_path TEXT NOT NULL,
   file_size INTEGER NOT NULL,
-  transfer_task_id INTEGER,
-  status TEXT NOT NULL DEFAULT 'pending',  -- pending | completed | failed | deleted
-  downloaded_at INTEGER,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
+  first_seen_at INTEGER NOT NULL,
+  last_verified_at INTEGER NOT NULL,
+  UNIQUE(plan_id, relative_path)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_auto_sync_dl_plan_remote ON auto_sync_downloaded_files(plan_id, remote_path);
-CREATE INDEX IF NOT EXISTS idx_auto_sync_dl_plan_status ON auto_sync_downloaded_files(plan_id, status);
+CREATE INDEX IF NOT EXISTS idx_auto_sync_snap_plan ON auto_sync_remote_snapshots(plan_id);
 `
 
-// 迁移：添加 base_path 字段到旧数据库
+// 迁移：添加 base_path 字段到旧数据库；迁移并删除废弃的 auto_sync_downloaded_files 表
 const MIGRATIONS = `
 ALTER TABLE sessions ADD COLUMN base_path TEXT DEFAULT '/';
+
+-- 将旧表已完成的数据迁移到新快照表（如果旧表存在）
+INSERT OR IGNORE INTO auto_sync_remote_snapshots
+  (plan_id, relative_path, file_size, first_seen_at, last_verified_at)
+SELECT plan_id, relative_path, file_size,
+  COALESCE(downloaded_at, created_at),
+  COALESCE(downloaded_at, updated_at)
+FROM auto_sync_downloaded_files
+WHERE status = 'completed';
+
+DROP TABLE IF EXISTS auto_sync_downloaded_files;
+DROP INDEX IF EXISTS idx_auto_sync_dl_plan_remote;
+DROP INDEX IF EXISTS idx_auto_sync_dl_plan_status;
 `
 
 export function initDatabase(): Database.Database {

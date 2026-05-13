@@ -45,7 +45,8 @@ const validChannels = [
   'update:available', 'update:not-available', 'update:download-progress', 'update:downloaded', 'update:error',
   'shareTransfer:exec', 'shareTransfer:list', 'shareTransfer:latest', 'shareTransfer:complete', 'shareTransfer:delete', 'shareTransfer:batchDelete',
   'autoSync:createPlanAndRun', 'autoSync:listPlans', 'autoSync:updatePlan', 'autoSync:pausePlan', 'autoSync:resumePlan',
-  'autoSync:deletePlan', 'autoSync:runPlan', 'autoSync:listRuns', 'autoSync:startupRun',
+  'autoSync:deletePlan', 'autoSync:runPlan', 'autoSync:listRuns', 'autoSync:startupRun', 'autoSync:resetBaseline',
+  'autoSync:progress',
   'config:check', 'config:get', 'config:save', 'config:reinit'
 ]
 
@@ -298,7 +299,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     listRuns: (params: { planId: number; userId: number; limit?: number }) =>
       ipcRenderer.invoke('autoSync:listRuns', params),
     startupRun: (params: { userId: number }) =>
-      ipcRenderer.invoke('autoSync:startupRun', params)
+      ipcRenderer.invoke('autoSync:startupRun', params),
+    resetBaseline: (params: { id: number; userId: number }) =>
+      ipcRenderer.invoke('autoSync:resetBaseline', params),
+    onProgress: (callback: (data: { planId: number; stage: string; status: string; message?: string; current?: number; total?: number }) => void) =>
+      ipcRenderer.on('autoSync:progress', wrapListener(callback)),
+    removeProgressListener: (callback: (data: { planId: number; stage: string; status: string; message?: string; current?: number; total?: number }) => void) =>
+      ipcRenderer.removeListener('autoSync:progress', unwrapListener(callback) as never)
   },
 
   config: {

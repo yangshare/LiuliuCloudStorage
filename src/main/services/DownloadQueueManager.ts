@@ -115,8 +115,9 @@ class DownloadQueueManager {
 
   /**
    * 批量添加下载任务到队列
+   * @returns 返回成功创建的任务元数据 { taskId, dbId }[]
    */
-  async addBatchToQueue(tasks: DownloadQueueTask[]): Promise<number[]> {
+  async addBatchToQueue(tasks: DownloadQueueTask[]): Promise<Array<{ taskId: string; dbId: number }>> {
     // 批量去重：过滤掉已在队列中的任务
     const uniqueTasks: DownloadQueueTask[] = []
     for (const task of tasks) {
@@ -140,12 +141,15 @@ class DownloadQueueManager {
       resumable: false
     }))
     const dbTasks = await this.transferService.createBatch(records)
+    const result: Array<{ taskId: string; dbId: number }> = []
     dbTasks.forEach((dbTask, i) => {
-      this.queue.set(uniqueTasks[i].id, { ...uniqueTasks[i], dbId: dbTask.id })
+      const task = uniqueTasks[i]
+      this.queue.set(task.id, { ...task, dbId: dbTask.id })
+      result.push({ taskId: task.id, dbId: dbTask.id })
     })
     this.processQueue()
     this.emitQueueUpdated()
-    return dbTasks.map(t => t.id)
+    return result
   }
 
   /**

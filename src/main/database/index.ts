@@ -183,7 +183,7 @@ CREATE TABLE IF NOT EXISTS auto_sync_downloaded_files (
   relative_path TEXT NOT NULL,
   file_size INTEGER NOT NULL,
   transfer_task_id INTEGER,
-  status TEXT NOT NULL DEFAULT 'pending',
+  status TEXT NOT NULL DEFAULT 'pending',  -- pending | completed | failed | deleted
   downloaded_at INTEGER,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL

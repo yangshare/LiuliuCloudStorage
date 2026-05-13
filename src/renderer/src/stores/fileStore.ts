@@ -55,8 +55,9 @@ export const useFileStore = defineStore('file', () => {
   }
 
   // Getters
+  const nameCollator = new Intl.Collator('zh-CN', { numeric: true, sensitivity: 'base' })
   function compareByName(a: FileItem, b: FileItem): number {
-    return a.name.localeCompare(b.name)
+    return nameCollator.compare(a.name, b.name)
   }
 
   function getModifiedTime(file: FileItem): number {

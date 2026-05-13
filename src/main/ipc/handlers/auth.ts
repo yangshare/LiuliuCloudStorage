@@ -4,6 +4,7 @@ import { cryptoService } from '../../services/CryptoService'
 import { alistService } from '../../services/AlistService'
 import { activityService, ActionType } from '../../services/ActivityService'
 import { loggerService } from '../../services/LoggerService'
+import { autoSyncService } from '../../services/AutoSyncService'
 import { preferencesService } from '../../services/PreferencesService'
 import { DEFAULT_QUOTA } from '../../../shared/constants'
 import { loadConfig } from '../../config'
@@ -279,6 +280,10 @@ export function registerAuthHandlers(): void {
     const username = currentSession?.username
 
     clearSession()
+
+    if (userId) {
+      autoSyncService.resetStartupExecuted(userId)
+    }
 
     // Story 9.2 CRITICAL FIX: 记录登出操作日志
     if (userId && username) {

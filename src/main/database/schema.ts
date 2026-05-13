@@ -184,7 +184,7 @@ export const autoSyncDownloadedFiles = sqliteTable('auto_sync_downloaded_files',
   relativePath: text('relative_path').notNull(),
   fileSize: integer('file_size').notNull(),
   transferTaskId: integer('transfer_task_id'),
-  status: text('status', { enum: ['pending', 'completed', 'failed'] }).notNull().default('pending'),
+  status: text('status', { enum: ['pending', 'completed', 'failed', 'deleted'] }).notNull().default('pending'),
   downloadedAt: integer('downloaded_at', { mode: 'timestamp' }),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date())

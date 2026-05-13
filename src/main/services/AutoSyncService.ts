@@ -189,9 +189,10 @@ function buildChildRemotePath(parent: string, name: string): string {
 
 export class AutoSyncService {
   private static instance: AutoSyncService | null = null
-  private startupExecutedPlans = new Set<number>()
+  private startupExecutedPlans = new Map<number, Set<number>>()
   private runningPlans = new Set<number>()
   private lastExpiredCheck = 0
+  private readonly maxScanDepth = 32
 
   static getInstance(): AutoSyncService {
     if (!AutoSyncService.instance) {
@@ -380,18 +381,23 @@ export class AutoSyncService {
 
   async deletePlan(id: number, userId: number): Promise<void> {
     const t = now()
-    this.db.prepare(`
-      DELETE FROM auto_sync_downloaded_files
+    const updateFiles = this.db.prepare(`
+      UPDATE auto_sync_downloaded_files
+      SET status = 'deleted', updated_at = ?
       WHERE plan_id = ?
         AND EXISTS (
           SELECT 1 FROM auto_sync_plans
           WHERE id = ? AND user_id = ?
         )
-    `).run(id, id, userId)
-    this.db.prepare(`
+    `)
+    const updatePlan = this.db.prepare(`
       UPDATE auto_sync_plans SET status = 'deleted', updated_at = ?
       WHERE id = ? AND user_id = ?
-    `).run(t, id, userId)
+    `)
+    this.db.transaction(() => {
+      updateFiles.run(t, id, id, userId)
+      updatePlan.run(t, id, userId)
+    })()
   }
 
   async runStartupPlans(session: { userId: number; username: string; token: string }): Promise<{
@@ -415,19 +421,25 @@ export class AutoSyncService {
     let skipped = 0
     let failed = 0
 
+    const executedSet = this.startupExecutedPlans.get(session.userId) ?? new Set<number>()
     for (const row of rows) {
       const plan = toRow(row)
-      if (this.startupExecutedPlans.has(plan.id)) {
+      if (executedSet.has(plan.id)) {
         skipped++
         continue
       }
-      this.startupExecutedPlans.add(plan.id)
+      executedSet.add(plan.id)
       const result = await this.runPlan(plan.id, session, 'startup')
       if (result.success) executed++
       else failed++
     }
+    this.startupExecutedPlans.set(session.userId, executedSet)
 
     return { success: true, total: rows.length, executed, skipped, failed }
+  }
+
+  resetStartupExecuted(userId: number): void {
+    this.startupExecutedPlans.delete(userId)
   }
 
   async runPlan(
@@ -468,8 +480,10 @@ export class AutoSyncService {
       }
 
       const remoteRoot = extractRemotePathFromAlistUrl(transfer.alistPath)
-      const remoteFiles = await this.scanRemoteFiles(remoteRoot)
-      const localFiles = await this.scanLocalDirectory(plan.localSyncDir)
+      const [remoteFiles, localFiles] = await Promise.all([
+        this.scanRemoteFiles(remoteRoot),
+        this.scanLocalDirectory(plan.localSyncDir)
+      ])
 
       // 同步已下载文件状态，并构建已完成下载的 Map
       this.syncDownloadedFileStatuses(planId)
@@ -535,10 +549,9 @@ export class AutoSyncService {
   }
 
   private syncDownloadedFileStatuses(planId: number): void {
-    const timestamp = Math.floor(Date.now() / 1000)
+    const timestamp = now()
 
-    // 将 transfer_queue 中已完成的记录同步为 completed
-    this.db.prepare(`
+    const updateCompleted = this.db.prepare(`
       UPDATE auto_sync_downloaded_files
       SET status = 'completed',
           downloaded_at = COALESCE(downloaded_at, (SELECT tq.updated_at FROM transfer_queue tq WHERE tq.id = transfer_task_id)),
@@ -546,20 +559,18 @@ export class AutoSyncService {
       WHERE plan_id = ?
         AND status = 'pending'
         AND transfer_task_id IN (SELECT id FROM transfer_queue WHERE status = 'completed')
-    `).run(timestamp, planId)
+    `)
 
-    // 将 transfer_queue 中失败的记录同步为 failed
-    this.db.prepare(`
+    const updateFailed = this.db.prepare(`
       UPDATE auto_sync_downloaded_files
       SET status = 'failed',
           updated_at = ?
       WHERE plan_id = ?
         AND status = 'pending'
         AND transfer_task_id IN (SELECT id FROM transfer_queue WHERE status = 'failed')
-    `).run(timestamp, planId)
+    `)
 
-    // 处理孤立记录：transfer_task_id 不存在于 transfer_queue 中，或为 NULL
-    this.db.prepare(`
+    const updateOrphan = this.db.prepare(`
       UPDATE auto_sync_downloaded_files
       SET status = 'failed',
           updated_at = ?
@@ -569,19 +580,30 @@ export class AutoSyncService {
           transfer_task_id IS NULL
           OR transfer_task_id NOT IN (SELECT id FROM transfer_queue)
         )
-    `).run(timestamp, planId)
+    `)
+
+    this.db.transaction(() => {
+      updateCompleted.run(timestamp, planId)
+      updateFailed.run(timestamp, planId)
+      updateOrphan.run(timestamp, planId)
+    })()
   }
 
   private async scanRemoteFiles(remoteRoot: string): Promise<RemoteFile[]> {
     const files: RemoteFile[] = []
     const root = normalizeRemotePath(remoteRoot)
 
-    const walk = async (current: string): Promise<void> => {
+    const walk = async (current: string, depth: number): Promise<void> => {
+      if (depth > this.maxScanDepth) {
+        loggerService.warn('AutoSyncService', `远程目录扫描深度超过 ${this.maxScanDepth}: ${current}`)
+        return
+      }
       const result = await alistService.listFiles(current)
+      const dirs: Array<{ path: string; name: string }> = []
       for (const item of result.content || []) {
         const childPath = buildChildRemotePath(current, item.name)
         if (item.isDir) {
-          await walk(childPath)
+          dirs.push({ path: childPath, name: item.name })
           continue
         }
         files.push({
@@ -592,9 +614,10 @@ export class AutoSyncService {
           modified: item.modified || ''
         })
       }
+      await Promise.all(dirs.map(d => walk(d.path, depth + 1)))
     }
 
-    await walk(root)
+    await walk(root, 0)
     return files.filter(file => file.relativePath && !file.relativePath.startsWith('..'))
   }
 
@@ -602,13 +625,22 @@ export class AutoSyncService {
     ensureDirectoryWritable(localDir)
     const root = path.resolve(localDir)
     const files: LocalFile[] = []
+    const visited = new Set<string>()
 
-    const walk = async (current: string): Promise<void> => {
+    const walk = async (current: string, depth: number): Promise<void> => {
+      if (depth > this.maxScanDepth) {
+        loggerService.warn('AutoSyncService', `本地目录扫描深度超过 ${this.maxScanDepth}: ${current}`)
+        return
+      }
       const entries = await readdir(current, { withFileTypes: true })
       for (const entry of entries) {
         const fullPath = path.join(current, entry.name)
+        const resolved = path.resolve(fullPath)
+        if (visited.has(resolved)) continue
+        if (entry.isSymbolicLink()) continue
         if (entry.isDirectory()) {
-          await walk(fullPath)
+          visited.add(resolved)
+          await walk(fullPath, depth + 1)
           continue
         }
         const s = await stat(fullPath)
@@ -620,7 +652,7 @@ export class AutoSyncService {
       }
     }
 
-    await walk(root)
+    await walk(root, 0)
     return files
   }
 
@@ -694,37 +726,34 @@ export class AutoSyncService {
       priority: index
     }))
 
-    const timestamp = Math.floor(Date.now() / 1000)
-    let queuedCount = 0
+    const batchResult = await downloadQueueManager.addBatchToQueue(tasks)
+    if (batchResult.length === 0) return 0
 
-    // 记录已入队的文件到跟踪表
-    for (let i = 0; i < tasks.length; i++) {
-      const transferDbId = await downloadQueueManager.addToQueue(tasks[i])
-      if (transferDbId <= 0) continue
+    const timestamp = now()
+    const insertStmt = this.db.prepare(`
+      INSERT OR REPLACE INTO auto_sync_downloaded_files
+        (plan_id, remote_path, relative_path, file_size, transfer_task_id, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)
+    `)
 
-      queuedCount++
-      const file = missingFiles[i]
-      try {
-        this.db.prepare(`
-          INSERT OR REPLACE INTO auto_sync_downloaded_files
-            (plan_id, remote_path, relative_path, file_size, transfer_task_id, status, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)
-        `).run(
+    this.db.transaction(() => {
+      for (const { taskId, dbId } of batchResult) {
+        const idx = tasks.findIndex(t => t.id === taskId)
+        if (idx === -1) continue
+        const file = missingFiles[idx]
+        insertStmt.run(
           planId,
           file.remotePath,
           file.relativePath,
           file.fileSize,
-          transferDbId,
+          dbId,
           timestamp,
           timestamp
         )
-      } catch (err: any) {
-        loggerService.error('AutoSyncService',
-          `记录下载文件跟踪失败: ${file.relativePath} - ${err.message}`)
       }
-    }
+    })()
 
-    return queuedCount
+    return batchResult.length
   }
 
   private async markExpiredPlans(userId: number): Promise<void> {

@@ -329,9 +329,9 @@ export function registerTransferHandlers(): void {
         userToken: session.token
       }))
 
-      const dbIds = await downloadQueueManager.addBatchToQueue(tasks)
+      const batchResult = await downloadQueueManager.addBatchToQueue(tasks)
 
-      return { success: true, successCount: dbIds.length, failedCount: 0 }
+      return { success: true, successCount: batchResult.length, failedCount: 0 }
     } catch (error: any) {
       return { success: false, error: error.message || '批量添加到下载队列失败' }
     }

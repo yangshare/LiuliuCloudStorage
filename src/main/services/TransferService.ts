@@ -333,30 +333,34 @@ export class TransferService {
   /**
    * 获取最近完成的下载/上传任务
    */
-  async getRecentCompletedTasks(taskType: 'download' | 'upload', limit: number = 100): Promise<TransferQueue[]> {
-    return this.db.select()
+  async getRecentCompletedTasks(taskType: 'download' | 'upload', limit?: number): Promise<TransferQueue[]> {
+    let query = this.db.select()
       .from(transferQueue)
       .where(and(
         eq(transferQueue.taskType, taskType),
         eq(transferQueue.status, 'completed')
       ))
       .orderBy(desc(transferQueue.updatedAt))
-      .limit(limit)
-      .all()
+    if (limit !== undefined) {
+      query = query.limit(limit)
+    }
+    return query.all()
   }
 
   /**
    * 获取最近失败的下载/上传任务
    */
-  async getRecentFailedTasks(taskType: 'download' | 'upload', limit: number = 100): Promise<TransferQueue[]> {
-    return this.db.select()
+  async getRecentFailedTasks(taskType: 'download' | 'upload', limit?: number): Promise<TransferQueue[]> {
+    let query = this.db.select()
       .from(transferQueue)
       .where(and(
         eq(transferQueue.taskType, taskType),
         eq(transferQueue.status, 'failed')
       ))
       .orderBy(desc(transferQueue.updatedAt))
-      .limit(limit)
-      .all()
+    if (limit !== undefined) {
+      query = query.limit(limit)
+    }
+    return query.all()
   }
 }

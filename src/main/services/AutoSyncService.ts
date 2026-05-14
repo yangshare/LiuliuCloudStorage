@@ -5,6 +5,7 @@ import { alistService } from './AlistService'
 import { shareTransferService } from './ShareTransferService'
 import { downloadQueueManager, type DownloadQueueTask } from './DownloadQueueManager'
 import { loggerService } from './LoggerService'
+import { SimplePQueue } from '../utils/SimplePQueue'
 
 export type AutoSyncPlanStatus = 'enabled' | 'paused' | 'syncing' | 'expired' | 'failed' | 'deleted'
 export type AutoSyncRunStatus = 'running' | 'completed' | 'partial_failed' | 'failed' | 'skipped'
@@ -593,55 +594,62 @@ export class AutoSyncService {
   ): Promise<RemoteFile[]> {
     const files: RemoteFile[] = []
     const root = normalizeRemotePath(remoteRoot)
-    const queue: Array<{ current: string; depth: number }> = [{ current: root, depth: 0 }]
-    let queueIndex = 0
+    loggerService.info('AutoSyncService', `开始扫描远程文件，root=${root}`)
     let scannedDirs = 0
     let lastProgressFiles = 0
     let lastProgressTime = 0
 
-    const worker = async (): Promise<void> => {
-      while (true) {
-        const task = queue[queueIndex++]
-        if (!task) break
+    const queue = new SimplePQueue({ concurrency: this.maxScanConcurrency })
 
-        if (task.depth > this.maxScanDepth) {
-          loggerService.warn('AutoSyncService', `远程目录扫描深度超过 ${this.maxScanDepth}: ${task.current}`)
+    const scanDir = async (current: string, depth: number): Promise<void> => {
+      if (depth > this.maxScanDepth) {
+        loggerService.warn('AutoSyncService', `远程目录扫描深度超过 ${this.maxScanDepth}: ${current}`)
+        return
+      }
+
+      loggerService.debug('AutoSyncService', `扫描目录: ${current} (depth=${depth})`)
+      let result: { content?: Array<{ name: string; isDir?: boolean; size?: number; modified?: string }> }
+      try {
+        result = await alistService.listFiles(current)
+      } catch (error: any) {
+        loggerService.error('AutoSyncService', `扫描目录失败: ${current}, error=${error.message || error}`)
+        return
+      }
+      scannedDirs++
+      const content = result.content || []
+      let dirCount = 0
+      for (const item of content) {
+        const childPath = buildChildRemotePath(current, item.name)
+        if (item.isDir) {
+          dirCount++
+          queue.add(() => scanDir(childPath, depth + 1))
           continue
         }
+        files.push({
+          relativePath: path.posix.relative(root, childPath),
+          remotePath: childPath,
+          fileName: item.name,
+          fileSize: item.size || 0,
+          modified: item.modified || ''
+        })
+      }
+      loggerService.debug('AutoSyncService', `目录扫描完成: ${current}, 内容项=${content.length}, 子目录=${dirCount}, 文件=${content.length - dirCount}`)
 
-        const result = await alistService.listFiles(task.current)
-        scannedDirs++
-        const dirs: Array<{ path: string; name: string }> = []
-        for (const item of result.content || []) {
-          const childPath = buildChildRemotePath(task.current, item.name)
-          if (item.isDir) {
-            dirs.push({ path: childPath, name: item.name })
-            continue
-          }
-          files.push({
-            relativePath: path.posix.relative(root, childPath),
-            remotePath: childPath,
-            fileName: item.name,
-            fileSize: item.size || 0,
-            modified: item.modified || ''
-          })
-        }
-        for (const d of dirs) {
-          queue.push({ current: d.path, depth: task.depth + 1 })
-        }
-
-        // 节流：每 500ms 或每新增 50 个文件报告一次进度
-        const nowTime = Date.now()
-        if (onProgress && (nowTime - lastProgressTime > 500 || files.length - lastProgressFiles >= 50)) {
-          onProgress(files.length, scannedDirs)
-          lastProgressTime = nowTime
-          lastProgressFiles = files.length
-        }
+      // 节流：每 500ms 或每新增 50 个文件报告一次进度
+      const nowTime = Date.now()
+      if (onProgress && (nowTime - lastProgressTime > 500 || files.length - lastProgressFiles >= 50)) {
+        onProgress(files.length, scannedDirs)
+        lastProgressTime = nowTime
+        lastProgressFiles = files.length
       }
     }
 
-    await Promise.all(Array.from({ length: this.maxScanConcurrency }, () => worker()))
-    return files.filter(file => file.relativePath && !file.relativePath.startsWith('..'))
+    queue.add(() => scanDir(root, 0))
+    await queue.onIdle()
+
+    const filtered = files.filter(file => file.relativePath && !file.relativePath.startsWith('..'))
+    loggerService.info('AutoSyncService', `远程文件扫描结束，共扫描 ${scannedDirs} 个目录，发现 ${filtered.length} 个文件`)
+    return filtered
   }
 
   private async diffFilesIncremental(

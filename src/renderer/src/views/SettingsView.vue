@@ -666,9 +666,7 @@ onMounted(async () => {
 
 <style scoped>
 .settings-container {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 20px;
+  padding: 20px 5%;
   background: linear-gradient(135deg, #F5F5F5 0%, #E8E8E8 100%);
   height: 100vh;
   overflow-y: auto;

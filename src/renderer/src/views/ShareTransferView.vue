@@ -212,8 +212,8 @@
             <el-table-column label="操作" width="230" fixed="right">
               <template #default="{ row }">
                 <el-button
-                  link
                   type="primary"
+                  size="small"
                   :loading="runningPlanId === row.id"
                   :disabled="row.status === 'expired' || row.status === 'syncing'"
                   @click="runPlan(row.id)"
@@ -250,15 +250,56 @@
         </div>
       </div>
     </el-card>
+
+    <!-- 同步进度弹窗 -->
+    <el-dialog
+      v-model="syncProgressVisible"
+      :title="syncProgressTitle"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+      :show-close="syncProgressStatus === 'success' || syncProgressStatus === 'exception'"
+      width="480px"
+      align-center
+    >
+      <div class="sync-progress-content">
+        <el-progress
+          :percentage="syncProgressPercent"
+          :status="syncProgressStatus"
+          :stroke-width="16"
+          striped
+          striped-flow
+          :duration="syncProgressStatus === 'success' || syncProgressStatus === 'exception' ? 0 : 2"
+        />
+        <div class="sync-progress-stage">{{ syncProgressStageText }}</div>
+        <div class="sync-progress-message">{{ syncProgressMessage }}</div>
+      </div>
+      <template #footer>
+        <el-button
+          v-if="syncProgressStatus === 'success' || syncProgressStatus === 'exception'"
+          type="primary"
+          @click="syncProgressVisible = false"
+        >
+          确定
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/authStore'
+
+const STAGE_TEXT_MAP: Record<string, string> = {
+  transfer: '转存',
+  scan: '扫描远程文件',
+  diff: '快照对比',
+  queue: '加入下载队列',
+  complete: '完成'
+}
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -303,6 +344,26 @@ const totalRecords = ref(0)
 const selectedIds = ref<number[]>([])
 const pageSizeOptions = [8, 10, 20, 50]
 const recordTableMaxHeight = 420
+
+// 同步进度状态
+const syncProgressVisible = ref(false)
+const syncProgressPercent = ref(0)
+const syncProgressStage = ref('')
+const syncProgressStatus = ref<'success' | 'exception' | undefined>(undefined)
+const syncProgressMessage = ref('')
+
+const syncProgressTitle = computed(() => {
+  const stage = STAGE_TEXT_MAP[syncProgressStage.value] || '同步'
+  return `${stage}中...`
+})
+
+const syncProgressStageText = computed(() => {
+  const stage = STAGE_TEXT_MAP[syncProgressStage.value] || syncProgressStage.value
+  if (syncProgressStage.value === 'complete') {
+    return syncProgressStatus.value === 'exception' ? '同步失败' : '同步完成'
+  }
+  return stage
+})
 
 // 分页
 const pagination = reactive({
@@ -354,6 +415,44 @@ function getRunStatusText(run: any) {
   const status = statusMap[run.status] || run.status
   const count = run.missingFileCount ?? run.missing_file_count ?? 0
   return `${status} / 缺少 ${count} 个`
+}
+
+function resetSyncProgress() {
+  syncProgressPercent.value = 0
+  syncProgressStage.value = ''
+  syncProgressStatus.value = undefined
+  syncProgressMessage.value = ''
+}
+
+function openSyncProgress() {
+  resetSyncProgress()
+  syncProgressVisible.value = true
+}
+
+function handleSyncProgress(data: {
+  planId: number
+  stage: string
+  status: string
+  message?: string
+  current?: number
+  total?: number
+}) {
+  if (!syncProgressVisible.value) return
+
+  syncProgressStage.value = data.stage
+  syncProgressMessage.value = data.message || ''
+
+  if (data.current !== undefined && data.total !== undefined && data.total > 0) {
+    syncProgressPercent.value = Math.min(Math.round((data.current / data.total) * 100), 100)
+  }
+
+  if (data.status === 'failed') {
+    syncProgressStatus.value = 'exception'
+  } else if (data.stage === 'complete' && data.status === 'completed') {
+    syncProgressStatus.value = 'success'
+  } else {
+    syncProgressStatus.value = undefined
+  }
 }
 
 /**
@@ -524,6 +623,9 @@ async function handleTransfer() {
     }
 
     transferring.value = true
+    if (syncForm.enabled) {
+      openSyncProgress()
+    }
     try {
       const result = syncForm.enabled
         ? await window.electronAPI.autoSync.createPlanAndRun({
@@ -562,9 +664,15 @@ async function handleTransfer() {
         }
       } else {
         ElMessage.error(result.message || (syncForm.enabled ? '创建自动同步计划失败' : '转存失败'))
+        if (syncForm.enabled) {
+          syncProgressVisible.value = false
+        }
       }
     } catch (error: any) {
       ElMessage.error('转存失败: ' + error.message)
+      if (syncForm.enabled) {
+        syncProgressVisible.value = false
+      }
     } finally {
       transferring.value = false
     }
@@ -623,20 +731,21 @@ async function runPlan(id: number) {
   if (!authStore.user?.id) return
 
   runningPlanId.value = id
+  openSyncProgress()
   try {
     const result = await window.electronAPI.autoSync.runPlan({
       id,
       userId: authStore.user.id
     })
 
-    if (result.success) {
-      ElMessage.success(result.message || '同步完成')
-    } else {
+    if (!result.success) {
+      syncProgressVisible.value = false
       ElMessage.error(result.message || '同步失败')
     }
     await loadPlans()
   } catch (error: any) {
     ElMessage.error('同步失败: ' + error.message)
+    syncProgressVisible.value = false
   } finally {
     runningPlanId.value = null
   }
@@ -814,14 +923,17 @@ onMounted(() => {
   loadRecords()
   loadPlans()
   ensureDefaultSyncDirectory()
+  window.electronAPI.autoSync.onProgress(handleSyncProgress)
+})
+
+onUnmounted(() => {
+  window.electronAPI.autoSync.removeProgressListener(handleSyncProgress)
 })
 </script>
 
 <style scoped>
 .share-transfer-container {
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 20px;
+  padding: 20px 5%;
   background: linear-gradient(135deg, #F5F5F5 0%, #E8E8E8 100%);
   height: 100vh;
   overflow-y: auto;
@@ -987,5 +1099,27 @@ onMounted(() => {
 
 :deep(.el-pager li.is-active) {
   background: var(--netease-red) !important;
+}
+
+/* 同步进度弹窗 */
+.sync-progress-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.sync-progress-stage {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--netease-gray-7);
+  text-align: center;
+}
+
+.sync-progress-message {
+  font-size: 13px;
+  color: var(--netease-gray-5);
+  text-align: center;
+  min-height: 20px;
 }
 </style>

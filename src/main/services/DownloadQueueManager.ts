@@ -380,8 +380,10 @@ class DownloadQueueManager {
 
     // completed / failed：从数据库查历史记录
     try {
-      const recentCompleted = await this.transferService.getRecentCompletedTasks('download', 100)
-      const recentFailed = await this.transferService.getRecentFailedTasks('download', 100)
+      const [recentCompleted, recentFailed] = await Promise.all([
+        this.transferService.getRecentCompletedTasks('download', 200),
+        this.transferService.getRecentFailedTasks('download', 200)
+      ])
 
       for (const dbTask of recentCompleted) {
         const fileSize: number = dbTask.fileSize ?? 0

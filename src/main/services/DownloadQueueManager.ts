@@ -332,11 +332,19 @@ class DownloadQueueManager {
     active: any[]
     completed: any[]
     failed: any[]
+    counts: {
+      pending: number
+      active: number
+      completed: number
+      failed: number
+    }
   }> {
     const pending: any[] = []
     const active: any[] = []
     const completed: any[] = []
     const failed: any[] = []
+    let completedCount = 0
+    let failedCount = 0
 
     // pending：直接从内存 queue 读，批量查 DB 获取进度数据
     const pendingTasks = Array.from(this.queue.values())
@@ -380,10 +388,14 @@ class DownloadQueueManager {
 
     // completed / failed：从数据库查历史记录
     try {
-      const [recentCompleted, recentFailed] = await Promise.all([
-        this.transferService.getRecentCompletedTasks('download', 200),
-        this.transferService.getRecentFailedTasks('download', 200)
+      const [recentCompleted, recentFailed, totalCompleted, totalFailed] = await Promise.all([
+        this.transferService.getRecentCompletedTasks(this.userId, 'download', 200),
+        this.transferService.getRecentFailedTasks(this.userId, 'download', 200),
+        this.transferService.getTaskCount(this.userId, 'download', 'completed'),
+        this.transferService.getTaskCount(this.userId, 'download', 'failed')
       ])
+      completedCount = totalCompleted
+      failedCount = totalFailed
 
       for (const dbTask of recentCompleted) {
         const fileSize: number = dbTask.fileSize ?? 0
@@ -424,7 +436,18 @@ class DownloadQueueManager {
       loggerService.error('DownloadQueueManager', `获取历史任务失败: ${error}`)
     }
 
-    return { pending, active, completed, failed }
+    return {
+      pending,
+      active,
+      completed,
+      failed,
+      counts: {
+        pending: pending.length,
+        active: active.length,
+        completed: completedCount,
+        failed: failedCount
+      }
+    }
   }
 
   /**
@@ -581,9 +604,15 @@ class DownloadQueueManager {
         pending: state.pending || [],
         active: state.active || [],
         completed: state.completed || [],
-        failed: state.failed || []
+        failed: state.failed || [],
+        counts: state.counts || {
+          pending: state.pending?.length || 0,
+          active: state.active?.length || 0,
+          completed: state.completed?.length || 0,
+          failed: state.failed?.length || 0
+        }
       }
-      loggerService.info('DownloadQueueManager', `发送队列更新事件: pending=${safeState.pending.length}, active=${safeState.active.length}, completed=${safeState.completed.length}, failed=${safeState.failed.length}`)
+      loggerService.info('DownloadQueueManager', `发送队列更新事件: pending=${safeState.counts.pending}, active=${safeState.counts.active}, completed=${safeState.counts.completed}, failed=${safeState.counts.failed}`)
       const windows = BrowserWindow.getAllWindows()
       windows.forEach(win => {
         if (win && !win.isDestroyed()) {

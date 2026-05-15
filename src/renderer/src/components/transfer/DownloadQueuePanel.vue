@@ -121,8 +121,8 @@
           <template #label>
             <el-space align="center" :size="8">
               <span>已完成</span>
-              <el-tag size="small" :type="completedDownloads.length > 0 ? 'success' : 'info'">
-                {{ completedDownloads.length }}
+              <el-tag size="small" :type="completedDownloadCount > 0 ? 'success' : 'info'">
+                {{ completedDownloadCount }}
               </el-tag>
             </el-space>
           </template>
@@ -158,8 +158,8 @@
           <template #label>
             <el-space align="center" :size="8">
               <span>失败</span>
-              <el-tag size="small" :type="failedDownloads.length > 0 ? 'danger' : 'info'">
-                {{ failedDownloads.length }}
+              <el-tag size="small" :type="failedDownloadCount > 0 ? 'danger' : 'info'">
+                {{ failedDownloadCount }}
               </el-tag>
             </el-space>
           </template>
@@ -203,6 +203,8 @@ const downloadQueue = computed(() => transferStore.downloadQueue)
 const activeDownloads = computed(() => transferStore.activeDownloads)
 const completedDownloads = computed(() => transferStore.completedDownloads)
 const failedDownloads = computed(() => transferStore.failedDownloads)
+const completedDownloadCount = computed(() => transferStore.downloadQueueCounts.completed)
+const failedDownloadCount = computed(() => transferStore.downloadQueueCounts.failed)
 const isDownloadQueuePaused = computed(() => transferStore.isDownloadQueuePaused)
 const downloadProgressMap = computed(() => transferStore.downloadProgressMap)
 
@@ -276,11 +278,13 @@ async function handleResumeQueue() {
 }
 
 async function handleClearQueue() {
+  const completedCount = completedDownloadCount.value
+  const failedCount = failedDownloadCount.value
   const result = await transferStore.clearDownloadQueue()
   if (result.success) {
     ElNotification.success({
       title: '队列已清空',
-      message: `已清空 ${completedDownloads.value.length} 个已完成任务和 ${failedDownloads.value.length} 个失败任务`
+      message: `已清空 ${completedCount} 个已完成任务和 ${failedCount} 个失败任务`
     })
   } else {
     ElNotification.error({

@@ -504,6 +504,12 @@ export const useTransferStore = defineStore('transfer', () => {
   const activeDownloads = ref<DownloadTask[]>([])
   const completedDownloads = ref<DownloadTask[]>([])
   const failedDownloads = ref<DownloadTask[]>([])
+  const downloadQueueCounts = ref({
+    pending: 0,
+    active: 0,
+    completed: 0,
+    failed: 0
+  })
 
   const isDownloadQueuePaused = ref(false)
 
@@ -583,6 +589,19 @@ export const useTransferStore = defineStore('transfer', () => {
   // 下载队列监听器引用(用于清理)
   let queueUpdatedListener: ((data: any) => void) | null = null
 
+  function applyDownloadQueueState(state: any) {
+    downloadQueue.value = state.pending || []
+    activeDownloads.value = state.active || []
+    completedDownloads.value = state.completed || []
+    failedDownloads.value = state.failed || []
+    downloadQueueCounts.value = state.counts || {
+      pending: downloadQueue.value.length,
+      active: activeDownloads.value.length,
+      completed: completedDownloads.value.length,
+      failed: failedDownloads.value.length
+    }
+  }
+
   // 初始化下载队列（应用启动时调用）
   async function initDownloadQueue(userId: number, userToken: string) {
     try {
@@ -596,20 +615,17 @@ export const useTransferStore = defineStore('transfer', () => {
       if (window.electronAPI?.transfer?.onQueueUpdated) {
         queueUpdatedListener = (state: any) => {
           console.log('[transferStore] 收到队列更新事件:', {
-            pending: state.pending?.length || 0,
-            active: state.active?.length || 0,
-            completed: state.completed?.length || 0,
-            failed: state.failed?.length || 0
+            pending: state.counts?.pending ?? state.pending?.length ?? 0,
+            active: state.counts?.active ?? state.active?.length ?? 0,
+            completed: state.counts?.completed ?? state.completed?.length ?? 0,
+            failed: state.counts?.failed ?? state.failed?.length ?? 0
           })
           // 添加防御性检查，确保 state 对象包含所有必需的属性
           if (!state) {
             console.warn('[transferStore] 队列更新事件的数据为空')
             return
           }
-          downloadQueue.value = state.pending || []
-          activeDownloads.value = state.active || []
-          completedDownloads.value = state.completed || []
-          failedDownloads.value = state.failed || []
+          applyDownloadQueueState(state)
         }
         window.electronAPI.transfer.onQueueUpdated(queueUpdatedListener)
       }
@@ -739,10 +755,7 @@ export const useTransferStore = defineStore('transfer', () => {
     try {
       const result = await window.electronAPI.transfer.getDownloadQueue?.()
       if (result?.success && result.state) {
-        downloadQueue.value = result.state.pending
-        activeDownloads.value = result.state.active
-        completedDownloads.value = result.state.completed
-        failedDownloads.value = result.state.failed
+        applyDownloadQueueState(result.state)
       }
     } catch (error: any) {
       console.error('[transferStore] 获取队列状态失败:', error)
@@ -979,6 +992,7 @@ export const useTransferStore = defineStore('transfer', () => {
     activeDownloads,
     completedDownloads,
     failedDownloads,
+    downloadQueueCounts,
     isUploading,
     uploadError,
     queueStatus,

@@ -83,7 +83,7 @@ export interface ElectronAPI {
     // 下载队列管理
     initDownloadQueue: (params: { userId: number; userToken: string }) => Promise<{ success: boolean; restoredCount?: number; error?: string }>
     queueDownload: (task: { id: string; remotePath: string; fileName: string; savePath?: string; userId: number; userToken: string; priority?: number }) => Promise<{ success: boolean; taskId?: string; error?: string }>
-    getDownloadQueue: () => Promise<{ success: boolean; state?: { pending: any[]; active: any[]; completed: any[]; failed: any[] }; error?: string }>
+    getDownloadQueue: () => Promise<{ success: boolean; state?: { pending: any[]; active: any[]; completed: any[]; failed: any[]; counts?: { pending: number; active: number; completed: number; failed: number } }; error?: string }>
     pauseDownloadQueue: () => Promise<{ success: boolean; error?: string }>
     resumeDownloadQueue: () => Promise<{ success: boolean; error?: string }>
     clearDownloadQueue: () => Promise<{ success: boolean; error?: string }>
@@ -93,8 +93,8 @@ export interface ElectronAPI {
     resumeDownload: (taskId: number) => Promise<{ success: boolean; error?: string }>
     cancelDownload: (taskId: string | number) => Promise<{ success: boolean; error?: string }>
     cancelAllDownloads: (userId: number) => Promise<{ success: boolean; error?: string }>
-    onQueueUpdated: (callback: (data: { pending: any[]; active: any[]; completed: any[]; failed: any[] }) => void) => void
-    removeQueueUpdatedListener: (callback: (data: { pending: any[]; active: any[]; completed: any[]; failed: any[] }) => void) => void
+    onQueueUpdated: (callback: (data: { pending: any[]; active: any[]; completed: any[]; failed: any[]; counts?: { pending: number; active: number; completed: number; failed: number } }) => void) => void
+    removeQueueUpdatedListener: (callback: (data: { pending: any[]; active: any[]; completed: any[]; failed: any[]; counts?: { pending: number; active: number; completed: number; failed: number } }) => void) => void
     onDownloadAuthFailed: (callback: (data: { error: string }) => void) => void
     removeDownloadAuthFailedListener: (callback: (data: { error: string }) => void) => void
   }

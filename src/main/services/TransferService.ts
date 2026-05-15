@@ -1,6 +1,6 @@
 import { getDatabase, isDatabaseOpen } from '../database'
 import { transferQueue, type TransferQueue, type NewTransferQueue } from '../database/schema'
-import { eq, and, or, inArray, desc } from 'drizzle-orm'
+import { eq, and, or, inArray, desc, count } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 
 export class TransferService {
@@ -169,6 +169,22 @@ export class TransferService {
   }
 
   /**
+   * 统计指定类型和状态的传输任务数量
+   */
+  async getTaskCount(userId: number, taskType: 'download' | 'upload', status: TransferQueue['status']): Promise<number> {
+    const result = this.db.select({ value: count() })
+      .from(transferQueue)
+      .where(and(
+        eq(transferQueue.userId, userId),
+        eq(transferQueue.taskType, taskType),
+        eq(transferQueue.status, status)
+      ))
+      .get()
+
+    return result?.value ?? 0
+  }
+
+  /**
    * 根据远程路径获取未完成的任务（pending 或 in_progress）
    */
   async getTaskByRemotePath(remotePath: string, taskType: 'upload' | 'download'): Promise<TransferQueue | undefined> {
@@ -333,10 +349,11 @@ export class TransferService {
   /**
    * 获取最近完成的下载/上传任务
    */
-  async getRecentCompletedTasks(taskType: 'download' | 'upload', limit?: number): Promise<TransferQueue[]> {
+  async getRecentCompletedTasks(userId: number, taskType: 'download' | 'upload', limit?: number): Promise<TransferQueue[]> {
     let query = this.db.select()
       .from(transferQueue)
       .where(and(
+        eq(transferQueue.userId, userId),
         eq(transferQueue.taskType, taskType),
         eq(transferQueue.status, 'completed')
       ))
@@ -350,10 +367,11 @@ export class TransferService {
   /**
    * 获取最近失败的下载/上传任务
    */
-  async getRecentFailedTasks(taskType: 'download' | 'upload', limit?: number): Promise<TransferQueue[]> {
+  async getRecentFailedTasks(userId: number, taskType: 'download' | 'upload', limit?: number): Promise<TransferQueue[]> {
     let query = this.db.select()
       .from(transferQueue)
       .where(and(
+        eq(transferQueue.userId, userId),
         eq(transferQueue.taskType, taskType),
         eq(transferQueue.status, 'failed')
       ))

@@ -170,9 +170,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('transfer:cancelDownload', { taskId }),
     cancelAllDownloads: (userId: number) =>
       ipcRenderer.invoke('transfer:cancelAllDownloads', { userId }),
-    onQueueUpdated: (callback: (data: { pending: any[]; active: any[]; completed: any[]; failed: any[] }) => void) =>
+    onQueueUpdated: (callback: (data: { pending: any[]; active: any[]; completed: any[]; failed: any[]; counts?: { pending: number; active: number; completed: number; failed: number } }) => void) =>
       ipcRenderer.on('transfer:queue-updated', wrapListener(callback)),
-    removeQueueUpdatedListener: (callback: (data: { pending: any[]; active: any[]; completed: any[]; failed: any[] }) => void) =>
+    removeQueueUpdatedListener: (callback: (data: { pending: any[]; active: any[]; completed: any[]; failed: any[]; counts?: { pending: number; active: number; completed: number; failed: number } }) => void) =>
       ipcRenderer.removeListener('transfer:queue-updated', unwrapListener(callback) as never)
   },
 

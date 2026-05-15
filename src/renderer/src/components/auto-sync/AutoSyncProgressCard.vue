@@ -14,16 +14,6 @@
       </button>
     </div>
 
-    <div class="progress-section">
-      <div class="progress-track">
-        <div
-          class="progress-fill"
-          :style="{ width: `${item.progress}%`, '--status-color': statusColor }"
-        />
-      </div>
-      <span v-if="item.status === 'running'" class="progress-text">{{ item.progress }}%</span>
-    </div>
-
     <div class="card-footer">
       <span class="stage-text">{{ stageDisplayText }}</span>
       <span v-if="item.status === 'completed' && item.queuedCount !== undefined" class="queued-badge">
@@ -54,25 +44,17 @@ const store = useAutoSyncGlobalStore()
 
 const MAX_ERROR_MSG_LEN = 24
 
-const statusColor = computed(() => {
-  switch (props.item.status) {
-    case 'completed': return 'var(--netease-green)'
-    case 'failed': return 'var(--netease-red)'
-    case 'running': return 'var(--netease-red)'
-  }
-})
-
 const stageDisplayText = computed(() => {
   if (props.item.stage === 'complete') {
     return props.item.status === 'failed' ? '同步失败' : '同步完成'
   }
-  if (props.item.message && props.item.status === 'failed') {
+  if (props.item.message) {
     return props.item.message.length > MAX_ERROR_MSG_LEN
       ? props.item.message.slice(0, MAX_ERROR_MSG_LEN) + '...'
       : props.item.message
   }
   const base = store.getStageText(props.item.stage)
-  return base ? base + '...' : props.item.message || '同步中...'
+  return base ? base + '...' : '同步中...'
 })
 
 function handleDismiss() {
@@ -152,37 +134,6 @@ function handleClick() {
 .close-btn:hover {
   background: rgba(0, 0, 0, 0.06);
   color: var(--netease-gray-7);
-}
-
-.progress-section {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 6px;
-}
-
-.progress-track {
-  flex: 1;
-  height: 4px;
-  background: rgba(0, 0, 0, 0.06);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  border-radius: 2px;
-  background: linear-gradient(90deg, var(--status-color) 0%, var(--status-color) 100%);
-  transition: width 0.4s ease;
-  opacity: 0.9;
-}
-
-.progress-text {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--netease-gray-5);
-  min-width: 28px;
-  text-align: right;
 }
 
 .card-footer {

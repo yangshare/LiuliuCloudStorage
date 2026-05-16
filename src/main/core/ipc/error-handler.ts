@@ -2,6 +2,8 @@
 
 import type { IPCResult, IPCErrorCodeType } from '../../../shared/types/ipc'
 import { IPCErrorCode } from '../../../shared/types/ipc'
+
+export { IPCErrorCode }
 import { loggerService } from '../../services/LoggerService'
 
 export class IPCError extends Error {

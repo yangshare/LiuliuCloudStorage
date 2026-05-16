@@ -13,7 +13,7 @@ import { registerCacheHandlers } from './handlers/cache'
 import { registerShareTransferHandlers } from './handlers/shareTransfer'
 import { registerConfigHandlers } from './handlers/config'
 import { registerAutoSyncHandlers } from './handlers/autoSync'
-import { initAuthModule } from '../features/auth'
+// import { initAuthModule } from '../features/auth'
 
 export function registerAllHandlers(): void {
   registerAuthHandlers()
@@ -31,5 +31,6 @@ export function registerAllHandlers(): void {
   registerShareTransferHandlers()
   registerConfigHandlers()
   registerAutoSyncHandlers()
-  initAuthModule()
+  // TODO: 新架构 auth handlers 暂时不启用，等完成完整业务逻辑后再切换
+  // initAuthModule()
 }

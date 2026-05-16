@@ -13,6 +13,7 @@ import { registerCacheHandlers } from './handlers/cache'
 import { registerShareTransferHandlers } from './handlers/shareTransfer'
 import { registerConfigHandlers } from './handlers/config'
 import { registerAutoSyncHandlers } from './handlers/autoSync'
+import { initAuthModule } from '../features/auth'
 
 export function registerAllHandlers(): void {
   registerAuthHandlers()
@@ -30,4 +31,5 @@ export function registerAllHandlers(): void {
   registerShareTransferHandlers()
   registerConfigHandlers()
   registerAutoSyncHandlers()
+  initAuthModule()
 }

@@ -1,3 +1,2 @@
-export { useTransferStore } from './stores/transferStore'
-export { useTransfer } from './composables/useTransfer'
+export { useTransferStore, type UploadTask, type DownloadTask, type QueueStatus } from './stores/transferStore'
 export { transferRendererService } from './transfer.renderer.service'

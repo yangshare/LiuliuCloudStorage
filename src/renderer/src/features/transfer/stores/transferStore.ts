@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed, h } from 'vue'
 import { throttle } from 'lodash-es'
 import { ElNotification, ElMessage } from 'element-plus'
-import { useQuotaStore } from '@/stores/quotaStore'
+import { useQuotaStore } from '@/features/quota'
 import { openFileDirectory } from '@/utils/openFileDirectory'
 
 // ==================== 常量定义 ====================
@@ -641,7 +641,7 @@ export const useTransferStore = defineStore('transfer', () => {
   async function queueDownload(remotePath: string, fileName: string, savePath?: string) {
     try {
       // 获取用户认证信息(延迟导入 authStore 以避免循环依赖)
-      const { useAuthStore } = await import('@/stores/authStore')
+      const { useAuthStore } = await import('@/features/auth')
       const authStore = useAuthStore()
 
       if (!authStore.isLoggedIn || !authStore.user) {
@@ -954,7 +954,7 @@ export const useTransferStore = defineStore('transfer', () => {
    * 取消所有下载（批量取消）
    */
   async function cancelAllDownloads() {
-    const authStore = (await import('@/stores/authStore')).useAuthStore()
+    const authStore = (await import('@/features/auth')).useAuthStore()
 
     if (!authStore.user) {
       ElMessage.error('请先登录')

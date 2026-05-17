@@ -2,8 +2,8 @@
 import { ref } from 'vue'
 import { ElText, ElButton, ElIcon, ElDialog, ElSpace, ElMessage, ElInput } from 'element-plus'
 import { Download, Delete, Refresh, Search } from '@element-plus/icons-vue'
-import { useFileStore } from '../../stores/fileStore'
-import { useTransferStore } from '../../stores/transferStore'
+import { useFileStore } from '@/features/file'
+import { useTransferStore } from '@/features/transfer'
 
 const fileStore = useFileStore()
 const transferStore = useTransferStore()

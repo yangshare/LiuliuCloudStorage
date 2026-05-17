@@ -5,7 +5,7 @@
 </template>
 
 <script setup lang="ts">
-import type { SyncItemStatus } from '@/stores/autoSyncGlobalStore'
+import type { SyncItemStatus } from '@/features/autoSync'
 
 interface Props {
   status: SyncItemStatus

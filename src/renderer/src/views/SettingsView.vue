@@ -215,7 +215,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Link, Platform, Key } from '@element-plus/icons-vue'
 
-import { useAuthStore } from '../stores/authStore'
+import { useAuthStore } from '@/features/auth'
 
 const router = useRouter()
 const authStore = useAuthStore()

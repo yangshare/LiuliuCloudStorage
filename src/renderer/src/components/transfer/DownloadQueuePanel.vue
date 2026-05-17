@@ -193,7 +193,7 @@
 import { computed, ref, watch } from 'vue'
 import { ElCard, ElTabs, ElTabPane, ElProgress, ElEmpty, ElButton, ElIcon, ElTag, ElText, ElSpace, ElNotification, ElPagination } from 'element-plus'
 import { Clock, Download, Check, CircleClose } from '@element-plus/icons-vue'
-import { useTransferStore } from '@/stores/transferStore'
+import { useTransferStore } from '@/features/transfer'
 import { formatFileSizePrecise as formatBytes, formatSpeedPrecise as formatSpeed } from '@/utils/formatters'
 import { openFileDirectory } from '@/utils/openFileDirectory'
 

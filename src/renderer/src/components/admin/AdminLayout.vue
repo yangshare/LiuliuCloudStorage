@@ -59,7 +59,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { useAuthStore } from '@/stores/authStore'
+import { useAuthStore } from '@/features/auth'
 import { ElContainer, ElAside, ElHeader, ElMain, ElMenu, ElMenuItem, ElText, ElButton, ElSpace, ElIcon } from 'element-plus'
 
 const router = useRouter()

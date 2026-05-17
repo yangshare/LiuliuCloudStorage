@@ -29,8 +29,8 @@ import { useRouter } from 'vue-router'
 import { Close } from '@element-plus/icons-vue'
 import { ElIcon } from 'element-plus'
 import AutoSyncPulseIndicator from './AutoSyncPulseIndicator.vue'
-import { useAutoSyncGlobalStore } from '@/stores/autoSyncGlobalStore'
-import type { AutoSyncGlobalItem } from '@/stores/autoSyncGlobalStore'
+import { useAutoSyncGlobalStore } from '@/features/autoSync'
+import type { AutoSyncGlobalItem } from '@/features/autoSync'
 
 interface Props {
   item: AutoSyncGlobalItem

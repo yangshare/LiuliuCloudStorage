@@ -2,7 +2,7 @@
 
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore } from '../stores/authStore'
+import { useAuthStore } from '@/features/auth'
 import { authRendererService } from '../auth.renderer.service'
 import { ElMessage } from 'element-plus'
 

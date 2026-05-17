@@ -2,8 +2,8 @@
 import { ref } from 'vue'
 import { ElIcon, ElText, ElButton, ElSpace } from 'element-plus'
 import { Upload, Document, FolderOpened } from '@element-plus/icons-vue'
-import { useTransferStore } from '../../stores/transferStore'
-import { useFileStore } from '../../stores/fileStore'
+import { useTransferStore } from '@/features/transfer'
+import { useFileStore } from '@/features/file'
 
 const transferStore = useTransferStore()
 const fileStore = useFileStore()

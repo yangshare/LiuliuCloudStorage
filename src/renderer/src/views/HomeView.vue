@@ -12,9 +12,9 @@ import DownloadQueuePanel from '../components/transfer/DownloadQueuePanel.vue'
 import CreateFolderModal from '../components/file/CreateFolderModal.vue'
 import BatchActionToolbar from '../components/file/BatchActionToolbar.vue'
 import UpdateButton from '../components/common/UpdateButton.vue'
-import { useFileStore } from '../stores/fileStore'
-import { useTransferStore } from '../stores/transferStore'
-import { useAuthStore } from '../stores/authStore'
+import { useFileStore } from '@/features/file'
+import { useTransferStore } from '@/features/transfer'
+import { useAuthStore } from '@/features/auth'
 
 const router = useRouter()
 const route = useRoute()

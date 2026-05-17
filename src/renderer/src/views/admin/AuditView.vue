@@ -99,7 +99,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ElCard, ElButton, ElSelect, ElOption, ElDatePicker, ElStatistic, ElTag, ElSpace, ElTable, ElTableColumn, ElPagination, ElMessage } from 'element-plus'
-import { useAuthStore } from '@/stores/authStore'
+import { useAuthStore } from '@/features/auth'
 import { formatFileSize } from '@/utils/formatters'
 
 const message = ElMessage

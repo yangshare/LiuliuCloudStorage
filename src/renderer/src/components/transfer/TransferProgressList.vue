@@ -24,7 +24,7 @@
 import { ref, computed } from 'vue'
 import { ElIcon } from 'element-plus'
 import { ArrowUp as ChevronUpIcon, ArrowDown as ChevronDownIcon  } from '@element-plus/icons-vue'
-import { useTransferStore } from '@/stores/transferStore'
+import { useTransferStore } from '@/features/transfer'
 import TransferProgressItem from './TransferProgressItem.vue'
 
 const transferStore = useTransferStore()

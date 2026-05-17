@@ -59,7 +59,7 @@
 import { ref } from 'vue'
 import { ElProgress, ElButton } from 'element-plus'
 import { ElMessageBox, ElNotification } from 'element-plus'
-import type { UploadTask } from '@/stores/transferStore'
+import type { UploadTask } from '@/features/transfer'
 import { formatFileSizePrecise as formatBytes, formatSpeed as _formatSpeed, formatTime as _formatTime } from '@/utils/formatters'
 
 interface Props {

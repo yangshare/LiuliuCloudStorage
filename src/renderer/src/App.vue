@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, defineComponent, h } from 'vue'
-import { useUpdateStore } from '@/stores/updateStore'
+import { useUpdateStore } from '@/features/update'
 import { NNotificationProvider, NMessageProvider, useNotification, useMessage } from 'naive-ui'
 import AutoSyncGlobalProgress from '@/components/auto-sync/AutoSyncGlobalProgress.vue'
 

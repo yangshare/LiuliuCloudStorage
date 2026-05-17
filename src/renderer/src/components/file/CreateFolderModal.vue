@@ -27,7 +27,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
 import { ElDialog, ElForm, ElFormItem, ElInput } from 'element-plus'
-import { useFileStore } from '../../stores/fileStore'
+import { useFileStore } from '@/features/file'
 
 const props = defineProps<{
   show: boolean

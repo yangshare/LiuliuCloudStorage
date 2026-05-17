@@ -291,7 +291,7 @@ import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
-import { useAuthStore } from '../stores/authStore'
+import { useAuthStore } from '@/features/auth'
 
 const STAGE_TEXT_MAP: Record<string, string> = {
   transfer: '转存',

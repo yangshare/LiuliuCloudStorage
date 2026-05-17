@@ -28,7 +28,7 @@
 import { onMounted, onUnmounted } from 'vue'
 import { Close } from '@element-plus/icons-vue'
 import { ElIcon } from 'element-plus'
-import { useAutoSyncGlobalStore } from '@/stores/autoSyncGlobalStore'
+import { useAutoSyncGlobalStore } from '@/features/autoSync'
 import AutoSyncProgressCard from './AutoSyncProgressCard.vue'
 
 const store = useAutoSyncGlobalStore()

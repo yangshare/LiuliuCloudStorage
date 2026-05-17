@@ -1,7 +1,7 @@
 // src/renderer/src/features/file/composables/useFile.ts
 
 import { ref } from 'vue'
-import { useFileStore } from '../stores/fileStore'
+import { useFileStore } from '@/features/file'
 import { fileRendererService } from '../file.renderer.service'
 import { useNotification } from '../../../core/composables/useNotification'
 import type { FileItem } from '../../../../../shared/types/file'

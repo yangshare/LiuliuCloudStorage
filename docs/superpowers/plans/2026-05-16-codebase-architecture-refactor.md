@@ -13,20 +13,25 @@
 | 阶段 | 状态 | 说明 |
 |------|------|------|
 | 基础设施 | ✅ 完成 | IPC 类型、错误处理器、useIPC、useNotification |
-| auth 模块 | ✅ 完成 | 完整迁移，新 handlers 启用，旧 handlers 已清理 |
-| file 模块 | ✅ 完成 | 完整迁移，新 handlers 启用，旧 handlers 已清理 |
-| transfer 模块 | ✅ 完成 | 业务逻辑完整迁移，原始通道覆盖旧 handlers |
-| quota 模块 | ✅ 完成 | 业务逻辑完整迁移，原始通道覆盖旧 handlers |
-| shareTransfer 模块 | ✅ 完成 | 业务逻辑完整迁移，原始通道覆盖旧 handlers |
-| autoSync 模块 | ✅ 完成 | 业务逻辑完整迁移，原始通道覆盖旧 handlers |
-| activity 模块 | ✅ 完成 | 业务逻辑完整迁移，原始通道覆盖旧 handlers |
-| downloadConfig 模块 | ✅ 完成 | 业务逻辑完整迁移，原始通道覆盖旧 handlers |
-| cache 模块 | ✅ 完成 | 业务逻辑完整迁移，原始通道覆盖旧 handlers |
-| config 模块 | ✅ 完成 | 业务逻辑完整迁移，原始通道覆盖旧 handlers |
-| 旧代码清理 | ✅ 完成 | auth/file handlers 注册已移除，getCurrentSession 引用已迁移 |
+| auth 模块 | ✅ 完成 | 完整迁移（Main + Renderer），旧 store 改为兼容层重新导出 |
+| file 模块 | ✅ 完成 | 完整迁移，新 handlers 启用 |
+| transfer 模块 | ✅ 完成 | 业务逻辑完整迁移，含 queue.service.ts |
+| quota 模块 | ✅ 完成 | 业务逻辑完整迁移，含 n8n Webhook |
+| shareTransfer 模块 | ✅ 完成 | 业务逻辑完整迁移 |
+| autoSync 模块 | ✅ 完成 | 业务逻辑完整迁移，含进度回调配置 |
+| activity 模块 | ✅ 完成 | 业务逻辑完整迁移 |
+| downloadConfig 模块 | ✅ 完成 | 业务逻辑完整迁移 |
+| cache 模块 | ✅ 完成 | 业务逻辑完整迁移 |
+| config 模块 | ✅ 完成 | 业务逻辑完整迁移 |
+| 组件层 auth | ✅ 完成 | authStore 已迁移为兼容层，指向新 feature store |
+| 编译验证 | ✅ 通过 | `pnpm electron-vite build` 持续通过 |
 
-**后续工作：**
-- 组件层逐步替换旧 store 引用为新 composables（transferStore、autoSyncGlobalStore、updateStore）
+**已完成的扩展工作（超出原始计划任务 1-15）：**
+- file、transfer、quota、shareTransfer、autoSync、activity、downloadConfig、cache、config 等 9 个模块的 Main 进程迁移
+- auth 模块 Renderer 端 store 兼容层建立
+
+**后续可选工作：**
+- transferStore（~1034 行）、autoSyncGlobalStore、updateStore 的 Renderer 端完整迁移（工作量大，涉及大量组件修改）
 
 ---
 

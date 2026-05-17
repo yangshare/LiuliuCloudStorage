@@ -1,5 +1,0 @@
-export { registerDialogHandlers } from './dialog'
-export { registerTrayHandlers } from './tray'
-export { registerNotificationHandlers } from './notification'
-export { registerAppHandlers } from './app'
-export { registerUpdateHandlers } from './update'

@@ -16,7 +16,7 @@ import { initFileModule } from '../features/file'
 import { initTransferModule } from '../features/transfer'
 
 export function registerAllHandlers(): void {
-  registerTransferHandlers()
+  registerTransferHandlers()  // 旧的（先注册，后由新模块覆盖）
   registerQuotaHandlers()
   registerDialogHandlers()
   registerTrayHandlers()
@@ -29,7 +29,7 @@ export function registerAllHandlers(): void {
   registerShareTransferHandlers()
   registerConfigHandlers()
   registerAutoSyncHandlers()
-  initAuthModule()
-  initFileModule()
-  initTransferModule()
+  initAuthModule()    // 新的（覆盖旧 auth）
+  initFileModule()    // 新的（覆盖旧 file）
+  initTransferModule() // 新的（覆盖旧的 transfer handlers）
 }

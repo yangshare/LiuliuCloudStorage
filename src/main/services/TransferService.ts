@@ -350,35 +350,51 @@ export class TransferService {
    * 获取最近完成的下载/上传任务
    */
   async getRecentCompletedTasks(userId: number, taskType: 'download' | 'upload', limit?: number): Promise<TransferQueue[]> {
-    let query = this.db.select()
-      .from(transferQueue)
-      .where(and(
-        eq(transferQueue.userId, userId),
-        eq(transferQueue.taskType, taskType),
-        eq(transferQueue.status, 'completed')
-      ))
-      .orderBy(desc(transferQueue.updatedAt))
+    const conditions = and(
+      eq(transferQueue.userId, userId),
+      eq(transferQueue.taskType, taskType),
+      eq(transferQueue.status, 'completed')
+    )
+
     if (limit !== undefined) {
-      query = query.limit(limit)
+      return this.db.select()
+        .from(transferQueue)
+        .where(conditions)
+        .orderBy(desc(transferQueue.updatedAt))
+        .limit(limit)
+        .all()
     }
-    return query.all()
+
+    return this.db.select()
+      .from(transferQueue)
+      .where(conditions)
+      .orderBy(desc(transferQueue.updatedAt))
+      .all()
   }
 
   /**
    * 获取最近失败的下载/上传任务
    */
   async getRecentFailedTasks(userId: number, taskType: 'download' | 'upload', limit?: number): Promise<TransferQueue[]> {
-    let query = this.db.select()
-      .from(transferQueue)
-      .where(and(
-        eq(transferQueue.userId, userId),
-        eq(transferQueue.taskType, taskType),
-        eq(transferQueue.status, 'failed')
-      ))
-      .orderBy(desc(transferQueue.updatedAt))
+    const conditions = and(
+      eq(transferQueue.userId, userId),
+      eq(transferQueue.taskType, taskType),
+      eq(transferQueue.status, 'failed')
+    )
+
     if (limit !== undefined) {
-      query = query.limit(limit)
+      return this.db.select()
+        .from(transferQueue)
+        .where(conditions)
+        .orderBy(desc(transferQueue.updatedAt))
+        .limit(limit)
+        .all()
     }
-    return query.all()
+
+    return this.db.select()
+      .from(transferQueue)
+      .where(conditions)
+      .orderBy(desc(transferQueue.updatedAt))
+      .all()
   }
 }

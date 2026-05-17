@@ -4,7 +4,6 @@ import { ref } from 'vue'
 import { useFileStore } from '@/features/file'
 import { fileRendererService } from '../file.renderer.service'
 import { useNotification } from '../../../core/composables/useNotification'
-import type { FileItem } from '../../../../../shared/types/file'
 
 export function useFile() {
   const store = useFileStore()
@@ -15,19 +14,23 @@ export function useFile() {
    * 加载文件列表
    */
   async function loadFiles(path: string) {
-    store.setLoading(true)
+    store.isLoadingFiles = true
     try {
       const result = await fileRendererService.list(path)
-      if (result.success && result.data) {
-        store.setFileList(result.data.content)
-        store.setCurrentPath(path)
-      } else {
+      if (!result.success) {
         showError('加载失败', result.error || '获取文件列表失败')
+        return
       }
+      if (!result.data) {
+        showError('加载失败', '获取文件列表失败')
+        return
+      }
+      store.files = result.data.content
+      store.currentPath = path
     } catch (error) {
       showError('加载失败', '网络错误，请稍后重试')
     } finally {
-      store.setLoading(false)
+      store.isLoadingFiles = false
     }
   }
 
@@ -123,7 +126,7 @@ export function useFile() {
    * 获取目录下所有文件（递归子目录）
    */
   async function getAllFilesInDirectory(remotePath: string) {
-    store.setLoading(true)
+    store.isLoadingFiles = true
     try {
       const result = await fileRendererService.getAllFilesInDirectory(remotePath)
       if (result.success && result.data) {
@@ -136,15 +139,15 @@ export function useFile() {
       showError('获取失败', '网络错误，请稍后重试')
       return []
     } finally {
-      store.setLoading(false)
+      store.isLoadingFiles = false
     }
   }
 
   return {
     // 状态
     currentPath: store.currentPath,
-    fileList: store.fileList,
-    isLoading: store.isLoading,
+    files: store.files,
+    isLoadingFiles: store.isLoadingFiles,
     isOperating,
 
     // 方法

@@ -300,7 +300,7 @@ export class TransferService {
   // ========== 最近任务 ==========
 
   async getRecentCompletedTasks(userId: number, taskType: 'download' | 'upload', limit?: number): Promise<TransferQueue[]> {
-    let query = this.db.select()
+    const query = this.db.select()
       .from(transferQueue)
       .where(and(
         eq(transferQueue.userId, userId),
@@ -309,13 +309,13 @@ export class TransferService {
       ))
       .orderBy(desc(transferQueue.updatedAt))
     if (limit !== undefined) {
-      query = query.limit(limit)
+      return query.limit(limit).all()
     }
     return query.all()
   }
 
   async getRecentFailedTasks(userId: number, taskType: 'download' | 'upload', limit?: number): Promise<TransferQueue[]> {
-    let query = this.db.select()
+    const query = this.db.select()
       .from(transferQueue)
       .where(and(
         eq(transferQueue.userId, userId),
@@ -324,9 +324,219 @@ export class TransferService {
       ))
       .orderBy(desc(transferQueue.updatedAt))
     if (limit !== undefined) {
-      query = query.limit(limit)
+      return query.limit(limit).all()
     }
     return query.all()
+  }
+
+  // ========== 上传下载业务方法 ==========
+
+  async uploadFile(
+    params: {
+      filePath: string
+      remotePath: string
+      userId: number
+      userToken: string
+      localTaskId: string
+    },
+    onProgress?: (data: { taskId: string; progress: number; transferredSize: number }) => void
+  ) {
+    return handleIPC(async () => {
+      const { alistService } = await import('../../services/AlistService')
+      const { orchestrationService } = await import('../../services/OrchestrationService')
+      const fs = await import('fs')
+      const path = await import('path')
+
+      alistService.setToken(params.userToken)
+      alistService.setBasePath('/alist/')
+      alistService.setUserId(params.userId)
+
+      const fileStats = fs.statSync(params.filePath)
+      const fileName = path.basename(params.filePath)
+
+      const uploadResult = await alistService.uploadFile(params.filePath, params.remotePath)
+      if (!uploadResult.success) {
+        throw new Error(uploadResult.error || '上传失败')
+      }
+
+      let lastProgress = 0
+      const success = await orchestrationService.waitForTaskCompletion(
+        uploadResult.taskId!,
+        (progress) => {
+          if (progress !== lastProgress && onProgress) {
+            const transferredSize = Math.floor((fileStats.size * progress) / 100)
+            onProgress({
+              taskId: params.localTaskId,
+              progress,
+              transferredSize
+            })
+            lastProgress = progress
+          }
+        }
+      )
+
+      return {
+        success,
+        taskId: uploadResult.taskId,
+        fileInfo: {
+          fileName,
+          fileSize: fileStats.size,
+          remotePath: `${alistService.getBasePath()}${params.remotePath}`,
+          uploadedAt: new Date().toISOString()
+        }
+      }
+    })
+  }
+
+  async downloadFile(
+    params: {
+      remotePath: string
+      fileName: string
+      userId: number
+      userToken: string
+      savePath?: string
+    },
+    onProgress?: (data: {
+      taskId: string
+      fileName: string
+      progress: number
+      downloadedBytes: number
+      totalBytes: number
+      speed: number
+    }) => void,
+    onCompleted?: (data: { taskId: string; fileName: string; savePath: string }) => void,
+    onFailed?: (data: { taskId: string; fileName: string; error: string }) => void
+  ) {
+    return handleIPC(async () => {
+      const { alistService } = await import('../../services/AlistService')
+      const { DownloadManager } = await import('../../services/DownloadManager')
+      const path = await import('path')
+
+      alistService.setToken(params.userToken)
+      alistService.setBasePath('/alist/')
+      alistService.setUserId(params.userId)
+
+      const downloadResult = await alistService.getDownloadUrl(params.remotePath)
+      if (!downloadResult.success) {
+        throw new Error(downloadResult.error || '获取下载链接失败')
+      }
+
+      const downloadManager = new DownloadManager()
+      const savePath = params.savePath || path.join(downloadManager.getDefaultDownloadPath(), params.fileName)
+      const taskId = `download_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+      downloadManager.startDownload({
+        id: taskId,
+        url: downloadResult.rawUrl!,
+        savePath,
+        fileName: downloadResult.fileName!,
+        fileSize: downloadResult.fileSize!,
+        userId: params.userId,
+        userToken: params.userToken,
+        remotePath: params.remotePath
+      }, (progress) => {
+        if (onProgress) {
+          onProgress({
+            taskId,
+            fileName: downloadResult.fileName!,
+            progress: progress.percentage,
+            downloadedBytes: progress.downloadedBytes,
+            totalBytes: progress.totalBytes,
+            speed: progress.speed
+          })
+        }
+      }).then((actualSavePath) => {
+        if (onCompleted) {
+          onCompleted({
+            taskId,
+            fileName: downloadResult.fileName!,
+            savePath: actualSavePath
+          })
+        }
+      }).catch((error) => {
+        if (onFailed) {
+          onFailed({
+            taskId,
+            fileName: downloadResult.fileName!,
+            error: error.message
+          })
+        }
+      })
+
+      return { success: true, taskId, savePath }
+    })
+  }
+
+  async saveAs(fileName: string, userId: number) {
+    return handleIPC(async () => {
+      const { dialog } = await import('electron')
+      const { DownloadManager } = await import('../../services/DownloadManager')
+      const { preferencesService } = await import('../../services/PreferencesService')
+      const path = await import('path')
+
+      const downloadManager = new DownloadManager()
+      const lastPath = preferencesService.getLastDownloadPath(userId)
+      const defaultPath = lastPath
+        ? path.join(lastPath, fileName)
+        : path.join(downloadManager.getDefaultDownloadPath(), fileName)
+
+      const result = await dialog.showSaveDialog({
+        title: '选择下载保存位置',
+        defaultPath,
+        buttonLabel: '保存',
+        filters: [{ name: 'All Files', extensions: ['*'] }],
+        properties: ['createDirectory']
+      })
+
+      if (result.canceled || !result.filePath) {
+        return { success: false, canceled: true }
+      }
+
+      const selectedDir = path.dirname(result.filePath)
+      preferencesService.saveLastDownloadPath(userId, selectedDir)
+
+      return { success: true, savePath: result.filePath }
+    })
+  }
+
+  async resumeDownload(
+    taskId: string,
+    onProgress?: (data: {
+      taskId: string
+      progress: number
+      downloadedBytes: number
+      totalBytes: number
+      speed: number
+    }) => void,
+    onCompleted?: (data: { taskId: string; fileName: string; savePath: string }) => void
+  ) {
+    return handleIPC(async () => {
+      const { DownloadManager } = await import('../../services/DownloadManager')
+      const downloadManager = new DownloadManager()
+      const taskInfo = await this.getTask(Number(taskId))
+
+      await downloadManager.resumeDownload(Number(taskId), (progress) => {
+        if (onProgress) {
+          onProgress({
+            taskId,
+            progress: progress.percentage,
+            downloadedBytes: progress.downloadedBytes,
+            totalBytes: progress.totalBytes,
+            speed: progress.speed
+          })
+        }
+      })
+
+      if (onCompleted) {
+        onCompleted({
+          taskId,
+          fileName: taskInfo?.fileName || '',
+          savePath: taskInfo?.filePath || ''
+        })
+      }
+
+      return { success: true }
+    })
   }
 
   // ========== 工具方法 ==========

@@ -17,6 +17,10 @@ import { initTransferModule } from '../features/transfer'
 import { initQuotaModule } from '../features/quota'
 import { initShareTransferModule } from '../features/shareTransfer'
 import { initAutoSyncModule } from '../features/autoSync'
+import { initActivityModule } from '../features/activity'
+import { initDownloadConfigModule } from '../features/downloadConfig'
+import { initCacheModule } from '../features/cache'
+import { initConfigModule } from '../features/config'
 
 export function registerAllHandlers(): void {
   registerTransferHandlers()  // 旧的（先注册，后由新模块覆盖）
@@ -38,4 +42,8 @@ export function registerAllHandlers(): void {
   initQuotaModule()    // 新的（覆盖旧的 quota handlers）
   initShareTransferModule() // 新的（覆盖旧的 shareTransfer handlers）
   initAutoSyncModule() // 新的（覆盖旧的 autoSync handlers）
+  initActivityModule() // 新的（覆盖旧的 activity handlers）
+  initDownloadConfigModule() // 新的（覆盖旧的 downloadConfig handlers）
+  initCacheModule() // 新的（覆盖旧的 cache handlers）
+  initConfigModule() // 新的（覆盖旧的 config handlers）
 }

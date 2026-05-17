@@ -1,6 +1,6 @@
 import { ipcMain, net } from 'electron'
 import { getDatabase } from '../../database'
-import { getCurrentSession } from './auth'
+import { authService } from '../../features/auth/auth.service'
 import { quotaCalculationService } from '../../services/QuotaCalculationService'
 import { loadConfig } from '../../config'
 
@@ -62,7 +62,7 @@ export function registerQuotaHandlers(): void {
   ipcMain.handle('quota:get', async () => {
     try {
       // 获取当前会话
-      const session = getCurrentSession()
+      const session = authService.getCurrentSession()
 
       if (!session) {
         throw new Error('用户未登录')
@@ -95,7 +95,7 @@ export function registerQuotaHandlers(): void {
    */
   ipcMain.handle('quota:update', async (_event, quotaUsed: number) => {
     try {
-      const session = getCurrentSession()
+      const session = authService.getCurrentSession()
 
       if (!session) {
         throw new Error('用户未登录')
@@ -119,7 +119,7 @@ export function registerQuotaHandlers(): void {
    */
   ipcMain.handle('quota:calculate', async () => {
     try {
-      const session = getCurrentSession()
+      const session = authService.getCurrentSession()
 
       if (!session) {
         throw new Error('用户未登录')
@@ -166,7 +166,7 @@ export function registerQuotaHandlers(): void {
    */
   ipcMain.handle('quota:admin-update', async (_event, targetUserId: number, newQuotaGB: number) => {
     try {
-      const session = getCurrentSession()
+      const session = authService.getCurrentSession()
 
       if (!session) {
         throw new Error('用户未登录')

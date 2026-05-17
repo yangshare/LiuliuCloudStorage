@@ -8,7 +8,7 @@ import { TransferService } from '../../services/TransferService'
 import { DownloadManager } from '../../services/DownloadManager'
 import { preferencesService } from '../../services/PreferencesService'
 import { downloadQueueManager, type DownloadQueueTask } from '../../services/DownloadQueueManager'
-import { getCurrentSession } from './auth'
+import { authService } from '../../features/auth/auth.service'
 
 const transferService = new TransferService()
 
@@ -287,7 +287,7 @@ export function registerTransferHandlers(): void {
   // 添加到下载队列
   ipcMain.handle('transfer:queueDownload', async (_event, taskData) => {
     try {
-      const session = getCurrentSession()
+      const session = authService.getCurrentSession()
       if (!session) {
         return { success: false, error: '用户未登录' }
       }
@@ -314,7 +314,7 @@ export function registerTransferHandlers(): void {
   // 批量添加到下载队列
   ipcMain.handle('transfer:batchQueueDownload', async (_event, { remotePaths }: { remotePaths: string[] }) => {
     try {
-      const session = getCurrentSession()
+      const session = authService.getCurrentSession()
       if (!session) {
         return { success: false, error: '用户未登录' }
       }

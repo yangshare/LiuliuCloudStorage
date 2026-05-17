@@ -1,5 +1,3 @@
-import { registerAuthHandlers } from './handlers/auth'
-import { registerFileHandlers } from './handlers/file'
 import { registerTransferHandlers } from './handlers/transfer'
 import { registerQuotaHandlers } from './handlers/quota'
 import { registerDialogHandlers } from './handlers/dialog'
@@ -18,8 +16,6 @@ import { initFileModule } from '../features/file'
 import { initTransferModule } from '../features/transfer'
 
 export function registerAllHandlers(): void {
-  registerAuthHandlers()
-  registerFileHandlers()
   registerTransferHandlers()
   registerQuotaHandlers()
   registerDialogHandlers()
@@ -33,10 +29,7 @@ export function registerAllHandlers(): void {
   registerShareTransferHandlers()
   registerConfigHandlers()
   registerAutoSyncHandlers()
-  // 新架构 auth handlers（后注册，覆盖旧 handlers）
   initAuthModule()
-  // 新架构 file handlers（后注册，覆盖旧 handlers）
   initFileModule()
-  // 新架构 transfer handlers（使用新通道 transfer:v2:*，不覆盖旧 handlers）
   initTransferModule()
 }

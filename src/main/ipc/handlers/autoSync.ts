@@ -1,7 +1,7 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { autoSyncService, type AutoSyncConflictPolicy, type AutoSyncProgressEvent } from '../../services/AutoSyncService'
 import { loggerService } from '../../services/LoggerService'
-import { getCurrentSession } from './auth'
+import { authService } from '../../features/auth/auth.service'
 
 function broadcastProgress(planId: number, event: AutoSyncProgressEvent): void {
   BrowserWindow.getAllWindows().forEach(win => {
@@ -14,7 +14,7 @@ autoSyncService.setProgressCallback((planId, event) => {
 })
 
 function getSessionOrThrow(): { userId: number; username: string; token: string } {
-  const session = getCurrentSession()
+  const session = authService.getCurrentSession()
   if (!session) {
     throw new Error('用户未登录')
   }

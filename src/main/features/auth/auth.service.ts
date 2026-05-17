@@ -226,7 +226,7 @@ export class AuthService {
       data: {
         id: user.id,
         username: user.username,
-        isAdmin: user.isAdmin,
+        isAdmin: user.isAdmin ?? false,
         quotaTotal: user.quotaTotal ?? DEFAULT_QUOTA,
         quotaUsed: user.quotaUsed ?? 0
       }

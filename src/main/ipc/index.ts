@@ -15,6 +15,7 @@ import { registerConfigHandlers } from './handlers/config'
 import { registerAutoSyncHandlers } from './handlers/autoSync'
 import { initAuthModule } from '../features/auth'
 import { initFileModule } from '../features/file'
+import { initTransferModule } from '../features/transfer'
 
 export function registerAllHandlers(): void {
   registerAuthHandlers()
@@ -36,4 +37,6 @@ export function registerAllHandlers(): void {
   initAuthModule()
   // 新架构 file handlers（后注册，覆盖旧 handlers）
   initFileModule()
+  // 新架构 transfer handlers（使用新通道 transfer:v2:*，不覆盖旧 handlers）
+  initTransferModule()
 }

@@ -33,6 +33,7 @@ const validChannels = [
   'transfer:clearPendingQueue', 'transfer:clearActiveQueue',
   'transfer:resumeDownload', 'transfer:cancelDownload', 'transfer:cancelAllDownloads',
   'transfer:queue-updated',
+  'transfer:v2:list',
   'quota:get', 'quota:update', 'quota:calculate', 'quota:admin-update',
   'crypto:encrypt', 'crypto:decrypt', 'crypto:isReady',
   'dialog:openFile',

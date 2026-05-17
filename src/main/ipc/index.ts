@@ -14,6 +14,7 @@ import { registerAutoSyncHandlers } from './handlers/autoSync'
 import { initAuthModule } from '../features/auth'
 import { initFileModule } from '../features/file'
 import { initTransferModule } from '../features/transfer'
+import { initQuotaModule } from '../features/quota'
 
 export function registerAllHandlers(): void {
   registerTransferHandlers()  // 旧的（先注册，后由新模块覆盖）
@@ -32,4 +33,5 @@ export function registerAllHandlers(): void {
   initAuthModule()    // 新的（覆盖旧 auth）
   initFileModule()    // 新的（覆盖旧 file）
   initTransferModule() // 新的（覆盖旧的 transfer handlers）
+  initQuotaModule()    // 新的（覆盖旧的 quota handlers）
 }

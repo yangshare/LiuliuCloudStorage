@@ -1,0 +1,646 @@
+import { ref, computed, h } from 'vue'
+import { throttle } from 'lodash-es'
+import { ElNotification, ElMessage } from 'element-plus'
+import { openFileDirectory } from '@/utils/openFileDirectory'
+import { isNotificationsEnabled } from './useTransferCommon'
+import type { DownloadTask } from '../stores/transferStore'
+
+// ==================== 常量定义 ====================
+
+/**
+ * 进度更新节流间隔（毫秒）
+ * 用于限制下载/上传进度更新频率，避免 UI 过于频繁刷新
+ */
+const PROGRESS_UPDATE_THROTTLE_MS = 1000
+
+/**
+ * 已完成任务进度数据清理延迟（毫秒）
+ * 任务完成后延迟清理进度数据，让用户看到完成状态
+ */
+const COMPLETED_TASK_CLEANUP_DELAY_MS = 5000
+
+export function useTransferDownload() {
+  // 下载队列状态
+  const downloadQueue = ref<DownloadTask[]>([])
+  const activeDownloads = ref<DownloadTask[]>([])
+  const completedDownloads = ref<DownloadTask[]>([])
+  const failedDownloads = ref<DownloadTask[]>([])
+  const downloadQueueCounts = ref({
+    pending: 0,
+    active: 0,
+    completed: 0,
+    failed: 0
+  })
+
+  const isDownloadQueuePaused = ref(false)
+
+  // 下载进度数据（使用 Map 存储以便快速查找）
+  const downloadProgressMap = ref<Map<string, {
+    taskId: string
+    fileName: string
+    downloadedBytes: number
+    totalBytes: number
+    percentage: number
+    speed: number
+    eta: number
+    status: 'pending' | 'in_progress' | 'completed' | 'failed'
+    lastUpdate: number
+  }>>(new Map())
+
+  // 批量通知状态
+  const pendingDownloadNotifications = ref<Array<{ fileName: string; savePath: string }>>([])
+  let downloadNotifyTimer: ReturnType<typeof setTimeout> | null = null
+  const pendingDownloadFailNotifications = ref<string[]>([])
+  let downloadFailNotifyTimer: ReturnType<typeof setTimeout> | null = null
+
+  // 下载队列监听器引用(用于清理)
+  let queueUpdatedListener: ((data: any) => void) | null = null
+
+  // 已通知的下载任务ID集合（去重用）
+  const notifiedDownloadTaskIds = new Set<string>()
+
+  // 节流更新函数（每秒更新一次）
+  const throttledProgressUpdate = throttle((data: {
+    taskId: string
+    fileName: string
+    progress: number
+    downloadedBytes: number
+    totalBytes: number
+    speed: number
+  }) => {
+    // 计算 ETA
+    const eta = data.speed > 0 && data.totalBytes > 0
+      ? (data.totalBytes - data.downloadedBytes) / data.speed
+      : Infinity
+
+    downloadProgressMap.value.set(data.taskId, {
+      taskId: data.taskId,
+      fileName: data.fileName,
+      downloadedBytes: data.downloadedBytes,
+      totalBytes: data.totalBytes,
+      percentage: data.progress,
+      speed: data.speed,
+      eta,
+      status: data.progress === 100 ? 'completed' : 'in_progress',
+      lastUpdate: Date.now()
+    })
+  }, PROGRESS_UPDATE_THROTTLE_MS)
+
+  // 获取所有进行中的下载进度
+  const activeDownloadProgress = computed(() => {
+    return Array.from(downloadProgressMap.value.values())
+      .filter(p => p.status === 'in_progress')
+      .sort((a, b) => b.lastUpdate - a.lastUpdate) // 按更新时间排序
+  })
+
+  // 获取总下载速度
+  const totalDownloadSpeed = computed(() => {
+    const progressArray = Array.from(downloadProgressMap.value.values())
+    return progressArray
+      .filter(p => p.status === 'in_progress')
+      .reduce((sum, p) => sum + p.speed, 0)
+  })
+
+  // 获取总下载进度百分比
+  const totalDownloadProgress = computed(() => {
+    const progressArray = Array.from(downloadProgressMap.value.values())
+    if (progressArray.length === 0) return 0
+
+    const totalDownloaded = progressArray.reduce((sum, p) => sum + p.downloadedBytes, 0)
+    const totalSize = progressArray.reduce((sum, p) => sum + p.totalBytes, 0)
+
+    if (totalSize === 0) return 0
+    return Math.round((totalDownloaded / totalSize) * 100)
+  })
+
+  // 通知函数
+  function scheduleDownloadNotification() {
+    if (downloadNotifyTimer) clearTimeout(downloadNotifyTimer)
+    // 队列中还有活跃或等待中的任务时，延长等待
+    const hasRemaining = activeDownloads.value.length > 0 || downloadQueue.value.length > 0
+    if (!hasRemaining) {
+      flushDownloadNotifications()
+      return
+    }
+    downloadNotifyTimer = setTimeout(() => {
+      if (activeDownloads.value.length > 0 || downloadQueue.value.length > 0) {
+        scheduleDownloadNotification()
+        return
+      }
+      flushDownloadNotifications()
+    }, 3000)
+  }
+
+  function flushDownloadNotifications() {
+    const files = pendingDownloadNotifications.value.splice(0)
+    if (files.length === 0 || !isNotificationsEnabled()) return
+    const title = '下载完成'
+    if (files.length === 1) {
+      const { fileName, savePath } = files[0]
+      ElNotification.success({
+        title,
+        message: h('div', [
+          h('p', { style: 'margin: 0 0 8px' }, `文件 "${fileName}" 已成功下载`),
+          h('button', {
+            onClick: () => openFileDirectory(savePath),
+            style: 'padding: 4px 12px; background-color: #18a058; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px'
+          }, '打开文件夹')
+        ]),
+        duration: 5000
+      })
+    } else {
+      const content = `${files.length} 个文件下载完成`
+      const dirs = files.map(f => (f.savePath || '').replace(/[\\/][^\\/]+$/, '').replace(/\\/g, '/'))
+      const validDirs = dirs.filter(d => d.length > 0)
+      const commonDir = validDirs.length > 0
+        ? validDirs.reduce((a, b) => {
+            const pa = a.split('/'), pb = b.split('/')
+            const common: string[] = []
+            for (let i = 0; i < Math.min(pa.length, pb.length); i++) {
+              if (pa[i] === pb[i]) common.push(pa[i])
+              else break
+            }
+            return common.join('/')
+          })
+        : ''
+      const lastSavePath = (commonDir || validDirs[0] || '').replace(/\//g, '\\')
+      ElNotification.success({
+        title,
+        message: h('div', [
+          h('p', { style: 'margin: 0 0 8px' }, content),
+          h('button', {
+            onClick: () => openFileDirectory(lastSavePath),
+            style: 'padding: 4px 12px; background-color: #18a058; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px'
+          }, '打开文件夹')
+        ]),
+        duration: 5000
+      })
+    }
+    window.electronAPI?.notification?.show({ title: '溜溜网盘', body: `${files.length} 个文件下载完成` })
+  }
+
+  function flushDownloadFailNotifications() {
+    const files = pendingDownloadFailNotifications.value.splice(0)
+    if (files.length === 0 || !isNotificationsEnabled()) return
+    const title = '下载失败'
+    const content = files.length === 1
+      ? `文件 "${files[0]}" 下载失败`
+      : `${files.length} 个文件下载失败`
+    ElNotification.error({ title, message: content, duration: 5000 })
+    window.electronAPI?.notification?.show({ title, body: content })
+  }
+
+  function applyDownloadQueueState(state: any) {
+    downloadQueue.value = state.pending || []
+    activeDownloads.value = state.active || []
+    completedDownloads.value = state.completed || []
+    failedDownloads.value = state.failed || []
+    downloadQueueCounts.value = state.counts || {
+      pending: downloadQueue.value.length,
+      active: activeDownloads.value.length,
+      completed: completedDownloads.value.length,
+      failed: failedDownloads.value.length
+    }
+  }
+
+  // 初始化下载队列（应用启动时调用）
+  async function initDownloadQueue(userId: number, userToken: string) {
+    try {
+      const result = await window.electronAPI.transfer.initDownloadQueue?.({ userId, userToken })
+
+      if (result?.success) {
+        console.log(`[useTransferDownload] 下载队列初始化完成，恢复了 ${result.restoredCount} 个任务`)
+      }
+
+      // 监听队列更新事件(保存监听器引用以便清理)
+      if (window.electronAPI?.transfer?.onQueueUpdated) {
+        queueUpdatedListener = (state: any) => {
+          console.log('[useTransferDownload] 收到队列更新事件:', {
+            pending: state.counts?.pending ?? state.pending?.length ?? 0,
+            active: state.counts?.active ?? state.active?.length ?? 0,
+            completed: state.counts?.completed ?? state.completed?.length ?? 0,
+            failed: state.counts?.failed ?? state.failed?.length ?? 0
+          })
+          // 添加防御性检查，确保 state 对象包含所有必需的属性
+          if (!state) {
+            console.warn('[useTransferDownload] 队列更新事件的数据为空')
+            return
+          }
+          applyDownloadQueueState(state)
+        }
+        window.electronAPI.transfer.onQueueUpdated(queueUpdatedListener)
+      }
+
+      // 主动拉取一次当前队列状态，确保历史记录（已完成/失败）在初始化时就显示出来
+      await fetchDownloadQueueState()
+    } catch (error: any) {
+      console.error('[useTransferDownload] 初始化下载队列失败:', error)
+    }
+  }
+
+  // 添加到下载队列
+  async function queueDownload(remotePath: string, fileName: string, savePath?: string) {
+    try {
+      // 获取用户认证信息(延迟导入 authStore 以避免循环依赖)
+      const { useAuthStore } = await import('@/features/auth')
+      const authStore = useAuthStore()
+
+      if (!authStore.isLoggedIn || !authStore.user) {
+        return {
+          success: false,
+          error: '用户未登录,无法添加下载任务'
+        }
+      }
+
+      const userId = authStore.user.id
+      const userToken = authStore.user.token
+
+      const taskId = `download_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
+
+      const result = await window.electronAPI.transfer.queueDownload?.({
+        id: taskId,
+        remotePath,
+        fileName,
+        savePath,
+        userId,
+        userToken,
+        priority: downloadQueue.value.length
+      })
+
+      console.log('[useTransferDownload.queueDownload] IPC 返回:', result)
+      const returnValue = result || { success: false, error: '队列下载功能未实现' }
+      console.log('[useTransferDownload.queueDownload] 实际返回:', returnValue)
+      return returnValue
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || '添加到队列失败'
+      }
+    }
+  }
+
+  // 批量添加到下载队列：一次 IPC 调用
+  async function batchQueueDownload(filePaths: string[]) {
+    try {
+      const result = await window.electronAPI.transfer.batchQueueDownload?.({ remotePaths: filePaths })
+      return result || { success: false, successCount: 0, failedCount: filePaths.length, error: '批量下载功能未实现' }
+    } catch (error: any) {
+      return { success: false, successCount: 0, failedCount: filePaths.length, error: error.message || '批量添加到队列失败' }
+    }
+  }
+
+  // 暂停下载队列
+  async function pauseDownloadQueue() {
+    try {
+      const result = await window.electronAPI.transfer.pauseDownloadQueue?.()
+      if (result?.success) {
+        isDownloadQueuePaused.value = true
+      }
+      return result || { success: false, error: '暂停队列功能未实现' }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || '暂停队列失败'
+      }
+    }
+  }
+
+  // 恢复下载队列
+  async function resumeDownloadQueue() {
+    try {
+      const result = await window.electronAPI.transfer.resumeDownloadQueue?.()
+      if (result?.success) {
+        isDownloadQueuePaused.value = false
+      }
+      return result || { success: false, error: '恢复队列功能未实现' }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || '恢复队列失败'
+      }
+    }
+  }
+
+  // 清空下载队列（已完成和失败的任务）
+  async function clearDownloadQueue() {
+    try {
+      const result = await window.electronAPI.transfer.clearDownloadQueue?.()
+      return result || { success: false, error: '清空队列功能未实现' }
+    } catch (error: any) {
+      return { success: false, error: error.message || '清空队列失败' }
+    }
+  }
+
+  // 清空等待中的任务
+  async function clearPendingQueue() {
+    try {
+      const result = await window.electronAPI.transfer.clearPendingQueue?.()
+      return result || { success: false, error: '清空等待队列功能未实现' }
+    } catch (error: any) {
+      return { success: false, error: error.message || '清空等待队列失败' }
+    }
+  }
+
+  // 清空正在下载的任务
+  async function clearActiveQueue() {
+    try {
+      const result = await window.electronAPI.transfer.clearActiveQueue?.()
+      return result || { success: false, error: '清空下载队列功能未实现' }
+    } catch (error: any) {
+      return { success: false, error: error.message || '清空下载队列失败' }
+    }
+  }
+
+  // 获取下载队列状态
+  async function fetchDownloadQueueState() {
+    try {
+      const result = await window.electronAPI.transfer.getDownloadQueue?.()
+      if (result?.success && result.state) {
+        applyDownloadQueueState(result.state)
+      }
+    } catch (error: any) {
+      console.error('[useTransferDownload] 获取队列状态失败:', error)
+    }
+  }
+
+  // 下载进度处理函数（节流优化）
+  const downloadProgressHandler = (data: { taskId: string, fileName: string, progress: number, downloadedBytes: number, totalBytes: number, speed: number } | undefined) => {
+    // 数据有效性检查
+    if (!data || !data.taskId) {
+      console.warn('[downloadProgressHandler] 收到无效的下载进度数据:', data)
+      return
+    }
+
+    // 使用节流函数更新进度
+    throttledProgressUpdate(data)
+  }
+
+  // 下载完成处理函数
+  const downloadCompletedHandler = (data: { taskId: string, fileName: string, savePath: string } | undefined) => {
+    // 数据有效性检查
+    if (!data || !data.taskId) {
+      console.warn('[downloadCompletedHandler] 收到无效的下载完成数据:', data)
+      return
+    }
+
+    // 去重：同一个 taskId 只处理一次通知
+    if (notifiedDownloadTaskIds.has(data.taskId)) return
+    notifiedDownloadTaskIds.add(data.taskId)
+    setTimeout(() => notifiedDownloadTaskIds.delete(data.taskId), 10000)
+
+    // 更新进度Map
+    const progress = downloadProgressMap.value.get(data.taskId)
+    if (progress) {
+      progress.status = 'completed'
+      progress.percentage = 100
+      progress.downloadedBytes = progress.totalBytes
+    }
+
+    // Story 6.2 CRITICAL FIX: 下载不应该影响配额使用量
+    // 下载是保存到用户本地，不占用服务器存储空间
+    // 移除了 quotaStore.refreshQuota() 调用
+
+    // 延迟清理已完成任务的进度数据（5秒后删除）
+    setTimeout(() => {
+      downloadProgressMap.value.delete(data.taskId)
+    }, COMPLETED_TASK_CLEANUP_DELAY_MS)
+
+    // 批量合并下载完成通知
+    pendingDownloadNotifications.value.push({ fileName: data.fileName, savePath: data.savePath })
+    scheduleDownloadNotification()
+  }
+
+  // 下载失败处理函数
+  const downloadFailedHandler = (data: { taskId: string, fileName: string, error: string } | undefined) => {
+    // 数据有效性检查
+    if (!data || !data.taskId) {
+      console.warn('[downloadFailedHandler] 收到无效的下载失败数据:', data)
+      return
+    }
+
+    // 清理进度数据
+    downloadProgressMap.value.delete(data.taskId)
+
+    // 批量合并失败通知
+    pendingDownloadFailNotifications.value.push(data.fileName)
+    if (downloadFailNotifyTimer) clearTimeout(downloadFailNotifyTimer)
+    downloadFailNotifyTimer = setTimeout(flushDownloadFailNotifications, 1500)
+  }
+
+  // 下载取消处理函数
+  const downloadCancelledHandler = (data: { taskId: string | number } | undefined) => {
+    // 数据有效性检查
+    if (!data || data.taskId === undefined) {
+      console.warn('[downloadCancelledHandler] 收到无效的下载取消数据:', data)
+      return
+    }
+
+    // 清理进度数据
+    downloadProgressMap.value.delete(data.taskId.toString())
+  }
+
+  // 认证失败处理：Alist token 过期时显示一次性通知
+  const downloadAuthFailedHandler = (data: { error: string } | undefined) => {
+    if (!data) return
+    isDownloadQueuePaused.value = true
+    ElNotification.error({
+      title: 'Alist 认证失效',
+      message: data.error,
+      duration: 0
+    })
+  }
+
+  // 注册下载监听器
+  if (typeof window !== 'undefined' && window.electronAPI?.transfer?.onDownloadProgress) {
+    window.electronAPI.transfer.onDownloadProgress(downloadProgressHandler)
+  }
+
+  if (typeof window !== 'undefined' && window.electronAPI?.transfer?.onDownloadCompleted) {
+    window.electronAPI.transfer.onDownloadCompleted(downloadCompletedHandler)
+  }
+
+  if (typeof window !== 'undefined' && window.electronAPI?.transfer?.onDownloadFailed) {
+    window.electronAPI.transfer.onDownloadFailed(downloadFailedHandler)
+  }
+
+  if (typeof window !== 'undefined' && window.electronAPI?.transfer?.onDownloadCancelled) {
+    window.electronAPI.transfer.onDownloadCancelled(downloadCancelledHandler)
+  }
+
+  if (typeof window !== 'undefined' && window.electronAPI?.transfer?.onDownloadAuthFailed) {
+    window.electronAPI.transfer.onDownloadAuthFailed(downloadAuthFailedHandler)
+  }
+
+  // ========== 另存为下载 ==========
+
+  // 另存为：打开保存对话框并下载到用户选择的路径
+  async function downloadWithSaveAs(remotePath: string, fileName: string, userId: number, userToken: string, username: string) {
+    try {
+      // 1. 打开保存对话框
+      const saveAsResult = await window.electronAPI.transfer.saveAs(fileName, userId)
+
+      // 2. 用户取消操作
+      if (saveAsResult?.canceled) {
+        return { success: false, canceled: true }
+      }
+
+      // 3. 保存对话框失败
+      if (!saveAsResult?.success || !saveAsResult?.filePath) {
+        return { success: false, error: saveAsResult?.error || '选择保存位置失败' }
+      }
+
+      // 4. 开始下载到用户选择的路径
+      const downloadResult = await window.electronAPI.transfer.download(
+        remotePath,
+        fileName,
+        userId,
+        userToken,
+        username,
+        saveAsResult.filePath
+      )
+
+      return downloadResult || { success: false, error: '下载失败' }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || '另存为下载失败'
+      }
+    }
+  }
+
+  /**
+   * 恢复下载任务（Story 4-5: 下载断点续传）
+   */
+  async function resumeDownload(taskId: number) {
+    try {
+      const result = await window.electronAPI.transfer.resumeDownload(taskId)
+
+      if (!result?.success) {
+        throw new Error(result?.error || '恢复下载失败')
+      }
+
+      return result
+    } catch (error: any) {
+      console.error('恢复下载失败:', error)
+      ElMessage.error(error.message || '恢复下载失败')
+      throw error
+    }
+  }
+
+  /**
+   * 取消下载任务（Story 4-6: 取消下载任务）
+   */
+  async function cancelDownload(taskId: string | number) {
+    try {
+      const result = await window.electronAPI.transfer.cancelDownload(taskId)
+
+      if (!result?.success) {
+        throw new Error(result?.error || '取消下载失败')
+      }
+
+      // 显示成功通知
+      ElMessage.success('下载已取消')
+
+      return result
+    } catch (error: any) {
+      console.error('取消下载失败:', error)
+      ElMessage.error(error.message || '取消下载失败')
+      throw error
+    }
+  }
+
+  /**
+   * 取消所有下载（批量取消）
+   */
+  async function cancelAllDownloads() {
+    const authStore = (await import('@/features/auth')).useAuthStore()
+
+    if (!authStore.user) {
+      ElMessage.error('请先登录')
+      return
+    }
+
+    try {
+      const result = await window.electronAPI.transfer.cancelAllDownloads(authStore.user.id)
+
+      if (!result?.success) {
+        throw new Error(result?.error || '取消所有下载失败')
+      }
+
+      ElMessage.success('所有下载已取消')
+
+      return result
+    } catch (error: any) {
+      console.error('取消所有下载失败:', error)
+      ElMessage.error(error.message || '取消下载失败')
+      throw error
+    }
+  }
+
+  // 清理函数
+  function cleanupDownload() {
+    // 清理下载队列监听器
+    if (queueUpdatedListener && typeof window !== 'undefined' && window.electronAPI?.transfer?.removeQueueUpdatedListener) {
+      window.electronAPI.transfer.removeQueueUpdatedListener(queueUpdatedListener)
+      queueUpdatedListener = null
+    }
+
+    // 清理下载进度监听器
+    if (typeof window !== 'undefined' && window.electronAPI?.transfer?.removeDownloadProgressListener) {
+      window.electronAPI.transfer.removeDownloadProgressListener(downloadProgressHandler)
+    }
+    if (typeof window !== 'undefined' && window.electronAPI?.transfer?.removeDownloadCompletedListener) {
+      window.electronAPI.transfer.removeDownloadCompletedListener(downloadCompletedHandler)
+    }
+    if (typeof window !== 'undefined' && window.electronAPI?.transfer?.removeDownloadFailedListener) {
+      window.electronAPI.transfer.removeDownloadFailedListener(downloadFailedHandler)
+    }
+    if (typeof window !== 'undefined' && window.electronAPI?.transfer?.removeDownloadCancelledListener) {
+      window.electronAPI.transfer.removeDownloadCancelledListener(downloadCancelledHandler)
+    }
+    if (typeof window !== 'undefined' && window.electronAPI?.transfer?.removeDownloadAuthFailedListener) {
+      window.electronAPI.transfer.removeDownloadAuthFailedListener(downloadAuthFailedHandler)
+    }
+
+    // 清理通知定时器
+    if (downloadNotifyTimer) {
+      clearTimeout(downloadNotifyTimer)
+      downloadNotifyTimer = null
+    }
+    if (downloadFailNotifyTimer) {
+      clearTimeout(downloadFailNotifyTimer)
+      downloadFailNotifyTimer = null
+    }
+  }
+
+  return {
+    // State
+    downloadQueue,
+    activeDownloads,
+    completedDownloads,
+    failedDownloads,
+    downloadQueueCounts,
+    isDownloadQueuePaused,
+    downloadProgressMap,
+    // Getters
+    activeDownloadProgress,
+    totalDownloadSpeed,
+    totalDownloadProgress,
+    // Actions
+    initDownloadQueue,
+    queueDownload,
+    batchQueueDownload,
+    pauseDownloadQueue,
+    resumeDownloadQueue,
+    clearDownloadQueue,
+    clearPendingQueue,
+    clearActiveQueue,
+    fetchDownloadQueueState,
+    downloadWithSaveAs,
+    resumeDownload,
+    cancelDownload,
+    cancelAllDownloads,
+    // Cleanup
+    cleanupDownload
+  }
+}

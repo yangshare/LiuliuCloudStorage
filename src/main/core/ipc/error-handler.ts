@@ -16,11 +16,23 @@ export class IPCError extends Error {
   }
 }
 
+function isIPCResult(data: unknown): data is IPCResult<unknown> {
+  return (
+    data !== null &&
+    typeof data === 'object' &&
+    'success' in data &&
+    typeof (data as { success: unknown }).success === 'boolean'
+  )
+}
+
 export async function handleIPC<T>(
   handler: () => Promise<T>
 ): Promise<IPCResult<T>> {
   try {
     const data = await handler()
+    if (isIPCResult(data)) {
+      return data as IPCResult<T>
+    }
     return { success: true, data }
   } catch (error) {
     if (error instanceof IPCError) {

@@ -1,12 +1,47 @@
 export interface LoginResult {
   success: boolean
   message?: string
+  error?: string
   token?: string
+}
+
+export interface SessionUser {
+  id: number
+  username: string
+  token: string
+  isAdmin?: boolean
 }
 
 export interface SessionCheckResult {
   valid: boolean
   username?: string
+  user?: SessionUser
+}
+
+type WrappedSessionCheckResult = {
+  success: boolean
+  data?: {
+    valid: boolean
+    user?: SessionUser
+  }
+}
+
+export function normalizeSessionCheckResult(
+  result: SessionCheckResult | WrappedSessionCheckResult | null | undefined
+): SessionCheckResult {
+  if (!result) {
+    return { valid: false }
+  }
+
+  if ('success' in result) {
+    return {
+      valid: result.success && (result.data?.valid ?? false),
+      username: result.data?.user?.username,
+      user: result.data?.user
+    }
+  }
+
+  return result
 }
 
 export const authRendererService = {
@@ -15,7 +50,8 @@ export const authRendererService = {
   },
 
   async checkSession(): Promise<SessionCheckResult> {
-    return window.electronAPI.auth.checkSession()
+    const result = await window.electronAPI.auth.checkSession()
+    return normalizeSessionCheckResult(result)
   },
 
   async getCurrentUser(): Promise<any> {

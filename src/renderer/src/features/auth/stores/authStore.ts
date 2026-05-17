@@ -2,6 +2,7 @@
 
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import type { SessionCheckResult } from '../auth.renderer.service'
 
 export interface User {
   id: number
@@ -52,7 +53,17 @@ export const useAuthStore = defineStore('auth', () => {
     startupAutoSyncTriggered.value = false
   }
 
-  function initUserFromSession(session: { valid: boolean; username?: string }) {
+  function initUserFromSession(session: SessionCheckResult) {
+    if (session.valid && session.user) {
+      setUser({
+        id: session.user.id,
+        username: session.user.username,
+        token: session.user.token || '',
+        isAdmin: session.user.isAdmin
+      })
+      return
+    }
+
     if (session.valid && session.username) {
       window.electronAPI.auth.getCurrentUser?.()
         .then((result: any) => {

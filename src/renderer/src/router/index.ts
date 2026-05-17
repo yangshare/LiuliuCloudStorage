@@ -1,5 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { useAuthStore } from '@/features/auth'
+import { normalizeSessionCheckResult } from '@/features/auth/auth.renderer.service'
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -96,7 +97,7 @@ router.beforeEach(async (to) => {
 
   // 4. 检查登录状态
   const authStore = useAuthStore()
-  const session = await window.electronAPI.auth.checkSession()
+  const session = normalizeSessionCheckResult(await window.electronAPI.auth.checkSession())
 
   if (!session.valid) return '/login'
 

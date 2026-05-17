@@ -15,13 +15,18 @@
 | 基础设施 | ✅ 完成 | IPC 类型、错误处理器、useIPC、useNotification |
 | auth 模块 | ✅ 完成 | 完整迁移，新 handlers 启用，旧 handlers 已清理 |
 | file 模块 | ✅ 完成 | 完整迁移，新 handlers 启用，旧 handlers 已清理 |
-| transfer 模块 | ⚠️ 样板完成 | 架构样板创建，使用 v2 通道不覆盖旧 handlers |
+| transfer 模块 | ✅ 完成 | 业务逻辑完整迁移，原始通道覆盖旧 handlers |
+| quota 模块 | ✅ 完成 | 业务逻辑完整迁移，原始通道覆盖旧 handlers |
+| shareTransfer 模块 | ✅ 完成 | 业务逻辑完整迁移，原始通道覆盖旧 handlers |
+| autoSync 模块 | ✅ 完成 | 业务逻辑完整迁移，原始通道覆盖旧 handlers |
+| activity 模块 | ✅ 完成 | 业务逻辑完整迁移，原始通道覆盖旧 handlers |
+| downloadConfig 模块 | ✅ 完成 | 业务逻辑完整迁移，原始通道覆盖旧 handlers |
+| cache 模块 | ✅ 完成 | 业务逻辑完整迁移，原始通道覆盖旧 handlers |
+| config 模块 | ✅ 完成 | 业务逻辑完整迁移，原始通道覆盖旧 handlers |
 | 旧代码清理 | ✅ 完成 | auth/file handlers 注册已移除，getCurrentSession 引用已迁移 |
 
 **后续工作：**
-- transfer 模块业务逻辑完整迁移（上传/下载队列管理）
-- 其他模块迁移（quota、autoSync、shareTransfer 等）
-- 组件层逐步替换旧 store 引用为新 composables
+- 组件层逐步替换旧 store 引用为新 composables（transferStore、autoSyncGlobalStore、updateStore）
 
 ---
 

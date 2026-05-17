@@ -23,29 +23,32 @@ export const useAuthStore = defineStore('auth', () => {
       user.value = null
       return
     }
-    user.value = {
+    const newUser: User = {
       id: userData.id,
       username: userData.username,
       token: userData.token,
       isAdmin: typeof userData.isAdmin === 'boolean' ? userData.isAdmin : userData.isAdmin === 1
     }
-    triggerStartupAutoSync()
+    user.value = newUser
   }
 
-  async function triggerStartupAutoSync() {
-    if (startupAutoSyncTriggered.value || !user.value?.id) return
-    startupAutoSyncTriggered.value = true
-
-    try {
-      const result = await window.electronAPI.autoSync.startupRun({
-        userId: user.value.id
-      })
-      if (result?.success && result.executed > 0) {
-        console.log(`[autoSync] 启动自动同步完成: ${result.executed}/${result.total}`)
+  function setUserFromSession(session: SessionCheckResult): User | null {
+    if (session.valid && session.user) {
+      const newUser: User = {
+        id: session.user.id,
+        username: session.user.username,
+        token: session.user.token || '',
+        isAdmin: session.user.isAdmin
       }
-    } catch (error) {
-      console.warn('[autoSync] 启动自动同步失败:', error)
+      setUser(newUser)
+      return newUser
     }
+    if (session.valid && session.username) {
+      const fallbackUser: User = { id: 0, username: session.username, token: '', isAdmin: false }
+      setUser(fallbackUser)
+      return fallbackUser
+    }
+    return null
   }
 
   function clearUser() {
@@ -53,75 +56,12 @@ export const useAuthStore = defineStore('auth', () => {
     startupAutoSyncTriggered.value = false
   }
 
-  function initUserFromSession(session: SessionCheckResult) {
-    if (session.valid && session.user) {
-      setUser({
-        id: session.user.id,
-        username: session.user.username,
-        token: session.user.token || '',
-        isAdmin: session.user.isAdmin
-      })
-      return
-    }
-
-    if (session.valid && session.username) {
-      window.electronAPI.auth.getCurrentUser?.()
-        .then((result: any) => {
-          if (result.success && result.data) {
-            setUser({
-              id: result.data.id,
-              username: result.data.username,
-              token: '',
-              isAdmin: result.data.isAdmin
-            })
-          } else {
-            setUser({
-              id: 0,
-              username: session.username!,
-              token: '',
-              isAdmin: false
-            })
-          }
-        })
-        .catch(() => {
-          setUser({
-            id: 0,
-            username: session.username!,
-            token: '',
-            isAdmin: false
-          })
-        })
-    }
-  }
-
-  async function logout() {
-    try {
-      await window.electronAPI.auth.logout()
-    } finally {
-      clearUser()
-    }
-  }
-
-  async function checkAdminPermission(): Promise<boolean> {
-    if (!isLoggedIn.value) {
-      return false
-    }
-    try {
-      const result = await window.electronAPI.auth.getUsers()
-      return result?.success ?? false
-    } catch {
-      return false
-    }
+  function markAutoSyncTriggered() {
+    startupAutoSyncTriggered.value = true
   }
 
   return {
-    user,
-    isLoggedIn,
-    isAdmin,
-    setUser,
-    clearUser,
-    logout,
-    initUserFromSession,
-    checkAdminPermission
+    user, isLoggedIn, isAdmin, startupAutoSyncTriggered,
+    setUser, setUserFromSession, clearUser, markAutoSyncTriggered
   }
 })

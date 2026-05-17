@@ -60,5 +60,9 @@ export const authRendererService = {
 
   async logout(): Promise<{ success: boolean }> {
     return window.electronAPI.auth.logout()
+  },
+
+  async getUsers(params?: { page?: number; pageSize?: number; search?: string }): Promise<any> {
+    return window.electronAPI.auth.getUsers(params)
   }
 }

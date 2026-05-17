@@ -1,6 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { useAuthStore } from '@/features/auth'
-import { normalizeSessionCheckResult } from '@/features/auth/auth.renderer.service'
+import { normalizeSessionCheckResult, authRendererService } from '@/features/auth/auth.renderer.service'
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -103,15 +103,28 @@ router.beforeEach(async (to) => {
 
   // Story 7.1 MEDIUM FIX: 初始化用户状态，包括 isAdmin
   if (!authStore.user) {
-    authStore.initUserFromSession(session)
+    const user = authStore.setUserFromSession(session)
+    if (user && user.id) {
+      window.electronAPI.autoSync.startupRun({ userId: user.id })
+        .then((result: any) => {
+          if (result?.success && result.executed > 0) {
+            console.log(`[autoSync] 启动自动同步完成: ${result.executed}/${result.total}`)
+          }
+        })
+        .catch((error: any) => console.warn('[autoSync] 启动自动同步失败:', error))
+    }
   }
 
   // 5. 管理员权限检查
   if (to.meta.requiresAdmin) {
     if (!authStore.isAdmin) {
-      // 尝试验证管理员权限
-      const hasPermission = await authStore.checkAdminPermission()
-      if (!hasPermission) {
+      try {
+        const result = await authRendererService.getUsers()
+        if (!result?.success) {
+          console.warn('权限不足：仅管理员可以访问此页面')
+          return '/'
+        }
+      } catch {
         console.warn('权限不足：仅管理员可以访问此页面')
         return '/'
       }

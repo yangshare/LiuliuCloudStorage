@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/features/auth'
 import { authRendererService } from '../auth.renderer.service'
 import { ElMessage } from 'element-plus'
+import type { SessionCheckResult } from '../auth.renderer.service'
 
 export function useAuth() {
   const store = useAuthStore()
@@ -16,7 +17,6 @@ export function useAuth() {
     try {
       const result = await authRendererService.login(username, password, autoLogin)
       if (result.success) {
-        // 登录成功后获取用户信息
         const userResult = await authRendererService.getCurrentUser()
         if (userResult?.success && userResult.data) {
           store.setUser({
@@ -26,6 +26,7 @@ export function useAuth() {
             isAdmin: userResult.data.isAdmin
           })
         }
+        await handlePostLogin()
         ElMessage.success('登录成功')
         router.push('/')
         return true
@@ -44,25 +45,53 @@ export function useAuth() {
   async function checkSession() {
     const result = await authRendererService.checkSession()
     if (!result.valid) {
-      store.setUser(null)
+      store.clearUser()
       return false
     }
     return true
   }
 
-  function logout() {
-    authRendererService.logout()
-    store.setUser(null)
-    router.push('/login')
+  async function initializeAuth(session: SessionCheckResult) {
+    const initialized = store.setUserFromSession(session)
+    if (initialized) {
+      await handlePostLogin()
+    }
+  }
+
+  async function handlePostLogin() {
+    if (store.startupAutoSyncTriggered || !store.user?.id) return
+    store.markAutoSyncTriggered()
+    try {
+      const result = await window.electronAPI.autoSync.startupRun({ userId: store.user.id })
+      if (result?.success && result.executed > 0) {
+        console.log(`[autoSync] 启动自动同步完成: ${result.executed}/${result.total}`)
+      }
+    } catch (error) {
+      console.warn('[autoSync] 启动自动同步失败:', error)
+    }
+  }
+
+  async function logout() {
+    try {
+      await authRendererService.logout()
+    } finally {
+      store.clearUser()
+      router.push('/login')
+    }
+  }
+
+  async function checkAdminPermission(): Promise<boolean> {
+    if (!store.isLoggedIn) return false
+    try {
+      const result = await authRendererService.getUsers()
+      return result?.success ?? false
+    } catch {
+      return false
+    }
   }
 
   return {
-    login,
-    logout,
-    checkSession,
-    isLoading,
-    user: store.user,
-    isLoggedIn: store.isLoggedIn,
-    isAdmin: store.isAdmin
+    login, logout, checkSession, initializeAuth, checkAdminPermission,
+    isLoading, user: store.user, isLoggedIn: store.isLoggedIn, isAdmin: store.isAdmin
   }
 }

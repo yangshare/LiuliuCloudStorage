@@ -1,5 +1,4 @@
 import { downloadConfigService } from '../../services/downloadConfigService'
-import { IPCError, IPCErrorCode } from '../../core/ipc/error-handler'
 import fs from 'fs/promises'
 import path from 'path'
 import { shell } from 'electron'

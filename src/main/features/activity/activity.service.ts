@@ -1,5 +1,4 @@
 import { activityService, type ActionType } from '../../services/ActivityService'
-import { IPCError, IPCErrorCode } from '../../core/ipc/error-handler'
 
 export interface LogActivityParams {
   userId: number

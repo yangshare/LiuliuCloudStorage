@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
-interface DownloadConfig {
+export interface DownloadConfig {
   defaultPath: string
   autoCreateDateFolder: boolean
 }

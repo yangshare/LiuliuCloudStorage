@@ -28,7 +28,7 @@ export const useUpdateStore = defineStore('update', () => {
       console.log('[updateStore] 当前已是最新版本')
     })
 
-    window.electronAPI.updateAPI.onDownloadProgress((progress) => {
+    window.electronAPI.updateAPI.onDownloadProgress((progress: { percent: number }) => {
       downloadProgress.value = progress.percent
     })
 
@@ -36,7 +36,7 @@ export const useUpdateStore = defineStore('update', () => {
       updateDownloaded.value = true
     })
 
-    window.electronAPI.updateAPI.onError((message) => {
+    window.electronAPI.updateAPI.onError((message: string) => {
       errorMessage.value = message
     })
 

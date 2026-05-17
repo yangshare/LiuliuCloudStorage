@@ -5,8 +5,8 @@ import { AppError } from '../../services/httpClient'
 import { getDatabase } from '../../database'
 import { activityService, ActionType } from '../../services/ActivityService'
 import { loggerService } from '../../services/LoggerService'
-import { IPCError, IPCErrorCode, handleIPC } from '../../core/ipc/error-handler'
-import type { FileListResult, FileListResponse, FileOperationResult } from '../../../shared/types/file'
+import { IPCError, IPCErrorCode } from '../../core/ipc/error-handler'
+import type { FileListResult } from '../../../shared/types/file'
 
 const CACHE_TTL = 60 * 60 * 1000 // 1 hour
 

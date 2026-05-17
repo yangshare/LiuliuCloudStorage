@@ -4,14 +4,6 @@ import { useQuotaStore } from '@/features/quota'
 import { isNotificationsEnabled } from './useTransferCommon'
 import type { UploadTask, QueueStatus } from '../stores/transferStore'
 
-// ==================== 常量定义 ====================
-
-/**
- * 已完成任务进度数据清理延迟（毫秒）
- * 任务完成后延迟清理进度数据，让用户看到完成状态
- */
-const COMPLETED_TASK_CLEANUP_DELAY_MS = 5000
-
 export function useTransferUpload() {
   // State
   const uploadQueue = ref<UploadTask[]>([])

@@ -3,6 +3,7 @@ import { throttle } from 'lodash-es'
 import { ElNotification, ElMessage } from 'element-plus'
 import { openFileDirectory } from '@/utils/openFileDirectory'
 import { isNotificationsEnabled } from './useTransferCommon'
+import { transferRendererService } from '../transfer.renderer.service'
 import type { DownloadTask } from '../stores/transferStore'
 
 // ==================== 常量定义 ====================
@@ -52,9 +53,6 @@ export function useTransferDownload() {
   let downloadNotifyTimer: ReturnType<typeof setTimeout> | null = null
   const pendingDownloadFailNotifications = ref<string[]>([])
   let downloadFailNotifyTimer: ReturnType<typeof setTimeout> | null = null
-
-  // 下载队列监听器引用(用于清理)
-  let queueUpdatedListener: ((data: any) => void) | null = null
 
   // 已通知的下载任务ID集合（去重用）
   const notifiedDownloadTaskIds = new Set<string>()
@@ -206,29 +204,10 @@ export function useTransferDownload() {
   // 初始化下载队列（应用启动时调用）
   async function initDownloadQueue(userId: number, userToken: string) {
     try {
-      const result = await window.electronAPI.transfer.initDownloadQueue?.({ userId, userToken })
+      const result = await transferRendererService.initDownloadQueue(userId, userToken)
 
       if (result?.success) {
         console.log(`[useTransferDownload] 下载队列初始化完成，恢复了 ${result.restoredCount} 个任务`)
-      }
-
-      // 监听队列更新事件(保存监听器引用以便清理)
-      if (window.electronAPI?.transfer?.onQueueUpdated) {
-        queueUpdatedListener = (state: any) => {
-          console.log('[useTransferDownload] 收到队列更新事件:', {
-            pending: state.counts?.pending ?? state.pending?.length ?? 0,
-            active: state.counts?.active ?? state.active?.length ?? 0,
-            completed: state.counts?.completed ?? state.completed?.length ?? 0,
-            failed: state.counts?.failed ?? state.failed?.length ?? 0
-          })
-          // 添加防御性检查，确保 state 对象包含所有必需的属性
-          if (!state) {
-            console.warn('[useTransferDownload] 队列更新事件的数据为空')
-            return
-          }
-          applyDownloadQueueState(state)
-        }
-        window.electronAPI.transfer.onQueueUpdated(queueUpdatedListener)
       }
 
       // 主动拉取一次当前队列状态，确保历史记录（已完成/失败）在初始化时就显示出来
@@ -257,7 +236,7 @@ export function useTransferDownload() {
 
       const taskId = `download_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
 
-      const result = await window.electronAPI.transfer.queueDownload?.({
+      const result = await transferRendererService.queueDownload({
         id: taskId,
         remotePath,
         fileName,
@@ -282,7 +261,7 @@ export function useTransferDownload() {
   // 批量添加到下载队列：一次 IPC 调用
   async function batchQueueDownload(filePaths: string[]) {
     try {
-      const result = await window.electronAPI.transfer.batchQueueDownload?.({ remotePaths: filePaths })
+      const result = await transferRendererService.batchQueueDownload(filePaths)
       return result || { success: false, successCount: 0, failedCount: filePaths.length, error: '批量下载功能未实现' }
     } catch (error: any) {
       return { success: false, successCount: 0, failedCount: filePaths.length, error: error.message || '批量添加到队列失败' }
@@ -292,7 +271,7 @@ export function useTransferDownload() {
   // 暂停下载队列
   async function pauseDownloadQueue() {
     try {
-      const result = await window.electronAPI.transfer.pauseDownloadQueue?.()
+      const result = await transferRendererService.pauseDownloadQueue()
       if (result?.success) {
         isDownloadQueuePaused.value = true
       }
@@ -308,7 +287,7 @@ export function useTransferDownload() {
   // 恢复下载队列
   async function resumeDownloadQueue() {
     try {
-      const result = await window.electronAPI.transfer.resumeDownloadQueue?.()
+      const result = await transferRendererService.resumeDownloadQueue()
       if (result?.success) {
         isDownloadQueuePaused.value = false
       }
@@ -324,7 +303,7 @@ export function useTransferDownload() {
   // 清空下载队列（已完成和失败的任务）
   async function clearDownloadQueue() {
     try {
-      const result = await window.electronAPI.transfer.clearDownloadQueue?.()
+      const result = await transferRendererService.clearDownloadQueue()
       return result || { success: false, error: '清空队列功能未实现' }
     } catch (error: any) {
       return { success: false, error: error.message || '清空队列失败' }
@@ -334,7 +313,7 @@ export function useTransferDownload() {
   // 清空等待中的任务
   async function clearPendingQueue() {
     try {
-      const result = await window.electronAPI.transfer.clearPendingQueue?.()
+      const result = await transferRendererService.clearPendingQueue()
       return result || { success: false, error: '清空等待队列功能未实现' }
     } catch (error: any) {
       return { success: false, error: error.message || '清空等待队列失败' }
@@ -344,7 +323,7 @@ export function useTransferDownload() {
   // 清空正在下载的任务
   async function clearActiveQueue() {
     try {
-      const result = await window.electronAPI.transfer.clearActiveQueue?.()
+      const result = await transferRendererService.clearActiveQueue()
       return result || { success: false, error: '清空下载队列功能未实现' }
     } catch (error: any) {
       return { success: false, error: error.message || '清空下载队列失败' }
@@ -354,7 +333,7 @@ export function useTransferDownload() {
   // 获取下载队列状态
   async function fetchDownloadQueueState() {
     try {
-      const result = await window.electronAPI.transfer.getDownloadQueue?.()
+      const result = await transferRendererService.getDownloadQueue()
       if (result?.success && result.state) {
         applyDownloadQueueState(result.state)
       }
@@ -451,33 +430,19 @@ export function useTransferDownload() {
   }
 
   // 注册下载监听器
-  if (typeof window !== 'undefined' && window.electronAPI?.transfer?.onDownloadProgress) {
-    window.electronAPI.transfer.onDownloadProgress(downloadProgressHandler)
-  }
-
-  if (typeof window !== 'undefined' && window.electronAPI?.transfer?.onDownloadCompleted) {
-    window.electronAPI.transfer.onDownloadCompleted(downloadCompletedHandler)
-  }
-
-  if (typeof window !== 'undefined' && window.electronAPI?.transfer?.onDownloadFailed) {
-    window.electronAPI.transfer.onDownloadFailed(downloadFailedHandler)
-  }
-
-  if (typeof window !== 'undefined' && window.electronAPI?.transfer?.onDownloadCancelled) {
-    window.electronAPI.transfer.onDownloadCancelled(downloadCancelledHandler)
-  }
-
-  if (typeof window !== 'undefined' && window.electronAPI?.transfer?.onDownloadAuthFailed) {
-    window.electronAPI.transfer.onDownloadAuthFailed(downloadAuthFailedHandler)
-  }
+  transferRendererService.onDownloadProgress(downloadProgressHandler)
+  transferRendererService.onDownloadCompleted(downloadCompletedHandler)
+  transferRendererService.onDownloadFailed(downloadFailedHandler)
+  transferRendererService.onDownloadCancelled(downloadCancelledHandler)
+  transferRendererService.onDownloadAuthFailed(downloadAuthFailedHandler)
 
   // ========== 另存为下载 ==========
 
   // 另存为：打开保存对话框并下载到用户选择的路径
-  async function downloadWithSaveAs(remotePath: string, fileName: string, userId: number, userToken: string, username: string) {
+  async function downloadWithSaveAs(remotePath: string, fileName: string, userId: number, userToken: string) {
     try {
       // 1. 打开保存对话框
-      const saveAsResult = await window.electronAPI.transfer.saveAs(fileName, userId)
+      const saveAsResult = await transferRendererService.saveAs(fileName, userId)
 
       // 2. 用户取消操作
       if (saveAsResult?.canceled) {
@@ -490,14 +455,13 @@ export function useTransferDownload() {
       }
 
       // 4. 开始下载到用户选择的路径
-      const downloadResult = await window.electronAPI.transfer.download(
+      const downloadResult = await transferRendererService.download({
         remotePath,
         fileName,
         userId,
         userToken,
-        username,
-        saveAsResult.filePath
-      )
+        savePath: saveAsResult.filePath
+      })
 
       return downloadResult || { success: false, error: '下载失败' }
     } catch (error: any) {
@@ -513,7 +477,7 @@ export function useTransferDownload() {
    */
   async function resumeDownload(taskId: number) {
     try {
-      const result = await window.electronAPI.transfer.resumeDownload(taskId)
+      const result = await transferRendererService.resumeDownload(taskId)
 
       if (!result?.success) {
         throw new Error(result?.error || '恢复下载失败')
@@ -532,7 +496,7 @@ export function useTransferDownload() {
    */
   async function cancelDownload(taskId: string | number) {
     try {
-      const result = await window.electronAPI.transfer.cancelDownload(taskId)
+      const result = await transferRendererService.cancelDownload(taskId)
 
       if (!result?.success) {
         throw new Error(result?.error || '取消下载失败')
@@ -561,7 +525,7 @@ export function useTransferDownload() {
     }
 
     try {
-      const result = await window.electronAPI.transfer.cancelAllDownloads(authStore.user.id)
+      const result = await transferRendererService.cancelAllDownloads(authStore.user.id)
 
       if (!result?.success) {
         throw new Error(result?.error || '取消所有下载失败')
@@ -579,28 +543,12 @@ export function useTransferDownload() {
 
   // 清理函数
   function cleanupDownload() {
-    // 清理下载队列监听器
-    if (queueUpdatedListener && typeof window !== 'undefined' && window.electronAPI?.transfer?.removeQueueUpdatedListener) {
-      window.electronAPI.transfer.removeQueueUpdatedListener(queueUpdatedListener)
-      queueUpdatedListener = null
-    }
-
     // 清理下载进度监听器
-    if (typeof window !== 'undefined' && window.electronAPI?.transfer?.removeDownloadProgressListener) {
-      window.electronAPI.transfer.removeDownloadProgressListener(downloadProgressHandler)
-    }
-    if (typeof window !== 'undefined' && window.electronAPI?.transfer?.removeDownloadCompletedListener) {
-      window.electronAPI.transfer.removeDownloadCompletedListener(downloadCompletedHandler)
-    }
-    if (typeof window !== 'undefined' && window.electronAPI?.transfer?.removeDownloadFailedListener) {
-      window.electronAPI.transfer.removeDownloadFailedListener(downloadFailedHandler)
-    }
-    if (typeof window !== 'undefined' && window.electronAPI?.transfer?.removeDownloadCancelledListener) {
-      window.electronAPI.transfer.removeDownloadCancelledListener(downloadCancelledHandler)
-    }
-    if (typeof window !== 'undefined' && window.electronAPI?.transfer?.removeDownloadAuthFailedListener) {
-      window.electronAPI.transfer.removeDownloadAuthFailedListener(downloadAuthFailedHandler)
-    }
+    transferRendererService.removeListener('transfer:download-progress', downloadProgressHandler)
+    transferRendererService.removeListener('transfer:download-completed', downloadCompletedHandler)
+    transferRendererService.removeListener('transfer:download-failed', downloadFailedHandler)
+    transferRendererService.removeListener('transfer:download-cancelled', downloadCancelledHandler)
+    transferRendererService.removeListener('transfer:download-auth-failed', downloadAuthFailedHandler)
 
     // 清理通知定时器
     if (downloadNotifyTimer) {

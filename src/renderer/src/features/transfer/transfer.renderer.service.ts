@@ -30,60 +30,60 @@ export function createTransferService() {
     },
 
     // ===== 下载 =====
-    async download(params: any) {
-      return invoke(window.electronAPI.invoke('transfer:download', params))
+    async download(params: any): Promise<any> {
+      return invoke<any>(window.electronAPI.invoke('transfer:download', params))
     },
 
-    async saveAs(fileName: string, userId: number) {
-      return invoke(window.electronAPI.invoke('transfer:saveAs', { fileName, userId }))
+    async saveAs(fileName: string, userId: number): Promise<any> {
+      return invoke<any>(window.electronAPI.invoke('transfer:saveAs', { fileName, userId }))
     },
 
-    async initDownloadQueue(userId: number, userToken: string) {
-      return invoke(window.electronAPI.invoke('transfer:initDownloadQueue', { userId, userToken }))
+    async initDownloadQueue(userId: number, userToken: string): Promise<any> {
+      return invoke<any>(window.electronAPI.invoke('transfer:initDownloadQueue', { userId, userToken }))
     },
 
-    async queueDownload(taskData: any) {
-      return invoke(window.electronAPI.invoke('transfer:queueDownload', taskData))
+    async queueDownload(taskData: any): Promise<any> {
+      return invoke<any>(window.electronAPI.invoke('transfer:queueDownload', taskData))
     },
 
-    async batchQueueDownload(remotePaths: string[]) {
-      return invoke(window.electronAPI.invoke('transfer:batchQueueDownload', { remotePaths }))
+    async batchQueueDownload(remotePaths: string[]): Promise<any> {
+      return invoke<any>(window.electronAPI.invoke('transfer:batchQueueDownload', { remotePaths }))
     },
 
-    async getDownloadQueue() {
-      return invoke(window.electronAPI.invoke('transfer:getDownloadQueue'))
+    async getDownloadQueue(): Promise<any> {
+      return invoke<any>(window.electronAPI.invoke('transfer:getDownloadQueue'))
     },
 
-    async pauseDownloadQueue() {
-      return invoke(window.electronAPI.invoke('transfer:pauseDownloadQueue'))
+    async pauseDownloadQueue(): Promise<any> {
+      return invoke<any>(window.electronAPI.invoke('transfer:pauseDownloadQueue'))
     },
 
-    async resumeDownloadQueue() {
-      return invoke(window.electronAPI.invoke('transfer:resumeDownloadQueue'))
+    async resumeDownloadQueue(): Promise<any> {
+      return invoke<any>(window.electronAPI.invoke('transfer:resumeDownloadQueue'))
     },
 
-    async clearDownloadQueue() {
-      return invoke(window.electronAPI.invoke('transfer:clearDownloadQueue'))
+    async clearDownloadQueue(): Promise<any> {
+      return invoke<any>(window.electronAPI.invoke('transfer:clearDownloadQueue'))
     },
 
-    async clearPendingQueue() {
-      return invoke(window.electronAPI.invoke('transfer:clearPendingQueue'))
+    async clearPendingQueue(): Promise<any> {
+      return invoke<any>(window.electronAPI.invoke('transfer:clearPendingQueue'))
     },
 
-    async clearActiveQueue() {
-      return invoke(window.electronAPI.invoke('transfer:clearActiveQueue'))
+    async clearActiveQueue(): Promise<any> {
+      return invoke<any>(window.electronAPI.invoke('transfer:clearActiveQueue'))
     },
 
-    async resumeDownload(taskId: number) {
-      return invoke(window.electronAPI.invoke('transfer:resumeDownload', { taskId }))
+    async resumeDownload(taskId: number): Promise<any> {
+      return invoke<any>(window.electronAPI.invoke('transfer:resumeDownload', { taskId }))
     },
 
-    async cancelDownload(taskId: string | number) {
-      return invoke(window.electronAPI.invoke('transfer:cancelDownload', { taskId }))
+    async cancelDownload(taskId: string | number): Promise<any> {
+      return invoke<any>(window.electronAPI.invoke('transfer:cancelDownload', { taskId }))
     },
 
-    async cancelAllDownloads(userId: number) {
-      return invoke(window.electronAPI.invoke('transfer:cancelAllDownloads', { userId }))
+    async cancelAllDownloads(userId: number): Promise<any> {
+      return invoke<any>(window.electronAPI.invoke('transfer:cancelAllDownloads', { userId }))
     },
 
     // ===== 任务列表 =====
@@ -126,6 +126,10 @@ export function createTransferService() {
 
     onDownloadCancelled(callback: (data: any) => void) {
       window.electronAPI.on('transfer:download-cancelled', callback)
+    },
+
+    onDownloadAuthFailed(callback: (data: any) => void) {
+      window.electronAPI.on('transfer:download-auth-failed', callback)
     },
 
     removeListener(channel: string, callback: Function) {

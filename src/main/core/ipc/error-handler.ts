@@ -17,12 +17,11 @@ export class IPCError extends Error {
 }
 
 function isIPCResult(data: unknown): data is IPCResult<unknown> {
-  return (
-    data !== null &&
-    typeof data === 'object' &&
-    'success' in data &&
-    typeof (data as { success: unknown }).success === 'boolean'
-  )
+  if (data === null || typeof data !== 'object') return false
+  const d = data as Record<string, unknown>
+  if (!('success' in d) || typeof d.success !== 'boolean') return false
+  if (d.success === true) return 'data' in d
+  return 'error' in d
 }
 
 export async function handleIPC<T>(

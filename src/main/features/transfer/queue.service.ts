@@ -1,5 +1,6 @@
 import { transferQueueManager, type QueueTask } from '../../services/TransferQueueManager'
 import { downloadQueueManager, type DownloadQueueTask } from '../../services/DownloadQueueManager'
+import { IPCError, IPCErrorCode } from '../../core/ipc/error-handler'
 
 export interface TransferQueueStatus {
   active: number
@@ -112,8 +113,8 @@ export class QueueService {
   async resumeUploadTask(taskId: number, userToken: string, username: string) {
     const { transferService } = await import('./transfer.service')
     const task = await transferService.getTask(taskId)
-    if (!task) throw new Error('任务不存在')
-    if (!task.resumable) throw new Error('该任务不支持恢复')
+    if (!task) throw new IPCError('任务不存在', IPCErrorCode.NOT_FOUND)
+    if (!task.resumable) throw new IPCError('该任务不支持恢复', IPCErrorCode.CONFLICT)
 
     await transferService.resumeTask(taskId)
     await this.addUploadTask({
@@ -133,7 +134,7 @@ export class QueueService {
   async queueDownloadWithSession(taskData: any) {
     const { authService } = await import('../auth/auth.service')
     const session = authService.getCurrentSession()
-    if (!session) throw new Error('用户未登录')
+    if (!session) throw new IPCError('用户未登录', IPCErrorCode.UNAUTHORIZED)
 
     const task: DownloadQueueTask = {
       id: taskData.id || `download_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -153,7 +154,7 @@ export class QueueService {
   async batchQueueDownloadWithSession(remotePaths: string[]) {
     const { authService } = await import('../auth/auth.service')
     const session = authService.getCurrentSession()
-    if (!session) throw new Error('用户未登录')
+    if (!session) throw new IPCError('用户未登录', IPCErrorCode.UNAUTHORIZED)
 
     const tasks: DownloadQueueTask[] = remotePaths.map((remotePath, i) => ({
       id: `download_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 9)}`,

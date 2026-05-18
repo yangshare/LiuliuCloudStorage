@@ -1,4 +1,4 @@
-import { activityService, type ActionType } from '../../services/ActivityService'
+import { activityService, type ActionType } from './activity.core.service'
 
 export interface LogActivityParams {
   userId: number

@@ -214,7 +214,7 @@ export class TrayService {
   private handleQuickUpload(): void {
     // 通过IPC发送消息到渲染进程
     if (this.mainWindow) {
-      this.mainWindow.webContents.send('tray-quick-upload')
+      this.mainWindow.webContents.send('tray:action:quick-upload')
     }
   }
 

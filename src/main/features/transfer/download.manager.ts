@@ -1,9 +1,9 @@
 import { net, app } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
-import { TransferService } from './TransferService'
-import { downloadConfigService } from './downloadConfigService'
-import { loggerService } from './LoggerService'
+import { TransferService } from './transfer.service'
+import { downloadConfigService } from '../downloadConfig/download-config.core.service'
+import { loggerService } from '../../core/logger/logger.service'
 
 export interface DownloadTaskInput {
   id: string

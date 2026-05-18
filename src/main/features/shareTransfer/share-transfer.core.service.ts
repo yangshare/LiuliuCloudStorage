@@ -1,11 +1,11 @@
 import axios from 'axios'
-import { getDatabase } from '../database'
-import { shareTransferRecords } from '../database/schema'
-import type { NewShareTransferRecord, ShareTransferRecord } from '../database/schema'
+import { getDatabase } from '../../database'
+import { shareTransferRecords } from '../../database/schema'
+import type { NewShareTransferRecord, ShareTransferRecord } from '../../database/schema'
 import { count, desc, eq, and, inArray } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
-import { loadConfig } from '../config'
-import { loggerService } from './LoggerService'
+import { loadConfig } from '../../config'
+import { loggerService } from '../../core/logger/logger.service'
 
 /**
  * 获取转存 Token（从配置文件读取）

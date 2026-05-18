@@ -3,11 +3,11 @@
 import { ipcMain } from 'electron'
 import { shareTransferFeatureService } from './shareTransfer.service'
 import { IPCError } from '../../core/ipc/error-handler'
-import { loggerService } from '../../services/LoggerService'
+import { loggerService } from '../../core/logger/logger.service'
 
 export function registerShareTransferHandlers(): void {
   // 执行分享转存
-  ipcMain.handle('shareTransfer:exec', async (_event, params: { url: string; userId: number }) => {
+  ipcMain.handle('shareTransfer:task:exec', async (_event, params: { url: string; userId: number }) => {
     try {
       const result = await shareTransferFeatureService.execTransfer(params.url, params.userId)
       return { success: result.success, message: result.message, alistPath: result.alistPath, recordId: result.recordId }
@@ -19,7 +19,7 @@ export function registerShareTransferHandlers(): void {
   })
 
   // 获取转存记录列表
-  ipcMain.handle('shareTransfer:list', async (_event, params: { userId: number; pageNum?: number; pageSize?: number; status?: string }) => {
+  ipcMain.handle('shareTransfer:task:list', async (_event, params: { userId: number; pageNum?: number; pageSize?: number; status?: string }) => {
     try {
       const result = await shareTransferFeatureService.listRecords(params.userId, params.pageNum, params.pageSize, params.status)
       return { success: true, records: result.records, total: result.total }
@@ -31,7 +31,7 @@ export function registerShareTransferHandlers(): void {
   })
 
   // 获取最新待转存记录
-  ipcMain.handle('shareTransfer:latest', async (_event, params: { userId: number }) => {
+  ipcMain.handle('shareTransfer:task:latest', async (_event, params: { userId: number }) => {
     try {
       const record = await shareTransferFeatureService.getLatestPending(params.userId)
       return { success: true, record }
@@ -43,7 +43,7 @@ export function registerShareTransferHandlers(): void {
   })
 
   // 标记为已转存
-  ipcMain.handle('shareTransfer:complete', async (_event, params: { id: number; userId: number }) => {
+  ipcMain.handle('shareTransfer:task:complete', async (_event, params: { id: number; userId: number }) => {
     try {
       const success = await shareTransferFeatureService.markAsCompleted(params.id, params.userId)
       return { success, message: success ? '已标记为完成' : '操作失败' }
@@ -55,7 +55,7 @@ export function registerShareTransferHandlers(): void {
   })
 
   // 删除记录
-  ipcMain.handle('shareTransfer:delete', async (_event, params: { id: number; userId: number }) => {
+  ipcMain.handle('shareTransfer:task:delete', async (_event, params: { id: number; userId: number }) => {
     try {
       const success = await shareTransferFeatureService.deleteRecord(params.id, params.userId)
       return { success, message: success ? '删除成功' : '删除失败' }
@@ -67,7 +67,7 @@ export function registerShareTransferHandlers(): void {
   })
 
   // 批量删除记录
-  ipcMain.handle('shareTransfer:batchDelete', async (_event, params: { ids: number[]; userId: number }) => {
+  ipcMain.handle('shareTransfer:task:batchDelete', async (_event, params: { ids: number[]; userId: number }) => {
     try {
       const success = await shareTransferFeatureService.deleteRecords(params.ids, params.userId)
       return { success, message: success ? '批量删除成功' : '批量删除失败' }

@@ -7,9 +7,9 @@ import { getDatabase } from '../../database'
 import { users } from '../../database/schema'
 import { IPCError, IPCErrorCode } from '../../core/ipc/error-handler'
 import { authService } from '../auth/auth.service'
-import { quotaCalculationService } from '../../services/QuotaCalculationService'
+import { quotaCalculationService } from './quota-calculation.service'
 import { loadConfig } from '../../config'
-import { loggerService } from '../../services/LoggerService'
+import { loggerService } from '../../core/logger/logger.service'
 
 export interface QuotaInfo {
   quotaTotal: number

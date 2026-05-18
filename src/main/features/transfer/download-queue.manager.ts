@@ -1,12 +1,12 @@
-import { TransferService } from './TransferService'
-import { DownloadManager } from './DownloadManager'
-import { alistService } from './AlistService'
-import { activityService, ActionType } from './ActivityService'
-import { loggerService } from './LoggerService'
+import { TransferService } from './transfer.service'
+import { DownloadManager } from './download.manager'
+import { alistService } from '../../core/api/alist.service'
+import { activityService, ActionType } from '../activity/activity.core.service'
+import { loggerService } from '../../core/logger/logger.service'
 import { BrowserWindow } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
-import { MAX_CONCURRENT_DOWNLOADS } from '../../shared/constants'
+import { MAX_CONCURRENT_DOWNLOADS } from '../../../shared/constants'
 
 export interface DownloadQueueTask {
   id: string
@@ -235,7 +235,7 @@ class DownloadQueueManager {
         const windows = BrowserWindow.getAllWindows()
         windows.forEach(win => {
           if (win && !win.isDestroyed()) {
-            win.webContents.send('transfer:download-progress', {
+            win.webContents.send('transfer:download:progress', {
               taskId: task.id,
               fileName: task.fileName,
               progress: progress.percentage,
@@ -268,7 +268,7 @@ class DownloadQueueManager {
       const windows = BrowserWindow.getAllWindows()
       windows.forEach(win => {
         if (win && !win.isDestroyed()) {
-          win.webContents.send('transfer:download-completed', {
+          win.webContents.send('transfer:download:completed', {
             taskId: task.id,
             fileName: task.fileName,
             savePath: actualSavePath
@@ -295,7 +295,7 @@ class DownloadQueueManager {
         const windows = BrowserWindow.getAllWindows()
         windows.forEach(win => {
           if (win && !win.isDestroyed()) {
-            win.webContents.send('transfer:download-auth-failed', {
+            win.webContents.send('transfer:download:auth-failed', {
               error: 'Alist 登录已过期，请重新登录后恢复下载'
             })
           }
@@ -309,7 +309,7 @@ class DownloadQueueManager {
       const windows = BrowserWindow.getAllWindows()
       windows.forEach(win => {
         if (win && !win.isDestroyed()) {
-          win.webContents.send('transfer:download-failed', {
+          win.webContents.send('transfer:download:failed', {
             taskId: task.id,
             fileName: task.fileName,
             error: isAuthError ? 'Alist 登录已过期' : errMsg
@@ -616,7 +616,7 @@ class DownloadQueueManager {
       const windows = BrowserWindow.getAllWindows()
       windows.forEach(win => {
         if (win && !win.isDestroyed()) {
-          win.webContents.send('transfer:queue-updated', safeState)
+          win.webContents.send('transfer:queue:updated', safeState)
         }
       })
     } catch (error) {

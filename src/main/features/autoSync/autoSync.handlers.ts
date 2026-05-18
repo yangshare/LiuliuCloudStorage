@@ -3,11 +3,11 @@
 import { ipcMain } from 'electron'
 import { autoSyncFeatureService } from './autoSync.service'
 import { IPCError } from '../../core/ipc/error-handler'
-import { loggerService } from '../../services/LoggerService'
+import { loggerService } from '../../core/logger/logger.service'
 
 export function registerAutoSyncHandlers(): void {
   // 创建并执行自动同步计划
-  ipcMain.handle('autoSync:createPlanAndRun', async (_event, params) => {
+  ipcMain.handle('autoSync:plan:createAndRun', async (_event, params) => {
     try {
       const result = await autoSyncFeatureService.createPlanAndRun(params)
       return result
@@ -19,7 +19,7 @@ export function registerAutoSyncHandlers(): void {
   })
 
   // 获取自动同步计划列表
-  ipcMain.handle('autoSync:listPlans', async (_event, params) => {
+  ipcMain.handle('autoSync:plan:list', async (_event, params) => {
     try {
       const result = await autoSyncFeatureService.listPlans(params.userId)
       return result
@@ -31,7 +31,7 @@ export function registerAutoSyncHandlers(): void {
   })
 
   // 更新自动同步计划
-  ipcMain.handle('autoSync:updatePlan', async (_event, params) => {
+  ipcMain.handle('autoSync:plan:update', async (_event, params) => {
     try {
       const result = await autoSyncFeatureService.updatePlan(params)
       return result
@@ -43,7 +43,7 @@ export function registerAutoSyncHandlers(): void {
   })
 
   // 暂停自动同步计划
-  ipcMain.handle('autoSync:pausePlan', async (_event, params) => {
+  ipcMain.handle('autoSync:plan:pause', async (_event, params) => {
     try {
       const result = await autoSyncFeatureService.pausePlan(params.id, params.userId)
       return result
@@ -55,7 +55,7 @@ export function registerAutoSyncHandlers(): void {
   })
 
   // 恢复自动同步计划
-  ipcMain.handle('autoSync:resumePlan', async (_event, params) => {
+  ipcMain.handle('autoSync:plan:resume', async (_event, params) => {
     try {
       const result = await autoSyncFeatureService.resumePlan(params.id, params.userId)
       return result
@@ -67,7 +67,7 @@ export function registerAutoSyncHandlers(): void {
   })
 
   // 删除自动同步计划
-  ipcMain.handle('autoSync:deletePlan', async (_event, params) => {
+  ipcMain.handle('autoSync:plan:delete', async (_event, params) => {
     try {
       const result = await autoSyncFeatureService.deletePlan(params.id, params.userId)
       return result
@@ -79,7 +79,7 @@ export function registerAutoSyncHandlers(): void {
   })
 
   // 执行自动同步计划
-  ipcMain.handle('autoSync:runPlan', async (_event, params) => {
+  ipcMain.handle('autoSync:plan:run', async (_event, params) => {
     try {
       const result = await autoSyncFeatureService.runPlan(params.id, params.userId)
       return result
@@ -91,7 +91,7 @@ export function registerAutoSyncHandlers(): void {
   })
 
   // 获取同步记录列表
-  ipcMain.handle('autoSync:listRuns', async (_event, params) => {
+  ipcMain.handle('autoSync:run:list', async (_event, params) => {
     try {
       const result = await autoSyncFeatureService.listRuns(params.planId, params.userId, params.limit)
       return result
@@ -103,7 +103,7 @@ export function registerAutoSyncHandlers(): void {
   })
 
   // 启动时运行自动同步
-  ipcMain.handle('autoSync:startupRun', async (_event, params) => {
+  ipcMain.handle('autoSync:run:startup', async (_event, params) => {
     try {
       const result = await autoSyncFeatureService.runStartupPlans(params.userId)
       return result
@@ -115,7 +115,7 @@ export function registerAutoSyncHandlers(): void {
   })
 
   // 重置同步基线
-  ipcMain.handle('autoSync:resetBaseline', async (_event, params) => {
+  ipcMain.handle('autoSync:plan:resetBaseline', async (_event, params) => {
     try {
       const result = await autoSyncFeatureService.resetBaseline(params.id, params.userId)
       return result

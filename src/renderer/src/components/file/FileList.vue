@@ -3,7 +3,6 @@ import { ref, computed, onUnmounted } from 'vue'
 import { ElCheckbox, ElButton, ElInput, ElMessage, ElEmpty } from 'element-plus'
 import { CaretBottom, CaretTop, Download } from '@element-plus/icons-vue'
 import { useFileStore } from '@/features/file'
-import { useTransferStore } from '@/features/transfer'
 import { useTransferDownload } from '@/features/transfer/composables/useTransferDownload'
 import { useAuthStore } from '@/features/auth'
 import FileIcon from './FileIcon.vue'
@@ -13,7 +12,6 @@ import { formatFileSize, formatDate } from '../../utils/formatters'
 import type { FileItem } from '../../../../shared/types/electron'
 
 const fileStore = useFileStore()
-const transferStore = useTransferStore()
 const { queueDownload, downloadWithSaveAs } = useTransferDownload()
 const authStore = useAuthStore()
 

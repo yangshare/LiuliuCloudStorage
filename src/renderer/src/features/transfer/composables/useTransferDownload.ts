@@ -513,11 +513,11 @@ export function useTransferDownload() {
   // 清理函数
   function cleanupDownload() {
     // 清理下载进度监听器
-    transferRendererService.removeListener('transfer:download-progress', downloadProgressHandler)
-    transferRendererService.removeListener('transfer:download-completed', downloadCompletedHandler)
-    transferRendererService.removeListener('transfer:download-failed', downloadFailedHandler)
-    transferRendererService.removeListener('transfer:download-cancelled', downloadCancelledHandler)
-    transferRendererService.removeListener('transfer:download-auth-failed', downloadAuthFailedHandler)
+    transferRendererService.removeListener('transfer:download:progress', downloadProgressHandler)
+    transferRendererService.removeListener('transfer:download:completed', downloadCompletedHandler)
+    transferRendererService.removeListener('transfer:download:failed', downloadFailedHandler)
+    transferRendererService.removeListener('transfer:download:cancelled', downloadCancelledHandler)
+    transferRendererService.removeListener('transfer:download:auth-failed', downloadAuthFailedHandler)
 
     // 清理通知定时器
     if (downloadNotifyTimer) {

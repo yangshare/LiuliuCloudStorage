@@ -2,8 +2,8 @@ import { app, session } from 'electron'
 import { join, normalize, resolve } from 'path'
 import { existsSync } from 'fs'
 import { readdir, stat, rm } from 'fs/promises'
-import { loggerService } from './LoggerService'
-import { formatFileSize } from '../../shared/formatters'
+import { loggerService } from '../logger/logger.service'
+import { formatFileSize } from '../../../shared/formatters'
 
 /**
  * 缓存清理策略

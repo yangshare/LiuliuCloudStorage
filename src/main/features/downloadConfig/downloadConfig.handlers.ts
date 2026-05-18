@@ -2,7 +2,7 @@ import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { downloadConfigFeatureService } from './downloadConfig.service'
 
 export function registerDownloadConfigHandlers(): void {
-  ipcMain.handle('downloadConfig:selectDirectory', async () => {
+  ipcMain.handle('downloadConfig:directory:select', async () => {
     const win = BrowserWindow.getFocusedWindow()
     const result = await dialog.showOpenDialog(win!, {
       properties: ['openDirectory'],
@@ -15,28 +15,28 @@ export function registerDownloadConfigHandlers(): void {
     return { success: false }
   })
 
-  ipcMain.handle('downloadConfig:get', async () => {
+  ipcMain.handle('downloadConfig:data:get', async () => {
     return downloadConfigFeatureService.getConfig()
   })
 
-  ipcMain.handle('downloadConfig:update', async (_event, updates) => {
+  ipcMain.handle('downloadConfig:data:update', async (_event, updates) => {
     return downloadConfigFeatureService.updateConfig(updates)
   })
 
-  ipcMain.handle('downloadConfig:openDirectory', async () => {
+  ipcMain.handle('downloadConfig:directory:open', async () => {
     const config = downloadConfigFeatureService.getConfig()
     return downloadConfigFeatureService.openDirectory(config.defaultPath)
   })
 
-  ipcMain.handle('downloadConfig:openFileDirectory', async (_event, filePath: string) => {
+  ipcMain.handle('downloadConfig:directory:openFile', async (_event, filePath: string) => {
     return downloadConfigFeatureService.openFileDirectory(filePath)
   })
 
-  ipcMain.handle('downloadConfig:createDirectory', async (_event, dirPath: string) => {
+  ipcMain.handle('downloadConfig:directory:create', async (_event, dirPath: string) => {
     return downloadConfigFeatureService.createDirectory(dirPath)
   })
 
-  ipcMain.handle('downloadConfig:reset', async () => {
+  ipcMain.handle('downloadConfig:data:reset', async () => {
     return downloadConfigFeatureService.resetToDefault()
   })
 }

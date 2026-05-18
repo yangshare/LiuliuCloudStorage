@@ -1,6 +1,6 @@
-import { getDatabase } from '../database'
-import { activityLogs, dailyStats } from '../database/schema'
-import type { NewActivityLogs, NewDailyStats } from '../database/schema'
+import { getDatabase } from '../../database'
+import { activityLogs, dailyStats } from '../../database/schema'
+import type { NewActivityLogs, NewDailyStats } from '../../database/schema'
 import { count, desc, eq, gte, lte, and, SQL } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 

@@ -1,6 +1,6 @@
 // src/main/features/autoSync/autoSync.service.ts
 
-import { autoSyncService, type AutoSyncConflictPolicy } from '../../services/AutoSyncService'
+import { autoSyncService, type AutoSyncConflictPolicy } from './auto-sync.core.service'
 import { IPCError, IPCErrorCode } from '../../core/ipc/error-handler'
 import { authService } from '../auth/auth.service'
 

@@ -1,9 +1,9 @@
 import { autoUpdater } from 'electron-updater'
 import { BrowserWindow, app } from 'electron'
 import { join } from 'path'
-import { loggerService } from './LoggerService'
-import { loadConfig } from '../config'
-import { formatFileSize } from '../../shared/formatters'
+import { loggerService } from '../../core/logger/logger.service'
+import { loadConfig } from '../../config'
+import { formatFileSize } from '../../../shared/formatters'
 
 const WINDOWS_UPDATE_URL = 'https://qiniu.yangshare.com/LiuliuCloudStorage/win/x64'
 
@@ -52,17 +52,17 @@ class UpdateService {
     // 事件监听
     autoUpdater.on('update-available', (info) => {
       loggerService.info('UpdateService', `发现新版本: ${info.version}`)
-      this.sendToRenderer('update:available', info)
+      this.sendToRenderer('update:event:available', info)
       // 开始静默下载，捕获异常避免静默失败
       autoUpdater.downloadUpdate().catch((error) => {
         loggerService.error('UpdateService', `下载更新失败: ${error.message}`, error)
-        this.sendToRenderer('update:error', `下载更新失败: ${error.message}`)
+        this.sendToRenderer('update:event:error', `下载更新失败: ${error.message}`)
       })
     })
 
     autoUpdater.on('update-not-available', () => {
       loggerService.info('UpdateService', '当前已是最新版本')
-      this.sendToRenderer('update:not-available', undefined)
+      this.sendToRenderer('update:event:not-available', undefined)
     })
 
     autoUpdater.on('download-progress', (progress) => {
@@ -70,13 +70,13 @@ class UpdateService {
       const transferred = formatFileSize(progress.transferred)
       const total = formatFileSize(progress.total)
       loggerService.debug('UpdateService', `下载进度: ${percent}% (${transferred}/${total})`)
-      this.sendToRenderer('update:download-progress', progress)
+      this.sendToRenderer('update:event:download-progress', progress)
     })
 
     autoUpdater.on('update-downloaded', () => {
       loggerService.info('UpdateService', '更新下载完成，准备安装')
       this.updateDownloaded = true
-      this.sendToRenderer('update:downloaded', undefined)
+      this.sendToRenderer('update:event:downloaded', undefined)
     })
 
     autoUpdater.on('error', (error) => {
@@ -96,7 +96,7 @@ class UpdateService {
         message = '更新文件损坏，请重启应用重试'
       }
 
-      this.sendToRenderer('update:error', message)
+      this.sendToRenderer('update:event:error', message)
     })
   }
 
@@ -104,7 +104,7 @@ class UpdateService {
     try {
       if (process.platform !== 'win32') {
         loggerService.info('UpdateService', `当前平台 ${process.platform} 暂不支持自动更新，跳过检查`)
-        this.sendToRenderer('update:not-available', undefined)
+        this.sendToRenderer('update:event:not-available', undefined)
         return
       }
 
@@ -112,7 +112,7 @@ class UpdateService {
       const config = loadConfig()
       if (!app.isPackaged && config.testUpdate !== true) {
         loggerService.info('UpdateService', '开发环境：跳过更新检查')
-        this.sendToRenderer('update:not-available', undefined)
+        this.sendToRenderer('update:event:not-available', undefined)
         return
       }
 
@@ -122,7 +122,7 @@ class UpdateService {
     } catch (error) {
       loggerService.error('UpdateService', '检查更新失败', error as Error)
       const message = error instanceof Error ? error.message : '检查更新失败'
-      this.sendToRenderer('update:error', message)
+      this.sendToRenderer('update:event:error', message)
     }
   }
 

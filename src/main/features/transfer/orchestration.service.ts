@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { AppError } from './httpClient'
+import { AppError } from '../../core/http/http-client'
 
 export interface TaskProgress {
   state: number  // 0: pending, 1: running, 2: succeeded, 3: failed

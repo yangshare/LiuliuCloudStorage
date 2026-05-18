@@ -1,5 +1,5 @@
-import { transferQueueManager, type QueueTask } from '../../services/TransferQueueManager'
-import { downloadQueueManager, type DownloadQueueTask } from '../../services/DownloadQueueManager'
+import { transferQueueManager, type QueueTask } from './transfer-queue.manager'
+import { downloadQueueManager, type DownloadQueueTask } from './download-queue.manager'
 import { IPCError, IPCErrorCode } from '../../core/ipc/error-handler'
 
 export interface TransferQueueStatus {
@@ -171,7 +171,7 @@ export class QueueService {
   }
 
   async cancelDownloadTask(taskId: string) {
-    const { DownloadManager } = await import('../../services/DownloadManager')
+    const { DownloadManager } = await import('./download.manager')
     const { transferService } = await import('./transfer.service')
     const downloadManager = new DownloadManager()
     await downloadManager.cancelDownload(taskId)

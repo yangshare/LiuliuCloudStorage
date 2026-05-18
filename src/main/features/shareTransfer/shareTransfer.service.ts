@@ -1,8 +1,8 @@
 // src/main/features/shareTransfer/shareTransfer.service.ts
 
-import { shareTransferService } from '../../services/ShareTransferService'
+import { shareTransferService } from './share-transfer.core.service'
 import { IPCError, IPCErrorCode } from '../../core/ipc/error-handler'
-import { loggerService } from '../../services/LoggerService'
+import { loggerService } from '../../core/logger/logger.service'
 
 export interface ExecTransferResult {
   success: boolean

@@ -3,11 +3,9 @@ import { ref } from 'vue'
 import { ElText, ElButton, ElIcon, ElDialog, ElSpace, ElMessage, ElInput } from 'element-plus'
 import { Download, Delete, Refresh, Search } from '@element-plus/icons-vue'
 import { useFileStore } from '@/features/file'
-import { useTransferStore } from '@/features/transfer'
 import { useTransferDownload } from '@/features/transfer/composables/useTransferDownload'
 
 const fileStore = useFileStore()
-const transferStore = useTransferStore()
 const { batchQueueDownload } = useTransferDownload()
 
 // 删除确认对话框状态

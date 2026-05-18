@@ -1,10 +1,10 @@
 // src/main/features/file/file.service.ts
 
-import { alistService } from '../../services/AlistService'
-import { AppError } from '../../services/httpClient'
+import { alistService } from '../../core/api/alist.service'
+import { AppError } from '../../core/http/http-client'
 import { getDatabase } from '../../database'
-import { activityService, ActionType } from '../../services/ActivityService'
-import { loggerService } from '../../services/LoggerService'
+import { activityService, ActionType } from '../activity/activity.core.service'
+import { loggerService } from '../../core/logger/logger.service'
 import { IPCError, IPCErrorCode } from '../../core/ipc/error-handler'
 import type { FileListResult } from '../../../shared/types/file'
 

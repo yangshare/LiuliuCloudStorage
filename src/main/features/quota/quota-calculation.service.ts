@@ -1,6 +1,6 @@
 import axios from 'axios'
-import { alistService, ListFilesResponse } from './AlistService'
-import { loadConfig } from '../config'
+import { alistService, ListFilesResponse } from '../../core/api/alist.service'
+import { loadConfig } from '../../config'
 
 /**
  * 配额计算服务

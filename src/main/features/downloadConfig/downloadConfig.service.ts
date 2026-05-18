@@ -1,4 +1,4 @@
-import { downloadConfigService } from '../../services/downloadConfigService'
+import { downloadConfigService } from './download-config.core.service'
 import fs from 'fs/promises'
 import path from 'path'
 import { shell } from 'electron'

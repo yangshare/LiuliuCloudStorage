@@ -1,4 +1,4 @@
-import { cacheService } from '../../services/CacheService'
+import { cacheService } from '../../core/cache/cache.service'
 import { formatFileSize } from '../../../shared/formatters'
 
 export interface CacheInfo {

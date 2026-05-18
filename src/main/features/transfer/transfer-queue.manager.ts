@@ -1,9 +1,9 @@
-import { TransferService } from './TransferService'
-import { alistService } from './AlistService'
-import { orchestrationService } from './OrchestrationService'
-import { activityService, ActionType } from './ActivityService'
+import { TransferService } from './transfer.service'
+import { alistService } from '../../core/api/alist.service'
+import { orchestrationService } from './orchestration.service'
+import { activityService, ActionType } from '../activity/activity.core.service'
 import { BrowserWindow } from 'electron'
-import { MAX_CONCURRENT_UPLOADS } from '../../shared/constants'
+import { MAX_CONCURRENT_UPLOADS } from '../../../shared/constants'
 
 export interface QueueTask {
   id: number
@@ -85,7 +85,7 @@ class TransferQueueManager {
             // 发送进度到渲染进程
             const windows = BrowserWindow.getAllWindows()
             windows.forEach(win => {
-              win.webContents.send('transfer:progress', { taskId: task.id, progress })
+              win.webContents.send('transfer:upload:progress', { taskId: task.id, progress })
             })
           }
         )
@@ -106,7 +106,7 @@ class TransferQueueManager {
         // 发送任务完成事件到渲染进程
         const windows = BrowserWindow.getAllWindows()
         windows.forEach(win => {
-          win.webContents.send('transfer:completed', { taskId: task.id, fileName: task.fileName })
+          win.webContents.send('transfer:upload:completed', { taskId: task.id, fileName: task.fileName })
         })
       } else {
         throw new Error(uploadResult.error || '上传失败')
@@ -141,7 +141,7 @@ class TransferQueueManager {
         // 发送任务失败事件到渲染进程
         const windows = BrowserWindow.getAllWindows()
         windows.forEach(win => {
-          win.webContents.send('transfer:failed', { taskId: task.id, fileName: task.fileName, error: errorMessage })
+          win.webContents.send('transfer:upload:failed', { taskId: task.id, fileName: task.fileName, error: errorMessage })
         })
       }
     } finally {
@@ -248,7 +248,7 @@ class TransferQueueManager {
       if (taskInfo) {
         const windows = BrowserWindow.getAllWindows()
         windows.forEach(win => {
-          win.webContents.send('transfer:cancelled', {
+          win.webContents.send('transfer:upload:cancelled', {
             taskId: taskId,
             fileName: taskInfo.fileName
           })

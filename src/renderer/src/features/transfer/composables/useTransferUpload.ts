@@ -255,10 +255,10 @@ export function useTransferUpload() {
   // 清理函数
   function cleanupUpload() {
     // 清理上传监听器
-    transferRendererService.removeListener('transfer:progress', progressHandler)
-    transferRendererService.removeListener('transfer:completed', completedHandler)
-    transferRendererService.removeListener('transfer:failed', failedHandler)
-    transferRendererService.removeListener('transfer:cancelled', cancelledHandler)
+    transferRendererService.removeListener('transfer:upload:progress', progressHandler)
+    transferRendererService.removeListener('transfer:upload:completed', completedHandler)
+    transferRendererService.removeListener('transfer:upload:failed', failedHandler)
+    transferRendererService.removeListener('transfer:upload:cancelled', cancelledHandler)
 
     // 清理通知定时器
     if (uploadNotifyTimer) {

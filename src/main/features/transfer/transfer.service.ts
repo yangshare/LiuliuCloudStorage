@@ -339,8 +339,8 @@ export class TransferService {
     },
     onProgress?: (data: { taskId: string; progress: number; transferredSize: number }) => void
   ) {
-    const { alistService } = await import('../../services/AlistService')
-    const { orchestrationService } = await import('../../services/OrchestrationService')
+    const { alistService } = await import('../../core/api/alist.service')
+    const { orchestrationService } = await import('./orchestration.service')
     const fs = await import('fs')
     const path = await import('path')
 
@@ -407,8 +407,8 @@ export class TransferService {
     onCompleted?: (data: { taskId: string; fileName: string; savePath: string }) => void,
     onFailed?: (data: { taskId: string; fileName: string; error: string }) => void
   ) {
-    const { alistService } = await import('../../services/AlistService')
-    const { DownloadManager } = await import('../../services/DownloadManager')
+    const { alistService } = await import('../../core/api/alist.service')
+    const { DownloadManager } = await import('./download.manager')
     const path = await import('path')
 
     alistService.setToken(params.userToken)
@@ -467,8 +467,8 @@ export class TransferService {
 
   async saveAs(fileName: string, userId: number) {
     const { dialog } = await import('electron')
-    const { DownloadManager } = await import('../../services/DownloadManager')
-    const { preferencesService } = await import('../../services/PreferencesService')
+    const { DownloadManager } = await import('./download.manager')
+    const { preferencesService } = await import('../../core/preferences/preferences.service')
     const path = await import('path')
 
     const downloadManager = new DownloadManager()
@@ -506,7 +506,7 @@ export class TransferService {
     }) => void,
     onCompleted?: (data: { taskId: string; fileName: string; savePath: string }) => void
   ) {
-    const { DownloadManager } = await import('../../services/DownloadManager')
+    const { DownloadManager } = await import('./download.manager')
     const downloadManager = new DownloadManager()
     const taskInfo = await this.getTask(Number(taskId))
 

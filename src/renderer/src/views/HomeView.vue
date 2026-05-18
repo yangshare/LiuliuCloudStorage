@@ -203,7 +203,7 @@ onMounted(() => {
   window.addEventListener('drop', handleWindowDrop)
   window.addEventListener('keydown', handleKeydown)
   // Story 8.3: 监听托盘快速上传消息
-  window.electronAPI?.onTrayQuickUpload?.(handleTrayQuickUpload)
+  window.electronAPI?.tray?.onTrayQuickUpload?.(handleTrayQuickUpload)
 })
 
 onUnmounted(() => {

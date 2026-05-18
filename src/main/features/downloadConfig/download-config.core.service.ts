@@ -2,9 +2,9 @@ import { app } from 'electron'
 import { join } from 'path'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { eq } from 'drizzle-orm'
-import { getDatabase } from '../database'
-import { downloadConfig } from '../database/schema'
-import type { DownloadConfig } from '../database/schema'
+import { getDatabase } from '../../database'
+import { downloadConfig } from '../../database/schema'
+import type { DownloadConfig } from '../../database/schema'
 
 export interface DownloadConfigUpdate {
   defaultPath?: string

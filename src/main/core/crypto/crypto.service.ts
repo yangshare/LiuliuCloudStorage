@@ -3,7 +3,7 @@ import { randomBytes, createCipheriv, createDecipheriv } from 'crypto'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { app } from 'electron'
-import { loadConfig } from '../config'
+import { loadConfig } from '../../config'
 
 const ALGORITHM = 'aes-256-gcm'
 const KEY_LENGTH = 32

@@ -2,11 +2,9 @@
 import { ref } from 'vue'
 import { ElIcon, ElText, ElButton, ElSpace } from 'element-plus'
 import { Upload, Document, FolderOpened } from '@element-plus/icons-vue'
-import { useTransferStore } from '@/features/transfer'
 import { useTransferUpload } from '@/features/transfer/composables/useTransferUpload'
 import { useFileStore } from '@/features/file'
 
-const transferStore = useTransferStore()
 const { addToUploadQueue, addPathsToUploadQueue } = useTransferUpload()
 const fileStore = useFileStore()
 

@@ -1,9 +1,9 @@
 import { ipcMain } from 'electron'
 import { cacheFeatureService } from './cache.service'
-import { loggerService } from '../../services/LoggerService'
+import { loggerService } from '../../core/logger/logger.service'
 
 export function registerCacheHandlers(): void {
-  ipcMain.handle('cache:get-info', async () => {
+  ipcMain.handle('cache:info:get', async () => {
     try {
       const info = await cacheFeatureService.getCacheInfo()
       return { success: true, ...info }
@@ -13,7 +13,7 @@ export function registerCacheHandlers(): void {
     }
   })
 
-  ipcMain.handle('cache:clear', async () => {
+  ipcMain.handle('cache:data:clear', async () => {
     try {
       loggerService.info('CacheHandler', '开始手动清理缓存（仅 f_ 文件）')
       const result = await cacheFeatureService.clearCache()

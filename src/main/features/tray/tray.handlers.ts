@@ -1,23 +1,23 @@
 import { ipcMain } from 'electron'
-import { trayService } from '../../services/TrayService'
+import { trayService } from './tray.core.service'
 
 export function registerTrayHandlers(): void {
-  ipcMain.handle('tray:update-transfer-status', (_, isTransferring: boolean) => {
+  ipcMain.handle('tray:status:update-transfer', (_, isTransferring: boolean) => {
     trayService.updateIcon(isTransferring)
   })
 
   ipcMain.handle(
-    'tray:update-transfer-counts',
+    'tray:status:update-counts',
     (_, uploadCount: number, downloadCount: number) => {
       trayService.updateContextMenu(uploadCount, downloadCount)
     }
   )
 
-  ipcMain.handle('tray:show-window', () => {
+  ipcMain.handle('tray:window:show', () => {
     trayService.updateContextMenu()
   })
 
-  ipcMain.handle('tray:hide-window', () => {
+  ipcMain.handle('tray:window:hide', () => {
     // 托盘服务内部处理
   })
 }

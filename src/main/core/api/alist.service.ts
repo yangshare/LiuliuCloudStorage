@@ -1,7 +1,7 @@
-import { createHttpClient, AppError } from './httpClient'
+import { createHttpClient, AppError } from '../http/http-client'
 import { AxiosInstance } from 'axios'
 import * as fs from 'fs'
-import { loggerService } from './LoggerService'
+import { loggerService } from '../logger/logger.service'
 
 export interface FileItem {
   name: string

@@ -4,7 +4,7 @@ import type { IPCResult, IPCErrorCodeType } from '../../../shared/types/ipc'
 import { IPCErrorCode } from '../../../shared/types/ipc'
 
 export { IPCErrorCode }
-import { loggerService } from '../../services/LoggerService'
+import { loggerService } from '../logger/logger.service'
 
 export class IPCError extends Error {
   constructor(

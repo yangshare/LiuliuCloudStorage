@@ -1,10 +1,10 @@
 import { ipcMain } from 'electron'
 import { activityFeatureService } from './activity.service'
 import { IPCError } from '../../core/ipc/error-handler'
-import { loggerService } from '../../services/LoggerService'
+import { loggerService } from '../../core/logger/logger.service'
 
 export function registerActivityHandlers(): void {
-  ipcMain.handle('activity:log', async (_, params) => {
+  ipcMain.handle('activity:log:create', async (_, params) => {
     try {
       await activityFeatureService.logActivity(params)
       return { success: true }
@@ -14,7 +14,7 @@ export function registerActivityHandlers(): void {
     }
   })
 
-  ipcMain.handle('activity:get-user-logs', async (_, userId, options) => {
+  ipcMain.handle('activity:log:get-user-logs', async (_, userId, options) => {
     try {
       return await activityFeatureService.getUserLogs(userId, options)
     } catch (error: any) {
@@ -23,7 +23,7 @@ export function registerActivityHandlers(): void {
     }
   })
 
-  ipcMain.handle('activity:get-all-logs', async (_, options) => {
+  ipcMain.handle('activity:log:get-all-logs', async (_, options) => {
     try {
       return await activityFeatureService.getAllLogs(options)
     } catch (error: any) {
@@ -32,7 +32,7 @@ export function registerActivityHandlers(): void {
     }
   })
 
-  ipcMain.handle('activity:get-dau', async (_, date) => {
+  ipcMain.handle('activity:analytics:get-dau', async (_, date) => {
     try {
       const result = await activityFeatureService.getDailyActiveUsers(date)
       return { success: true, ...result }
@@ -42,7 +42,7 @@ export function registerActivityHandlers(): void {
     }
   })
 
-  ipcMain.handle('activity:get-user-stats', async (_, userId, startDate, endDate) => {
+  ipcMain.handle('activity:analytics:get-user-stats', async (_, userId, startDate, endDate) => {
     try {
       const result = await activityFeatureService.getUserStats(userId, startDate, endDate)
       return { success: true, ...result }

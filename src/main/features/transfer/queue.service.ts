@@ -32,8 +32,8 @@ export class QueueService {
     return transferQueueManager.getStatus()
   }
 
-  async cancelUploadTask(taskId: number): Promise<{ success: boolean; error?: string }> {
-    return transferQueueManager.cancelTask(taskId)
+  async cancelUploadTask(taskId: number): Promise<void> {
+    await transferQueueManager.cancelTask(taskId)
   }
 
   async autoRetryAllUploads(userId: number, userToken: string, username: string): Promise<number> {
@@ -110,7 +110,7 @@ export class QueueService {
     return { restored: tasks.length }
   }
 
-  async resumeUploadTask(taskId: number, userToken: string, username: string) {
+  async resumeUploadTask(taskId: number, userToken: string, username: string): Promise<void> {
     const { transferService } = await import('./transfer.service')
     const task = await transferService.getTask(taskId)
     if (!task) throw new IPCError('任务不存在', IPCErrorCode.NOT_FOUND)
@@ -127,8 +127,6 @@ export class QueueService {
       fileName: task.fileName,
       fileSize: task.fileSize
     })
-
-    return { success: true }
   }
 
   async queueDownloadWithSession(taskData: any) {
@@ -148,7 +146,7 @@ export class QueueService {
     }
 
     const dbId = await this.addDownloadTask(task)
-    return { success: true, taskId: task.id, dbId }
+    return { taskId: task.id, dbId }
   }
 
   async batchQueueDownloadWithSession(remotePaths: string[]) {
@@ -167,17 +165,16 @@ export class QueueService {
     }))
 
     const batchResult = await this.addBatchDownloadTasks(tasks)
-    return { success: true, successCount: batchResult.length, failedCount: 0 }
+    return { successCount: batchResult.length, failedCount: 0 }
   }
 
-  async cancelDownloadTask(taskId: string) {
+  async cancelDownloadTask(taskId: string): Promise<void> {
     const { DownloadManager } = await import('./download.manager')
     const { transferService } = await import('./transfer.service')
     const downloadManager = new DownloadManager()
     await downloadManager.cancelDownload(taskId)
     await transferService.cancelTask(Number(taskId))
     await this.removeDownloadFromQueue(taskId)
-    return { success: true }
   }
 }
 

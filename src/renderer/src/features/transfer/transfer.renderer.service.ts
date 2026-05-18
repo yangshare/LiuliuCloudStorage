@@ -132,6 +132,10 @@ export function createTransferService() {
       window.electronAPI.on('transfer:download:auth-failed', callback)
     },
 
+    onQueueUpdated(callback: (data: any) => void) {
+      window.electronAPI.on('transfer:queue:updated', callback)
+    },
+
     removeListener(channel: string, callback: Function) {
       window.electronAPI.removeListener(channel, callback)
     }

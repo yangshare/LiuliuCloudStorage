@@ -401,12 +401,20 @@ export function useTransferDownload() {
     })
   }
 
+  // 队列更新处理函数
+  const queueUpdatedHandler = (state: any) => {
+    if (state) {
+      applyDownloadQueueState(state)
+    }
+  }
+
   // 注册下载监听器
   transferRendererService.onDownloadProgress(downloadProgressHandler)
   transferRendererService.onDownloadCompleted(downloadCompletedHandler)
   transferRendererService.onDownloadFailed(downloadFailedHandler)
   transferRendererService.onDownloadCancelled(downloadCancelledHandler)
   transferRendererService.onDownloadAuthFailed(downloadAuthFailedHandler)
+  transferRendererService.onQueueUpdated(queueUpdatedHandler)
 
   // ========== 另存为下载 ==========
 
@@ -521,6 +529,7 @@ export function useTransferDownload() {
     transferRendererService.removeListener('transfer:download:failed', downloadFailedHandler)
     transferRendererService.removeListener('transfer:download:cancelled', downloadCancelledHandler)
     transferRendererService.removeListener('transfer:download:auth-failed', downloadAuthFailedHandler)
+    transferRendererService.removeListener('transfer:queue:updated', queueUpdatedHandler)
 
     // 清理通知定时器
     if (downloadNotifyTimer) {

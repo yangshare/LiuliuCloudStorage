@@ -212,9 +212,8 @@ class TransferQueueManager {
   }
 
   // 取消任务
-  async cancelTask(taskId: number): Promise<{ success: boolean; error?: string }> {
-    try {
-      console.log(`[TransferQueueManager] 尝试取消任务 ${taskId}`)
+  async cancelTask(taskId: number): Promise<void> {
+    console.log(`[TransferQueueManager] 尝试取消任务 ${taskId}`)
 
       // 1. 从队列中移除（如果在等待队列）
       const queueIndex = this.queue.findIndex(t => t.id === taskId)
@@ -255,11 +254,6 @@ class TransferQueueManager {
         })
       }
 
-      return { success: true }
-    } catch (error: any) {
-      console.error(`[TransferQueueManager] 取消任务 ${taskId} 失败:`, error)
-      return { success: false, error: error.message || '取消任务失败' }
-    }
   }
 }
 

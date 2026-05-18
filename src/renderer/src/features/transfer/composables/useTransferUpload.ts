@@ -233,7 +233,7 @@ export function useTransferUpload() {
       userToken,
       username
     )
-    if (result) {
+    if (result !== null) {
       store.updateUploadTaskStatus(taskId, 'in_progress')
     }
     return result
@@ -242,7 +242,7 @@ export function useTransferUpload() {
   // 自动重试所有失败任务
   async function autoRetryFailedTasks(userId: number, userToken: string, username: string) {
     const result = await transferRendererService.autoRetryAll(userId, userToken, username)
-    if (result) {
+    if (result !== null) {
       // 更新所有失败任务的状态为 in_progress
       const failedTasks = uploadQueue.filter(t => t.status === 'failed' && t.resumable)
       failedTasks.forEach(task => {

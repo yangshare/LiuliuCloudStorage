@@ -175,7 +175,7 @@ export function useTransferDownload() {
     try {
       const result = await transferRendererService.initDownloadQueue(userId, userToken)
 
-      if (result?.success) {
+      if (result?.restoredCount !== undefined) {
         console.log(`[useTransferDownload] 下载队列初始化完成，恢复了 ${result.restoredCount} 个任务`)
       }
 
@@ -215,10 +215,10 @@ export function useTransferDownload() {
         priority: downloadQueue.length
       })
 
-      console.log('[useTransferDownload.queueDownload] IPC 返回:', result)
-      const returnValue = result || { success: false, error: '队列下载功能未实现' }
-      console.log('[useTransferDownload.queueDownload] 实际返回:', returnValue)
-      return returnValue
+      if (!result) {
+        return { success: false, error: '添加到队列失败' }
+      }
+      return { success: true, taskId: result.taskId, dbId: result.dbId }
     } catch (error: any) {
       return {
         success: false,
@@ -231,7 +231,10 @@ export function useTransferDownload() {
   async function batchQueueDownload(filePaths: string[]) {
     try {
       const result = await transferRendererService.batchQueueDownload(filePaths)
-      return result || { success: false, successCount: 0, failedCount: filePaths.length, error: '批量下载功能未实现' }
+      if (!result) {
+        return { success: false, successCount: 0, failedCount: filePaths.length, error: '批量添加到队列失败' }
+      }
+      return { success: true, successCount: result.successCount, failedCount: result.failedCount }
     } catch (error: any) {
       return { success: false, successCount: 0, failedCount: filePaths.length, error: error.message || '批量添加到队列失败' }
     }
@@ -241,10 +244,10 @@ export function useTransferDownload() {
   async function pauseDownloadQueue() {
     try {
       const result = await transferRendererService.pauseDownloadQueue()
-      if (result?.success) {
+      if (result !== null) {
         store.setDownloadQueuePaused(true)
       }
-      return result || { success: false, error: '暂停队列功能未实现' }
+      return { success: result !== null }
     } catch (error: any) {
       return {
         success: false,
@@ -257,10 +260,10 @@ export function useTransferDownload() {
   async function resumeDownloadQueue() {
     try {
       const result = await transferRendererService.resumeDownloadQueue()
-      if (result?.success) {
+      if (result !== null) {
         store.setDownloadQueuePaused(false)
       }
-      return result || { success: false, error: '恢复队列功能未实现' }
+      return { success: result !== null }
     } catch (error: any) {
       return {
         success: false,
@@ -273,7 +276,7 @@ export function useTransferDownload() {
   async function clearDownloadQueue() {
     try {
       const result = await transferRendererService.clearDownloadQueue()
-      return result || { success: false, error: '清空队列功能未实现' }
+      return { success: result !== null }
     } catch (error: any) {
       return { success: false, error: error.message || '清空队列失败' }
     }
@@ -283,7 +286,7 @@ export function useTransferDownload() {
   async function clearPendingQueue() {
     try {
       const result = await transferRendererService.clearPendingQueue()
-      return result || { success: false, error: '清空等待队列功能未实现' }
+      return { success: result !== null }
     } catch (error: any) {
       return { success: false, error: error.message || '清空等待队列失败' }
     }
@@ -293,7 +296,7 @@ export function useTransferDownload() {
   async function clearActiveQueue() {
     try {
       const result = await transferRendererService.clearActiveQueue()
-      return result || { success: false, error: '清空下载队列功能未实现' }
+      return { success: result !== null }
     } catch (error: any) {
       return { success: false, error: error.message || '清空下载队列失败' }
     }
@@ -303,8 +306,8 @@ export function useTransferDownload() {
   async function fetchDownloadQueueState() {
     try {
       const result = await transferRendererService.getDownloadQueue()
-      if (result?.success && result.state) {
-        applyDownloadQueueState(result.state)
+      if (result) {
+        applyDownloadQueueState(result)
       }
     } catch (error: any) {
       console.error('[useTransferDownload] 获取队列状态失败:', error)
@@ -414,13 +417,13 @@ export function useTransferDownload() {
       const saveAsResult = await transferRendererService.saveAs(fileName, userId)
 
       // 2. 用户取消操作
-      if (saveAsResult?.canceled) {
+      if (saveAsResult === null) {
         return { success: false, canceled: true }
       }
 
       // 3. 保存对话框失败
-      if (!saveAsResult?.success || !saveAsResult?.filePath) {
-        return { success: false, error: saveAsResult?.error || '选择保存位置失败' }
+      if (!saveAsResult?.filePath) {
+        return { success: false, error: '选择保存位置失败' }
       }
 
       // 4. 开始下载到用户选择的路径
@@ -448,11 +451,11 @@ export function useTransferDownload() {
     try {
       const result = await transferRendererService.resumeDownload(taskId)
 
-      if (!result?.success) {
-        throw new Error(result?.error || '恢复下载失败')
+      if (result === null) {
+        throw new Error('恢复下载失败')
       }
 
-      return result
+      return { success: true }
     } catch (error: any) {
       console.error('恢复下载失败:', error)
       ElMessage.error(error.message || '恢复下载失败')
@@ -467,14 +470,14 @@ export function useTransferDownload() {
     try {
       const result = await transferRendererService.cancelDownload(taskId)
 
-      if (!result?.success) {
-        throw new Error(result?.error || '取消下载失败')
+      if (result === null) {
+        throw new Error('取消下载失败')
       }
 
       // 显示成功通知
       ElMessage.success('下载已取消')
 
-      return result
+      return { success: true }
     } catch (error: any) {
       console.error('取消下载失败:', error)
       ElMessage.error(error.message || '取消下载失败')
@@ -496,13 +499,13 @@ export function useTransferDownload() {
     try {
       const result = await transferRendererService.cancelAllDownloads(authStore.user.id)
 
-      if (!result?.success) {
-        throw new Error(result?.error || '取消所有下载失败')
+      if (result === null) {
+        throw new Error('取消所有下载失败')
       }
 
       ElMessage.success('所有下载已取消')
 
-      return result
+      return { success: true }
     } catch (error: any) {
       console.error('取消所有下载失败:', error)
       ElMessage.error(error.message || '取消下载失败')

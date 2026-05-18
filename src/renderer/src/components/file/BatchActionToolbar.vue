@@ -75,19 +75,19 @@ async function handleBatchDownload() {
 
   // 使用批量入队：先立即显示在等待列表，再分批获取下载链接
   const result = await batchQueueDownload(filePaths)
-  successCount = result.successCount ?? 0
-  failedCount = (result.failedCount ?? 0) + failedCount
 
   // 清空选中状态
   fileStore.clearSelection()
 
   // 显示结果
-  if (failedCount === 0) {
-    ElMessage.success(`已添加 ${successCount} 个文件到下载队列`)
-  } else if (successCount === 0) {
-    ElMessage.error(`添加失败，请稍后重试`)
+  if (!result.success) {
+    ElMessage.error(result.error || '添加失败，请稍后重试')
+  } else if (result.successCount === 0) {
+    ElMessage.warning('没有新的文件需要下载（可能已在队列中）')
+  } else if (result.failedCount === 0) {
+    ElMessage.success(`已添加 ${result.successCount} 个文件到下载队列`)
   } else {
-    ElMessage.warning(`成功添加 ${successCount} 个文件，失败 ${failedCount} 个`)
+    ElMessage.warning(`成功添加 ${result.successCount} 个文件，失败 ${result.failedCount} 个`)
   }
 }
 

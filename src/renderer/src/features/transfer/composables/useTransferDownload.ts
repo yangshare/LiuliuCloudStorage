@@ -4,7 +4,8 @@ import { ElNotification, ElMessage } from 'element-plus'
 import { openFileDirectory } from '@/utils/openFileDirectory'
 import { isNotificationsEnabled } from './useTransferCommon'
 import { transferRendererService } from '../transfer.renderer.service'
-import type { DownloadTask } from '../stores/transferStore'
+import { useTransferStore } from '../stores/transferStore'
+// DownloadTask type is available through store, no need to import separately
 
 // ==================== 常量定义 ====================
 
@@ -21,32 +22,18 @@ const PROGRESS_UPDATE_THROTTLE_MS = 1000
 const COMPLETED_TASK_CLEANUP_DELAY_MS = 5000
 
 export function useTransferDownload() {
-  // 下载队列状态
-  const downloadQueue = ref<DownloadTask[]>([])
-  const activeDownloads = ref<DownloadTask[]>([])
-  const completedDownloads = ref<DownloadTask[]>([])
-  const failedDownloads = ref<DownloadTask[]>([])
-  const downloadQueueCounts = ref({
-    pending: 0,
-    active: 0,
-    completed: 0,
-    failed: 0
-  })
+  const store = useTransferStore()
 
-  const isDownloadQueuePaused = ref(false)
+  // 下载队列状态（直接引用 store 的 state，保持响应式）
+  const downloadQueue = store.downloadQueue
+  const activeDownloads = store.activeDownloads
+  const completedDownloads = store.completedDownloads
+  const failedDownloads = store.failedDownloads
+  const downloadQueueCounts = store.downloadQueueCounts
+  const isDownloadQueuePaused = store.isDownloadQueuePaused
 
-  // 下载进度数据（使用 Map 存储以便快速查找）
-  const downloadProgressMap = ref<Map<string, {
-    taskId: string
-    fileName: string
-    downloadedBytes: number
-    totalBytes: number
-    percentage: number
-    speed: number
-    eta: number
-    status: 'pending' | 'in_progress' | 'completed' | 'failed'
-    lastUpdate: number
-  }>>(new Map())
+  // 下载进度数据（直接引用 store 的 state）
+  const downloadProgressMap = store.downloadProgressMap
 
   // 批量通知状态
   const pendingDownloadNotifications = ref<Array<{ fileName: string; savePath: string }>>([])
@@ -71,7 +58,7 @@ export function useTransferDownload() {
       ? (data.totalBytes - data.downloadedBytes) / data.speed
       : Infinity
 
-    downloadProgressMap.value.set(data.taskId, {
+    downloadProgressMap.set(data.taskId, {
       taskId: data.taskId,
       fileName: data.fileName,
       downloadedBytes: data.downloadedBytes,
@@ -84,44 +71,26 @@ export function useTransferDownload() {
     })
   }, PROGRESS_UPDATE_THROTTLE_MS)
 
-  // 获取所有进行中的下载进度
-  const activeDownloadProgress = computed(() => {
-    return Array.from(downloadProgressMap.value.values())
-      .filter(p => p.status === 'in_progress')
-      .sort((a, b) => b.lastUpdate - a.lastUpdate) // 按更新时间排序
-  })
+  // 获取所有进行中的下载进度（直接引用 store 的 getters）
+  const activeDownloadProgress = computed(() => store.activeDownloadProgress)
 
-  // 获取总下载速度
-  const totalDownloadSpeed = computed(() => {
-    const progressArray = Array.from(downloadProgressMap.value.values())
-    return progressArray
-      .filter(p => p.status === 'in_progress')
-      .reduce((sum, p) => sum + p.speed, 0)
-  })
+  // 获取总下载速度（直接引用 store 的 getters）
+  const totalDownloadSpeed = computed(() => store.totalDownloadSpeed)
 
-  // 获取总下载进度百分比
-  const totalDownloadProgress = computed(() => {
-    const progressArray = Array.from(downloadProgressMap.value.values())
-    if (progressArray.length === 0) return 0
-
-    const totalDownloaded = progressArray.reduce((sum, p) => sum + p.downloadedBytes, 0)
-    const totalSize = progressArray.reduce((sum, p) => sum + p.totalBytes, 0)
-
-    if (totalSize === 0) return 0
-    return Math.round((totalDownloaded / totalSize) * 100)
-  })
+  // 获取总下载进度百分比（直接引用 store 的 getters）
+  const totalDownloadProgress = computed(() => store.totalDownloadProgress)
 
   // 通知函数
   function scheduleDownloadNotification() {
     if (downloadNotifyTimer) clearTimeout(downloadNotifyTimer)
     // 队列中还有活跃或等待中的任务时，延长等待
-    const hasRemaining = activeDownloads.value.length > 0 || downloadQueue.value.length > 0
+    const hasRemaining = activeDownloads.length > 0 || downloadQueue.length > 0
     if (!hasRemaining) {
       flushDownloadNotifications()
       return
     }
     downloadNotifyTimer = setTimeout(() => {
-      if (activeDownloads.value.length > 0 || downloadQueue.value.length > 0) {
+      if (activeDownloads.length > 0 || downloadQueue.length > 0) {
         scheduleDownloadNotification()
         return
       }
@@ -189,16 +158,16 @@ export function useTransferDownload() {
   }
 
   function applyDownloadQueueState(state: any) {
-    downloadQueue.value = state.pending || []
-    activeDownloads.value = state.active || []
-    completedDownloads.value = state.completed || []
-    failedDownloads.value = state.failed || []
-    downloadQueueCounts.value = state.counts || {
-      pending: downloadQueue.value.length,
-      active: activeDownloads.value.length,
-      completed: completedDownloads.value.length,
-      failed: failedDownloads.value.length
-    }
+    store.setDownloadQueue(state.pending || [])
+    store.setActiveDownloads(state.active || [])
+    store.setCompletedDownloads(state.completed || [])
+    store.setFailedDownloads(state.failed || [])
+    store.setDownloadQueueCounts(state.counts || {
+      pending: downloadQueue.length,
+      active: activeDownloads.length,
+      completed: completedDownloads.length,
+      failed: failedDownloads.length
+    })
   }
 
   // 初始化下载队列（应用启动时调用）
@@ -243,7 +212,7 @@ export function useTransferDownload() {
         savePath,
         userId,
         userToken,
-        priority: downloadQueue.value.length
+        priority: downloadQueue.length
       })
 
       console.log('[useTransferDownload.queueDownload] IPC 返回:', result)
@@ -273,7 +242,7 @@ export function useTransferDownload() {
     try {
       const result = await transferRendererService.pauseDownloadQueue()
       if (result?.success) {
-        isDownloadQueuePaused.value = true
+        store.setDownloadQueuePaused(true)
       }
       return result || { success: false, error: '暂停队列功能未实现' }
     } catch (error: any) {
@@ -289,7 +258,7 @@ export function useTransferDownload() {
     try {
       const result = await transferRendererService.resumeDownloadQueue()
       if (result?.success) {
-        isDownloadQueuePaused.value = false
+        store.setDownloadQueuePaused(false)
       }
       return result || { success: false, error: '恢复队列功能未实现' }
     } catch (error: any) {
@@ -368,7 +337,7 @@ export function useTransferDownload() {
     setTimeout(() => notifiedDownloadTaskIds.delete(data.taskId), 10000)
 
     // 更新进度Map
-    const progress = downloadProgressMap.value.get(data.taskId)
+    const progress = downloadProgressMap.get(data.taskId)
     if (progress) {
       progress.status = 'completed'
       progress.percentage = 100
@@ -381,7 +350,7 @@ export function useTransferDownload() {
 
     // 延迟清理已完成任务的进度数据（5秒后删除）
     setTimeout(() => {
-      downloadProgressMap.value.delete(data.taskId)
+      downloadProgressMap.delete(data.taskId)
     }, COMPLETED_TASK_CLEANUP_DELAY_MS)
 
     // 批量合并下载完成通知
@@ -398,7 +367,7 @@ export function useTransferDownload() {
     }
 
     // 清理进度数据
-    downloadProgressMap.value.delete(data.taskId)
+    downloadProgressMap.delete(data.taskId)
 
     // 批量合并失败通知
     pendingDownloadFailNotifications.value.push(data.fileName)
@@ -415,13 +384,13 @@ export function useTransferDownload() {
     }
 
     // 清理进度数据
-    downloadProgressMap.value.delete(data.taskId.toString())
+    downloadProgressMap.delete(data.taskId.toString())
   }
 
   // 认证失败处理：Alist token 过期时显示一次性通知
   const downloadAuthFailedHandler = (data: { error: string } | undefined) => {
     if (!data) return
-    isDownloadQueuePaused.value = true
+    store.setDownloadQueuePaused(true)
     ElNotification.error({
       title: 'Alist 认证失效',
       message: data.error,

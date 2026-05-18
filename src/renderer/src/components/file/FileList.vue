@@ -4,6 +4,7 @@ import { ElCheckbox, ElButton, ElInput, ElMessage, ElEmpty } from 'element-plus'
 import { CaretBottom, CaretTop, Download } from '@element-plus/icons-vue'
 import { useFileStore } from '@/features/file'
 import { useTransferStore } from '@/features/transfer'
+import { useTransferDownload } from '@/features/transfer/composables/useTransferDownload'
 import { useAuthStore } from '@/features/auth'
 import FileIcon from './FileIcon.vue'
 import DownloadDialog from '../download/DownloadDialog.vue'
@@ -13,6 +14,7 @@ import type { FileItem } from '../../../../shared/types/electron'
 
 const fileStore = useFileStore()
 const transferStore = useTransferStore()
+const { queueDownload, downloadWithSaveAs } = useTransferDownload()
 const authStore = useAuthStore()
 
 // 右键菜单状态
@@ -131,7 +133,7 @@ async function handleDownload(file: FileItem) {
   ElMessage.info(`正在添加到下载队列: ${file.name}`)
 
   try {
-    const result = await transferStore.queueDownload(remotePath, file.name)
+    const result = await queueDownload(remotePath, file.name)
     if (result?.success) {
       ElMessage.success(`已添加到下载队列: ${file.name}`)
       // 成功后保留标记，等定时器自动清理（防止快速重复添加）
@@ -216,7 +218,7 @@ async function handleContextMenuSelect(key: string) {
       break
 
     case 'saveAs':
-      await transferStore.downloadWithSaveAs(
+      await downloadWithSaveAs(
         remotePath,
         file.name,
         authStore.user.id,

@@ -194,10 +194,18 @@ import { computed, ref, watch } from 'vue'
 import { ElCard, ElTabs, ElTabPane, ElProgress, ElEmpty, ElButton, ElIcon, ElTag, ElText, ElSpace, ElNotification, ElPagination } from 'element-plus'
 import { Clock, Download, Check, CircleClose } from '@element-plus/icons-vue'
 import { useTransferStore } from '@/features/transfer'
+import { useTransferDownload } from '@/features/transfer/composables/useTransferDownload'
 import { formatFileSizePrecise as formatBytes, formatSpeedPrecise as formatSpeed } from '@/utils/formatters'
 import { openFileDirectory } from '@/utils/openFileDirectory'
 
 const transferStore = useTransferStore()
+const {
+  pauseDownloadQueue,
+  resumeDownloadQueue,
+  clearDownloadQueue,
+  clearPendingQueue,
+  clearActiveQueue
+} = useTransferDownload()
 
 const downloadQueue = computed(() => transferStore.downloadQueue)
 const activeDownloads = computed(() => transferStore.activeDownloads)
@@ -248,7 +256,7 @@ function getTaskSpeed(taskId: string): number {
 }
 
 async function handlePauseQueue() {
-  const result = await transferStore.pauseDownloadQueue()
+  const result = await pauseDownloadQueue()
   if (result.success) {
     ElNotification.success({
       title: '队列已暂停',
@@ -263,7 +271,7 @@ async function handlePauseQueue() {
 }
 
 async function handleResumeQueue() {
-  const result = await transferStore.resumeDownloadQueue()
+  const result = await resumeDownloadQueue()
   if (result.success) {
     ElNotification.success({
       title: '队列已恢复',
@@ -280,7 +288,7 @@ async function handleResumeQueue() {
 async function handleClearQueue() {
   const completedCount = completedDownloadCount.value
   const failedCount = failedDownloadCount.value
-  const result = await transferStore.clearDownloadQueue()
+  const result = await clearDownloadQueue()
   if (result.success) {
     ElNotification.success({
       title: '队列已清空',
@@ -295,7 +303,7 @@ async function handleClearQueue() {
 }
 
 async function handleClearPendingQueue() {
-  const result = await transferStore.clearPendingQueue()
+  const result = await clearPendingQueue()
   if (result.success) {
     ElNotification.success({ title: '已清空', message: '等待中的任务已全部取消' })
   } else {
@@ -304,7 +312,7 @@ async function handleClearPendingQueue() {
 }
 
 async function handleClearActiveQueue() {
-  const result = await transferStore.clearActiveQueue()
+  const result = await clearActiveQueue()
   if (result.success) {
     ElNotification.success({ title: '已清空', message: '下载中的任务已全部取消' })
   } else {

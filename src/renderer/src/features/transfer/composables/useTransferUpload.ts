@@ -3,31 +3,26 @@ import { ElNotification } from 'element-plus'
 import { useQuotaStore } from '@/features/quota'
 import { isNotificationsEnabled } from './useTransferCommon'
 import { transferRendererService } from '../transfer.renderer.service'
+import { useTransferStore } from '../stores/transferStore'
 import type { UploadTask, QueueStatus } from '../stores/transferStore'
 
 export function useTransferUpload() {
-  // State
-  const uploadQueue = ref<UploadTask[]>([])
-  const isUploading = ref<boolean>(false)
-  const uploadError = ref<string | null>(null)
-  const queueStatus = ref<QueueStatus>({ active: 0, pending: 0, maxConcurrent: 5 })
+  const store = useTransferStore()
+
+  // State（直接引用 store 的 state，保持响应式）
+  const uploadQueue = store.uploadQueue
+  const isUploading = store.isUploading
+  const uploadError = store.uploadError
+  const queueStatus = store.queueStatus
 
   // 批量通知状态
   const pendingUploadNotifications = ref<string[]>([])
   let uploadNotifyTimer: ReturnType<typeof setTimeout> | null = null
 
-  // Getters
-  const pendingUploads = computed(() =>
-    uploadQueue.value.filter(t => t.status === 'pending')
-  )
-
-  const activeUploads = computed(() =>
-    uploadQueue.value.filter(t => t.status === 'in_progress')
-  )
-
-  const completedUploads = computed(() =>
-    uploadQueue.value.filter(t => t.status === 'completed')
-  )
+  // Getters（直接引用 store 的 getters）
+  const pendingUploads = computed(() => store.pendingUploads)
+  const activeUploads = computed(() => store.activeUploads)
+  const completedUploads = computed(() => store.completedUploads)
 
   // 通知函数
   function flushUploadNotifications() {
@@ -60,7 +55,7 @@ export function useTransferUpload() {
       resumable: true  // 所有上传任务默认支持断点续传
     }))
 
-    uploadQueue.value.push(...tasks)
+    store.setUploadTasks([...uploadQueue, ...tasks])
   }
 
   function addPathsToUploadQueue(paths: string[], targetPath: string = '/') {
@@ -80,26 +75,23 @@ export function useTransferUpload() {
       lastTransferredSize: 0,
       resumable: true  // 所有上传任务默认支持断点续传
     }))
-    uploadQueue.value.push(...tasks)
+    store.setUploadTasks([...uploadQueue, ...tasks])
   }
 
   function removeFromQueue(taskId: string | number) {
-    const index = uploadQueue.value.findIndex(t => t.id === taskId)
-    if (index !== -1) {
-      uploadQueue.value.splice(index, 1)
-    }
+    store.removeUploadTask(taskId)
   }
 
   function clearCompleted() {
-    uploadQueue.value = uploadQueue.value.filter(t => t.status !== 'completed')
+    store.setUploadTasks(uploadQueue.filter(t => t.status !== 'completed'))
   }
 
   async function startUpload(taskId: string, userId: number, userToken: string, username: string) {
-    const task = uploadQueue.value.find(t => t.id === taskId)
+    const task = uploadQueue.find(t => t.id === taskId || String(t.id) === String(taskId))
     if (!task) return
 
-    task.status = 'pending'
-    uploadError.value = null
+    store.updateUploadTaskStatus(taskId, 'pending')
+    store.setUploadError(null)
 
     try {
       // 使用队列管理器而不是直接上传
@@ -114,9 +106,11 @@ export function useTransferUpload() {
         fileSize: task.fileSize
       })
     } catch (error: any) {
-      task.status = 'failed'
-      task.error = error.message || '添加到队列失败'
-      uploadError.value = error.message || '添加到队列失败'
+      store.updateUploadTaskStatus(taskId, 'failed')
+      // 需要更新 error 字段，但 store 没有专门的 setter，这里直接修改
+      const t = uploadQueue.find(t => t.id === taskId || String(t.id) === String(taskId))
+      if (t) t.error = error.message || '添加到队列失败'
+      store.setUploadError(error.message || '添加到队列失败')
     }
   }
 
@@ -132,13 +126,13 @@ export function useTransferUpload() {
   async function fetchQueueStatus() {
     const status = await transferRendererService.getQueueStatus() as QueueStatus | null
     if (status) {
-      queueStatus.value = status
+      store.setUploadQueueStatus(status)
     }
   }
 
   // 进度更新处理函数
   const progressHandler = (data: { taskId: string | number, progress: number, transferredSize?: number }) => {
-    const task = uploadQueue.value.find(t => t.id === data.taskId || String(t.id) === String(data.taskId))
+    const task = uploadQueue.find(t => t.id === data.taskId || String(t.id) === String(data.taskId))
     if (!task) return
 
     const now = Date.now()
@@ -165,7 +159,7 @@ export function useTransferUpload() {
     }
 
     // 更新进度
-    task.progress = data.progress
+    store.updateUploadTaskProgress(data.taskId, data.progress)
     task.transferredSize = newTransferredSize
     task.lastUpdateTime = now
     task.lastTransferredSize = newTransferredSize
@@ -176,10 +170,10 @@ export function useTransferUpload() {
 
   // 任务完成处理函数
   const completedHandler = (data: { taskId: string | number, fileName: string }) => {
-    const task = uploadQueue.value.find(t => t.id === data.taskId || String(t.id) === String(data.taskId))
+    const task = uploadQueue.find(t => t.id === data.taskId || String(t.id) === String(data.taskId))
     if (task) {
-      task.status = 'completed'
-      task.progress = 100
+      store.updateUploadTaskStatus(data.taskId, 'completed')
+      store.updateUploadTaskProgress(data.taskId, 100)
       task.transferredSize = task.fileSize
 
       // 计算并更新配额（Story 6.2）
@@ -195,9 +189,10 @@ export function useTransferUpload() {
 
   // 任务失败处理函数
   const failedHandler = (data: { taskId: string | number, fileName: string, error: string }) => {
-    const task = uploadQueue.value.find(t => t.id === data.taskId || String(t.id) === String(data.taskId))
+    const task = uploadQueue.find(t => t.id === data.taskId || String(t.id) === String(data.taskId))
     if (task) {
-      task.status = 'failed'
+      store.updateUploadTaskStatus(data.taskId, 'failed')
+      // 需要更新 error 字段，直接修改
       task.error = data.error
       task.resumable = true  // 失败任务可恢复
 
@@ -218,9 +213,9 @@ export function useTransferUpload() {
 
   // 任务取消处理函数
   const cancelledHandler = (data: { taskId: string | number, fileName: string }) => {
-    const task = uploadQueue.value.find(t => t.id === data.taskId || String(t.id) === String(data.taskId))
+    const task = uploadQueue.find(t => t.id === data.taskId || String(t.id) === String(data.taskId))
     if (task) {
-      task.status = 'cancelled'
+      store.updateUploadTaskStatus(data.taskId, 'cancelled')
       task.resumable = false  // 已取消任务不可恢复
     }
   }
@@ -239,10 +234,7 @@ export function useTransferUpload() {
       username
     )
     if (result) {
-      const task = uploadQueue.value.find(t => t.id === taskId)
-      if (task) {
-        task.status = 'in_progress'
-      }
+      store.updateUploadTaskStatus(taskId, 'in_progress')
     }
     return result
   }
@@ -252,9 +244,9 @@ export function useTransferUpload() {
     const result = await transferRendererService.autoRetryAll(userId, userToken, username)
     if (result) {
       // 更新所有失败任务的状态为 in_progress
-      const failedTasks = uploadQueue.value.filter(t => t.status === 'failed' && t.resumable)
+      const failedTasks = uploadQueue.filter(t => t.status === 'failed' && t.resumable)
       failedTasks.forEach(task => {
-        task.status = 'in_progress'
+        store.updateUploadTaskStatus(task.id, 'in_progress')
       })
     }
     return result

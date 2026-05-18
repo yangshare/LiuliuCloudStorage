@@ -3,9 +3,11 @@ import { ref } from 'vue'
 import { ElIcon, ElText, ElButton, ElSpace } from 'element-plus'
 import { Upload, Document, FolderOpened } from '@element-plus/icons-vue'
 import { useTransferStore } from '@/features/transfer'
+import { useTransferUpload } from '@/features/transfer/composables/useTransferUpload'
 import { useFileStore } from '@/features/file'
 
 const transferStore = useTransferStore()
+const { addToUploadQueue, addPathsToUploadQueue } = useTransferUpload()
 const fileStore = useFileStore()
 
 const isDragging = ref(false)
@@ -50,7 +52,7 @@ function handleDrop(e: DragEvent) {
 
   const files = e.dataTransfer?.files
   if (files && files.length > 0) {
-    transferStore.addToUploadQueue(Array.from(files), fileStore.currentPath)
+    addToUploadQueue(Array.from(files), fileStore.currentPath)
   }
 }
 
@@ -58,7 +60,7 @@ async function selectFiles() {
   if (!fileStore.isOnline) return
   const result = await window.electronAPI.dialog.openFile()
   if (!result.canceled && result.files?.length) {
-    transferStore.addPathsToUploadQueue(result.files.map(f => f.path), fileStore.currentPath)
+    addPathsToUploadQueue(result.files.map(f => f.path), fileStore.currentPath)
   }
 }
 
@@ -66,7 +68,7 @@ async function selectFolder() {
   if (!fileStore.isOnline) return
   const result = await window.electronAPI.dialog.openFile({ directory: true })
   if (!result.canceled && result.files?.length) {
-    transferStore.addPathsToUploadQueue(result.files.map(f => f.path), fileStore.currentPath)
+    addPathsToUploadQueue(result.files.map(f => f.path), fileStore.currentPath)
   }
 }
 </script>

@@ -1,7 +1,5 @@
 import { defineStore } from 'pinia'
-import { useTransferUpload } from '../composables/useTransferUpload'
-import { useTransferDownload } from '../composables/useTransferDownload'
-import { useTransferCommon } from '../composables/useTransferCommon'
+import { ref, computed } from 'vue'
 
 // ==================== 类型定义 ====================
 
@@ -46,78 +44,198 @@ export interface QueueStatus {
 // ==================== Store 定义 ====================
 
 export const useTransferStore = defineStore('transfer', () => {
-  // 组合三个 feature-based composables
-  const upload = useTransferUpload()
-  const download = useTransferDownload()
-  const common = useTransferCommon()
+  // Upload state
+  const uploadQueue = ref<UploadTask[]>([])
+  const isUploading = ref<boolean>(false)
+  const uploadError = ref<string | null>(null)
+  const queueStatus = ref<QueueStatus>({ active: 0, pending: 0, maxConcurrent: 5 })
 
-  // 清理函数：调用所有 composable 的 cleanup
-  function cleanup() {
-    upload.cleanupUpload()
-    download.cleanupDownload()
-    common.cleanupCommon()
+  // Download state
+  const downloadQueue = ref<DownloadTask[]>([])
+  const activeDownloads = ref<DownloadTask[]>([])
+  const completedDownloads = ref<DownloadTask[]>([])
+  const failedDownloads = ref<DownloadTask[]>([])
+  const downloadQueueCounts = ref({
+    pending: 0,
+    active: 0,
+    completed: 0,
+    failed: 0
+  })
+  const isDownloadQueuePaused = ref(false)
+
+  // Common state
+  const isProgressPanelCollapsed = ref<boolean>(
+    localStorage.getItem('liuliu_progress_panel_collapsed') === 'true'
+  )
+  const isOnline = ref(navigator.onLine)
+
+  // Upload getters
+  const pendingUploads = computed(() =>
+    uploadQueue.value.filter(t => t.status === 'pending')
+  )
+
+  const activeUploads = computed(() =>
+    uploadQueue.value.filter(t => t.status === 'in_progress')
+  )
+
+  const completedUploads = computed(() =>
+    uploadQueue.value.filter(t => t.status === 'completed')
+  )
+
+  // Download progress data（使用 Map 存储以便快速查找）
+  const downloadProgressMap = ref<Map<string, {
+    taskId: string
+    fileName: string
+    downloadedBytes: number
+    totalBytes: number
+    percentage: number
+    speed: number
+    eta: number
+    status: 'pending' | 'in_progress' | 'completed' | 'failed'
+    lastUpdate: number
+  }>>(new Map())
+
+  // Download getters
+  const activeDownloadProgress = computed(() => {
+    return Array.from(downloadProgressMap.value.values())
+      .filter(p => p.status === 'in_progress')
+      .sort((a, b) => b.lastUpdate - a.lastUpdate)
+  })
+
+  const totalDownloadSpeed = computed(() => {
+    const progressArray = Array.from(downloadProgressMap.value.values())
+    return progressArray
+      .filter(p => p.status === 'in_progress')
+      .reduce((sum, p) => sum + p.speed, 0)
+  })
+
+  const totalDownloadProgress = computed(() => {
+    const progressArray = Array.from(downloadProgressMap.value.values())
+    if (progressArray.length === 0) return 0
+
+    const totalDownloaded = progressArray.reduce((sum, p) => sum + p.downloadedBytes, 0)
+    const totalSize = progressArray.reduce((sum, p) => sum + p.totalBytes, 0)
+
+    if (totalSize === 0) return 0
+    return Math.round((totalDownloaded / totalSize) * 100)
+  })
+
+  // ===== Setters（供 composables 使用） =====
+
+  function setUploadTasks(tasks: UploadTask[]) {
+    uploadQueue.value = tasks
+  }
+
+  function updateUploadTaskProgress(taskId: string | number, progress: number) {
+    const task = uploadQueue.value.find(t => t.id === taskId || String(t.id) === String(taskId))
+    if (task) task.progress = progress
+  }
+
+  function updateUploadTaskStatus(taskId: string | number, status: UploadTask['status']) {
+    const task = uploadQueue.value.find(t => t.id === taskId || String(t.id) === String(taskId))
+    if (task) task.status = status
+  }
+
+  function removeUploadTask(taskId: string | number) {
+    const index = uploadQueue.value.findIndex(t => t.id === taskId || String(t.id) === String(taskId))
+    if (index !== -1) uploadQueue.value.splice(index, 1)
+  }
+
+  function setUploadQueueStatus(status: QueueStatus) {
+    queueStatus.value = status
+  }
+
+  function setIsUploading(value: boolean) {
+    isUploading.value = value
+  }
+
+  function setUploadError(error: string | null) {
+    uploadError.value = error
+  }
+
+  function setDownloadQueue(tasks: DownloadTask[]) {
+    downloadQueue.value = tasks
+  }
+
+  function setActiveDownloads(tasks: DownloadTask[]) {
+    activeDownloads.value = tasks
+  }
+
+  function setCompletedDownloads(tasks: DownloadTask[]) {
+    completedDownloads.value = tasks
+  }
+
+  function setFailedDownloads(tasks: DownloadTask[]) {
+    failedDownloads.value = tasks
+  }
+
+  function setDownloadQueueCounts(counts: { pending: number; active: number; completed: number; failed: number }) {
+    downloadQueueCounts.value = counts
+  }
+
+  function setDownloadQueuePaused(paused: boolean) {
+    isDownloadQueuePaused.value = paused
+  }
+
+  function setDownloadProgressMap(map: Map<string, any>) {
+    downloadProgressMap.value = map
+  }
+
+  function setIsOnline(online: boolean) {
+    isOnline.value = online
+  }
+
+  function toggleProgressPanel() {
+    isProgressPanelCollapsed.value = !isProgressPanelCollapsed.value
+    localStorage.setItem('liuliu_progress_panel_collapsed', String(isProgressPanelCollapsed.value))
   }
 
   return {
     // Upload state
-    uploadQueue: upload.uploadQueue,
-    isUploading: upload.isUploading,
-    uploadError: upload.uploadError,
-    queueStatus: upload.queueStatus,
+    uploadQueue,
+    isUploading,
+    uploadError,
+    queueStatus,
 
     // Download state
-    downloadQueue: download.downloadQueue,
-    activeDownloads: download.activeDownloads,
-    completedDownloads: download.completedDownloads,
-    failedDownloads: download.failedDownloads,
-    downloadQueueCounts: download.downloadQueueCounts,
-    isDownloadQueuePaused: download.isDownloadQueuePaused,
+    downloadQueue,
+    activeDownloads,
+    completedDownloads,
+    failedDownloads,
+    downloadQueueCounts,
+    isDownloadQueuePaused,
 
     // Common state
-    isProgressPanelCollapsed: common.isProgressPanelCollapsed,
-    isOnline: common.isOnline,
+    isProgressPanelCollapsed,
+    isOnline,
 
     // Upload getters
-    pendingUploads: upload.pendingUploads,
-    activeUploads: upload.activeUploads,
-    completedUploads: upload.completedUploads,
+    pendingUploads,
+    activeUploads,
+    completedUploads,
 
     // Download getters
-    downloadProgressMap: download.downloadProgressMap,
-    activeDownloadProgress: download.activeDownloadProgress,
-    totalDownloadSpeed: download.totalDownloadSpeed,
-    totalDownloadProgress: download.totalDownloadProgress,
+    downloadProgressMap,
+    activeDownloadProgress,
+    totalDownloadSpeed,
+    totalDownloadProgress,
 
-    // Upload actions
-    addToUploadQueue: upload.addToUploadQueue,
-    addPathsToUploadQueue: upload.addPathsToUploadQueue,
-    removeFromQueue: upload.removeFromQueue,
-    clearCompleted: upload.clearCompleted,
-    startUpload: upload.startUpload,
-    processQueue: upload.processQueue,
-    fetchQueueStatus: upload.fetchQueueStatus,
-    resumeUpload: upload.resumeUpload,
-    autoRetryFailedTasks: upload.autoRetryFailedTasks,
-
-    // Download actions
-    initDownloadQueue: download.initDownloadQueue,
-    queueDownload: download.queueDownload,
-    batchQueueDownload: download.batchQueueDownload,
-    pauseDownloadQueue: download.pauseDownloadQueue,
-    resumeDownloadQueue: download.resumeDownloadQueue,
-    clearDownloadQueue: download.clearDownloadQueue,
-    clearPendingQueue: download.clearPendingQueue,
-    clearActiveQueue: download.clearActiveQueue,
-    fetchDownloadQueueState: download.fetchDownloadQueueState,
-    downloadWithSaveAs: download.downloadWithSaveAs,
-    resumeDownload: download.resumeDownload,
-    cancelDownload: download.cancelDownload,
-    cancelAllDownloads: download.cancelAllDownloads,
-
-    // Common actions
-    toggleProgressPanel: common.toggleProgressPanel,
-
-    // Cleanup
-    cleanup
+    // Setters
+    setUploadTasks,
+    updateUploadTaskProgress,
+    updateUploadTaskStatus,
+    removeUploadTask,
+    setUploadQueueStatus,
+    setIsUploading,
+    setUploadError,
+    setDownloadQueue,
+    setActiveDownloads,
+    setCompletedDownloads,
+    setFailedDownloads,
+    setDownloadQueueCounts,
+    setDownloadQueuePaused,
+    setDownloadProgressMap,
+    setIsOnline,
+    toggleProgressPanel
   }
 })

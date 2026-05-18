@@ -4,9 +4,11 @@ import { ElText, ElButton, ElIcon, ElDialog, ElSpace, ElMessage, ElInput } from 
 import { Download, Delete, Refresh, Search } from '@element-plus/icons-vue'
 import { useFileStore } from '@/features/file'
 import { useTransferStore } from '@/features/transfer'
+import { useTransferDownload } from '@/features/transfer/composables/useTransferDownload'
 
 const fileStore = useFileStore()
 const transferStore = useTransferStore()
+const { batchQueueDownload } = useTransferDownload()
 
 // 删除确认对话框状态
 const showDeleteConfirm = ref(false)
@@ -74,7 +76,7 @@ async function handleBatchDownload() {
   ElMessage.info(`正在添加 ${totalFiles} 个文件到下载队列...`)
 
   // 使用批量入队：先立即显示在等待列表，再分批获取下载链接
-  const result = await transferStore.batchQueueDownload(filePaths)
+  const result = await batchQueueDownload(filePaths)
   successCount = result.successCount ?? 0
   failedCount = (result.failedCount ?? 0) + failedCount
 

@@ -66,6 +66,10 @@ export function registerTransferHandlers(): void {
     return handleIPC(async () => {
       queueService.setDownloadCredentials(userId, userToken)
       const restoredCount = await queueService.restoreDownloadQueue(userId, userToken)
+      const { downloadQueueManager } = await import('../../services/DownloadQueueManager')
+      downloadQueueManager.setProgressCallback((data: any) => {
+        _event.sender.send('transfer:download-progress', data)
+      })
       return { restoredCount }
     })
   })

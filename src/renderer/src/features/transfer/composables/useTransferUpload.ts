@@ -2,6 +2,7 @@ import { ref, computed } from 'vue'
 import { ElNotification } from 'element-plus'
 import { useQuotaStore } from '@/features/quota'
 import { isNotificationsEnabled } from './useTransferCommon'
+import { transferRendererService } from '../transfer.renderer.service'
 import type { UploadTask, QueueStatus } from '../stores/transferStore'
 
 export function useTransferUpload() {
@@ -102,7 +103,7 @@ export function useTransferUpload() {
 
     try {
       // 使用队列管理器而不是直接上传
-      await window.electronAPI.transfer.addToQueue({
+      await transferRendererService.addToQueue({
         id: typeof task.id === 'number' ? task.id : parseInt(task.id as string) || 0,
         filePath: task.filePath,
         remotePath: task.targetPath,
@@ -129,8 +130,9 @@ export function useTransferUpload() {
 
   // 获取队列状态
   async function fetchQueueStatus() {
-    if (window.electronAPI?.transfer?.getQueueStatus) {
-      queueStatus.value = await window.electronAPI.transfer.getQueueStatus()
+    const status = await transferRendererService.getQueueStatus() as QueueStatus | null
+    if (status) {
+      queueStatus.value = status
     }
   }
 
@@ -170,9 +172,7 @@ export function useTransferUpload() {
   }
 
   // 注册进度监听器
-  if (typeof window !== 'undefined' && window.electronAPI?.transfer?.onProgress) {
-    window.electronAPI.transfer.onProgress(progressHandler)
-  }
+  transferRendererService.onProgress(progressHandler)
 
   // 任务完成处理函数
   const completedHandler = (data: { taskId: string | number, fileName: string }) => {
@@ -226,71 +226,47 @@ export function useTransferUpload() {
   }
 
   // 注册完成、失败和取消监听器
-  if (typeof window !== 'undefined' && window.electronAPI?.transfer?.onCompleted) {
-    window.electronAPI.transfer.onCompleted(completedHandler)
-  }
-
-  if (typeof window !== 'undefined' && window.electronAPI?.transfer?.onFailed) {
-    window.electronAPI.transfer.onFailed(failedHandler)
-  }
-
-  if (typeof window !== 'undefined' && window.electronAPI?.transfer?.onCancelled) {
-    window.electronAPI.transfer.onCancelled(cancelledHandler)
-  }
+  transferRendererService.onCompleted(completedHandler)
+  transferRendererService.onFailed(failedHandler)
+  transferRendererService.onCancelled(cancelledHandler)
 
   // 恢复单个上传任务
   async function resumeUpload(taskId: string | number, userId: number, userToken: string, username: string) {
-    try {
-      const result = await window.electronAPI.transfer.resume(
-        typeof taskId === 'number' ? taskId : parseInt(taskId as string) || 0,
-        userId,
-        userToken,
-        username
-      )
-      if (result?.success) {
-        const task = uploadQueue.value.find(t => t.id === taskId)
-        if (task) {
-          task.status = 'in_progress'
-        }
+    const result = await transferRendererService.resume(
+      typeof taskId === 'number' ? taskId : parseInt(taskId as string) || 0,
+      userId,
+      userToken,
+      username
+    )
+    if (result) {
+      const task = uploadQueue.value.find(t => t.id === taskId)
+      if (task) {
+        task.status = 'in_progress'
       }
-      return result || { success: false, error: '未返回结果' }
-    } catch (error: any) {
-      return { success: false, error: error.message || '恢复任务失败' }
     }
+    return result
   }
 
   // 自动重试所有失败任务
   async function autoRetryFailedTasks(userId: number, userToken: string, username: string) {
-    try {
-      const result = await window.electronAPI.transfer.autoRetryAll(userId, userToken, username)
-      if (result?.success) {
-        // 更新所有失败任务的状态为 in_progress
-        const failedTasks = uploadQueue.value.filter(t => t.status === 'failed' && t.resumable)
-        failedTasks.forEach(task => {
-          task.status = 'in_progress'
-        })
-      }
-      return result || { success: false, error: '未返回结果' }
-    } catch (error: any) {
-      return { success: false, error: error.message || '自动重试失败' }
+    const result = await transferRendererService.autoRetryAll(userId, userToken, username)
+    if (result) {
+      // 更新所有失败任务的状态为 in_progress
+      const failedTasks = uploadQueue.value.filter(t => t.status === 'failed' && t.resumable)
+      failedTasks.forEach(task => {
+        task.status = 'in_progress'
+      })
     }
+    return result
   }
 
   // 清理函数
   function cleanupUpload() {
     // 清理上传监听器
-    if (typeof window !== 'undefined' && window.electronAPI?.transfer?.removeProgressListener) {
-      window.electronAPI.transfer.removeProgressListener(progressHandler)
-    }
-    if (typeof window !== 'undefined' && window.electronAPI?.transfer?.removeCompletedListener) {
-      window.electronAPI.transfer.removeCompletedListener(completedHandler)
-    }
-    if (typeof window !== 'undefined' && window.electronAPI?.transfer?.removeFailedListener) {
-      window.electronAPI.transfer.removeFailedListener(failedHandler)
-    }
-    if (typeof window !== 'undefined' && window.electronAPI?.transfer?.removeCancelledListener) {
-      window.electronAPI.transfer.removeCancelledListener(cancelledHandler)
-    }
+    transferRendererService.removeListener('transfer:progress', progressHandler)
+    transferRendererService.removeListener('transfer:completed', completedHandler)
+    transferRendererService.removeListener('transfer:failed', failedHandler)
+    transferRendererService.removeListener('transfer:cancelled', cancelledHandler)
 
     // 清理通知定时器
     if (uploadNotifyTimer) {

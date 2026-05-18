@@ -2,19 +2,17 @@ import { eq, desc, and, or, inArray, count } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { getDatabase } from '../../database'
 import { transferQueue, type NewTransferQueue, type TransferQueue } from '../../database/schema'
-import { handleIPC } from '../../core/ipc/error-handler'
-import type { TransferTask, TransferStatus, TransferListResult } from '../../../shared/types/transfer'
+import { IPCError, IPCErrorCode } from '../../core/ipc/error-handler'
+import type { TransferTask, TransferStatus } from '../../../shared/types/transfer'
 
 export class TransferService {
   private get db() { return drizzle(getDatabase()) }
 
   // ========== 基础查询 ==========
 
-  async getTasksByUser(userId: number): Promise<TransferListResult> {
-    return handleIPC(async () => {
-      const rows = await this.db.select().from(transferQueue).where(eq(transferQueue.userId, userId)).orderBy(desc(transferQueue.createdAt)).all()
-      return rows.map(r => this.toTransferTask(r))
-    })
+  async getTasksByUser(userId: number): Promise<TransferTask[]> {
+    const rows = await this.db.select().from(transferQueue).where(eq(transferQueue.userId, userId)).orderBy(desc(transferQueue.createdAt)).all()
+    return rows.map(r => this.toTransferTask(r))
   }
 
   async getTask(taskId: number): Promise<TransferQueue | undefined> {
@@ -341,51 +339,53 @@ export class TransferService {
     },
     onProgress?: (data: { taskId: string; progress: number; transferredSize: number }) => void
   ) {
-    return handleIPC(async () => {
-      const { alistService } = await import('../../services/AlistService')
-      const { orchestrationService } = await import('../../services/OrchestrationService')
-      const fs = await import('fs')
-      const path = await import('path')
+    const { alistService } = await import('../../services/AlistService')
+    const { orchestrationService } = await import('../../services/OrchestrationService')
+    const fs = await import('fs')
+    const path = await import('path')
 
-      alistService.setToken(params.userToken)
-      alistService.setBasePath('/alist/')
-      alistService.setUserId(params.userId)
+    if (!fs.existsSync(params.filePath)) {
+      throw new IPCError('文件不存在', IPCErrorCode.NOT_FOUND)
+    }
 
-      const fileStats = fs.statSync(params.filePath)
-      const fileName = path.basename(params.filePath)
+    alistService.setToken(params.userToken)
+    alistService.setBasePath('/alist/')
+    alistService.setUserId(params.userId)
 
-      const uploadResult = await alistService.uploadFile(params.filePath, params.remotePath)
-      if (!uploadResult.success) {
-        throw new Error(uploadResult.error || '上传失败')
-      }
+    const fileStats = fs.statSync(params.filePath)
+    const fileName = path.basename(params.filePath)
 
-      let lastProgress = 0
-      const success = await orchestrationService.waitForTaskCompletion(
-        uploadResult.taskId!,
-        (progress) => {
-          if (progress !== lastProgress && onProgress) {
-            const transferredSize = Math.floor((fileStats.size * progress) / 100)
-            onProgress({
-              taskId: params.localTaskId,
-              progress,
-              transferredSize
-            })
-            lastProgress = progress
-          }
-        }
-      )
+    const uploadResult = await alistService.uploadFile(params.filePath, params.remotePath)
+    if (!uploadResult.success) {
+      throw new IPCError(uploadResult.error || '上传失败', IPCErrorCode.NETWORK)
+    }
 
-      return {
-        success,
-        taskId: uploadResult.taskId,
-        fileInfo: {
-          fileName,
-          fileSize: fileStats.size,
-          remotePath: `${alistService.getBasePath()}${params.remotePath}`,
-          uploadedAt: new Date().toISOString()
+    let lastProgress = 0
+    const success = await orchestrationService.waitForTaskCompletion(
+      uploadResult.taskId!,
+      (progress) => {
+        if (progress !== lastProgress && onProgress) {
+          const transferredSize = Math.floor((fileStats.size * progress) / 100)
+          onProgress({
+            taskId: params.localTaskId,
+            progress,
+            transferredSize
+          })
+          lastProgress = progress
         }
       }
-    })
+    )
+
+    return {
+      success,
+      taskId: uploadResult.taskId,
+      fileInfo: {
+        fileName,
+        fileSize: fileStats.size,
+        remotePath: `${alistService.getBasePath()}${params.remotePath}`,
+        uploadedAt: new Date().toISOString()
+      }
+    }
   }
 
   async downloadFile(
@@ -407,96 +407,92 @@ export class TransferService {
     onCompleted?: (data: { taskId: string; fileName: string; savePath: string }) => void,
     onFailed?: (data: { taskId: string; fileName: string; error: string }) => void
   ) {
-    return handleIPC(async () => {
-      const { alistService } = await import('../../services/AlistService')
-      const { DownloadManager } = await import('../../services/DownloadManager')
-      const path = await import('path')
+    const { alistService } = await import('../../services/AlistService')
+    const { DownloadManager } = await import('../../services/DownloadManager')
+    const path = await import('path')
 
-      alistService.setToken(params.userToken)
-      alistService.setBasePath('/alist/')
-      alistService.setUserId(params.userId)
+    alistService.setToken(params.userToken)
+    alistService.setBasePath('/alist/')
+    alistService.setUserId(params.userId)
 
-      const downloadResult = await alistService.getDownloadUrl(params.remotePath)
-      if (!downloadResult.success) {
-        throw new Error(downloadResult.error || '获取下载链接失败')
+    const downloadResult = await alistService.getDownloadUrl(params.remotePath)
+    if (!downloadResult.success) {
+      throw new IPCError(downloadResult.error || '获取下载链接失败', IPCErrorCode.NETWORK)
+    }
+
+    const downloadManager = new DownloadManager()
+    const savePath = params.savePath || path.join(downloadManager.getDefaultDownloadPath(), params.fileName)
+    const taskId = `download_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+    downloadManager.startDownload({
+      id: taskId,
+      url: downloadResult.rawUrl!,
+      savePath,
+      fileName: downloadResult.fileName!,
+      fileSize: downloadResult.fileSize!,
+      userId: params.userId,
+      userToken: params.userToken,
+      remotePath: params.remotePath
+    }, (progress) => {
+      if (onProgress) {
+        onProgress({
+          taskId,
+          fileName: downloadResult.fileName!,
+          progress: progress.percentage,
+          downloadedBytes: progress.downloadedBytes,
+          totalBytes: progress.totalBytes,
+          speed: progress.speed
+        })
       }
-
-      const downloadManager = new DownloadManager()
-      const savePath = params.savePath || path.join(downloadManager.getDefaultDownloadPath(), params.fileName)
-      const taskId = `download_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-
-      downloadManager.startDownload({
-        id: taskId,
-        url: downloadResult.rawUrl!,
-        savePath,
-        fileName: downloadResult.fileName!,
-        fileSize: downloadResult.fileSize!,
-        userId: params.userId,
-        userToken: params.userToken,
-        remotePath: params.remotePath
-      }, (progress) => {
-        if (onProgress) {
-          onProgress({
-            taskId,
-            fileName: downloadResult.fileName!,
-            progress: progress.percentage,
-            downloadedBytes: progress.downloadedBytes,
-            totalBytes: progress.totalBytes,
-            speed: progress.speed
-          })
-        }
-      }).then((actualSavePath) => {
-        if (onCompleted) {
-          onCompleted({
-            taskId,
-            fileName: downloadResult.fileName!,
-            savePath: actualSavePath
-          })
-        }
-      }).catch((error) => {
-        if (onFailed) {
-          onFailed({
-            taskId,
-            fileName: downloadResult.fileName!,
-            error: error.message
-          })
-        }
-      })
-
-      return { success: true, taskId, savePath }
+    }).then((actualSavePath) => {
+      if (onCompleted) {
+        onCompleted({
+          taskId,
+          fileName: downloadResult.fileName!,
+          savePath: actualSavePath
+        })
+      }
+    }).catch((error) => {
+      if (onFailed) {
+        onFailed({
+          taskId,
+          fileName: downloadResult.fileName!,
+          error: error.message
+        })
+      }
     })
+
+    return { success: true, taskId, savePath }
   }
 
   async saveAs(fileName: string, userId: number) {
-    return handleIPC(async () => {
-      const { dialog } = await import('electron')
-      const { DownloadManager } = await import('../../services/DownloadManager')
-      const { preferencesService } = await import('../../services/PreferencesService')
-      const path = await import('path')
+    const { dialog } = await import('electron')
+    const { DownloadManager } = await import('../../services/DownloadManager')
+    const { preferencesService } = await import('../../services/PreferencesService')
+    const path = await import('path')
 
-      const downloadManager = new DownloadManager()
-      const lastPath = preferencesService.getLastDownloadPath(userId)
-      const defaultPath = lastPath
-        ? path.join(lastPath, fileName)
-        : path.join(downloadManager.getDefaultDownloadPath(), fileName)
+    const downloadManager = new DownloadManager()
+    const lastPath = preferencesService.getLastDownloadPath(userId)
+    const defaultPath = lastPath
+      ? path.join(lastPath, fileName)
+      : path.join(downloadManager.getDefaultDownloadPath(), fileName)
 
-      const result = await dialog.showSaveDialog({
-        title: '选择下载保存位置',
-        defaultPath,
-        buttonLabel: '保存',
-        filters: [{ name: 'All Files', extensions: ['*'] }],
-        properties: ['createDirectory']
-      })
-
-      if (result.canceled || !result.filePath) {
-        return { success: false, canceled: true }
-      }
-
-      const selectedDir = path.dirname(result.filePath)
-      preferencesService.saveLastDownloadPath(userId, selectedDir)
-
-      return { success: true, savePath: result.filePath }
+    const result = await dialog.showSaveDialog({
+      title: '选择下载保存位置',
+      defaultPath,
+      buttonLabel: '保存',
+      filters: [{ name: 'All Files', extensions: ['*'] }],
+      properties: ['createDirectory']
     })
+
+    if (result.canceled || !result.filePath) {
+      return { success: false, canceled: true }
+    }
+
+    const selectedDir = path.dirname(result.filePath)
+    preferencesService.saveLastDownloadPath(userId, selectedDir)
+
+    return { success: true, savePath: result.filePath }
   }
 
   async resumeDownload(
@@ -510,33 +506,35 @@ export class TransferService {
     }) => void,
     onCompleted?: (data: { taskId: string; fileName: string; savePath: string }) => void
   ) {
-    return handleIPC(async () => {
-      const { DownloadManager } = await import('../../services/DownloadManager')
-      const downloadManager = new DownloadManager()
-      const taskInfo = await this.getTask(Number(taskId))
+    const { DownloadManager } = await import('../../services/DownloadManager')
+    const downloadManager = new DownloadManager()
+    const taskInfo = await this.getTask(Number(taskId))
 
-      await downloadManager.resumeDownload(Number(taskId), (progress) => {
-        if (onProgress) {
-          onProgress({
-            taskId,
-            progress: progress.percentage,
-            downloadedBytes: progress.downloadedBytes,
-            totalBytes: progress.totalBytes,
-            speed: progress.speed
-          })
-        }
-      })
+    if (!taskInfo) {
+      throw new IPCError('任务不存在', IPCErrorCode.NOT_FOUND)
+    }
 
-      if (onCompleted) {
-        onCompleted({
+    await downloadManager.resumeDownload(Number(taskId), (progress) => {
+      if (onProgress) {
+        onProgress({
           taskId,
-          fileName: taskInfo?.fileName || '',
-          savePath: taskInfo?.filePath || ''
+          progress: progress.percentage,
+          downloadedBytes: progress.downloadedBytes,
+          totalBytes: progress.totalBytes,
+          speed: progress.speed
         })
       }
-
-      return { success: true }
     })
+
+    if (onCompleted) {
+      onCompleted({
+        taskId,
+        fileName: taskInfo.fileName || '',
+        savePath: taskInfo.filePath || ''
+      })
+    }
+
+    return { success: true }
   }
 
   // ========== 工具方法 ==========

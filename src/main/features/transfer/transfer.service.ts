@@ -376,8 +376,11 @@ export class TransferService {
       }
     )
 
+    if (!success) {
+      throw new IPCError('上传任务执行失败', IPCErrorCode.NETWORK)
+    }
+
     return {
-      success,
       taskId: uploadResult.taskId,
       fileInfo: {
         fileName,
@@ -462,7 +465,7 @@ export class TransferService {
       }
     })
 
-    return { success: true, taskId, savePath }
+    return { taskId, savePath }
   }
 
   async saveAs(fileName: string, userId: number) {
@@ -486,13 +489,13 @@ export class TransferService {
     })
 
     if (result.canceled || !result.filePath) {
-      return { success: false, canceled: true }
+      return null
     }
 
     const selectedDir = path.dirname(result.filePath)
     preferencesService.saveLastDownloadPath(userId, selectedDir)
 
-    return { success: true, savePath: result.filePath }
+    return { filePath: result.filePath }
   }
 
   async resumeDownload(
@@ -534,7 +537,6 @@ export class TransferService {
       })
     }
 
-    return { success: true }
   }
 
   // ========== 工具方法 ==========

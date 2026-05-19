@@ -117,16 +117,55 @@ npx @electron/rebuild -f -w better-sqlite3
 
 ```
 src/
-├── main/           # Electron 主进程
-│   ├── database/   # 数据库 schema 和操作
-│   ├── ipc/        # IPC 处理器
-│   └── services/   # 后端服务
-├── renderer/src/   # Vue 渲染进程
-│   ├── components/ # Vue 组件
-│   ├── views/      # 页面视图
-│   └── stores/     # Pinia 状态管理
-├── preload/        # 预加载脚本
-└── shared/         # 共享类型和常量
+├── main/                       # Electron 主进程
+│   ├── core/                   # 核心基础设施
+│   │   ├── api/                # Alist API 封装
+│   │   ├── cache/              # 缓存服务
+│   │   ├── crypto/             # 加密服务
+│   │   ├── http/               # HTTP 客户端
+│   │   ├── ipc/                # IPC 错误处理
+│   │   ├── logger/             # 日志服务
+│   │   ├── preferences/        # 偏好设置
+│   │   └── utils/              # 路径验证器
+│   ├── database/               # 数据库 schema 和操作
+│   ├── ipc/                    # IPC 处理器注册入口
+│   ├── features/               # 15 个业务功能模块
+│   │   ├── auth/               # 认证与会话
+│   │   ├── file/               # 文件操作
+│   │   ├── transfer/           # 传输与队列
+│   │   ├── shareTransfer/      # 分享转存
+│   │   ├── autoSync/           # 自动同步
+│   │   ├── quota/              # 配额管理
+│   │   ├── activity/           # 活动日志
+│   │   ├── downloadConfig/     # 下载配置
+│   │   ├── dialog/             # 系统对话框
+│   │   ├── tray/               # 系统托盘
+│   │   ├── notification/       # 系统通知
+│   │   ├── app/                # 应用生命周期
+│   │   ├── cache/              # 缓存 IPC
+│   │   ├── config/             # 应用配置
+│   │   └── update/             # 自动更新
+│   └── utils/                  # 简单优先队列
+├── renderer/src/               # Vue 渲染进程
+│   ├── core/composables/       # 通用组合式函数
+│   ├── features/               # 功能模块（stores + composables）
+│   │   ├── auth/               # 认证状态
+│   │   ├── file/               # 文件浏览状态
+│   │   ├── transfer/           # 转存任务状态
+│   │   ├── quota/              # 配额管理状态
+│   │   ├── autoSync/           # 自动同步状态
+│   │   ├── downloadConfig/     # 下载配置状态
+│   │   └── update/             # 应用更新状态
+│   ├── services/               # 前端跨模块服务
+│   ├── views/                  # 页面视图
+│   ├── components/             # Vue 组件
+│   ├── router/                 # 路由配置
+│   ├── utils/                  # 工具函数
+│   ├── types/                  # 类型声明
+│   ├── plugins/                # 插件配置
+│   └── styles/                 # 主题样式
+├── preload/                    # 预加载脚本（IPC 白名单）
+└── shared/                     # 共享类型、常量和格式化工具
 ```
 
 ## 许可证

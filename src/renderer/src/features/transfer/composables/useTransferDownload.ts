@@ -21,6 +21,14 @@ const PROGRESS_UPDATE_THROTTLE_MS = 1000
  */
 const COMPLETED_TASK_CLEANUP_DELAY_MS = 5000
 
+// 模块级共享状态：确保 IPC 监听器只注册一次，避免多个组件重复弹窗
+let _listenersRegistered = false
+const _pendingDownloadNotifications = ref<Array<{ fileName: string; savePath: string }>>([])
+let _downloadNotifyTimer: ReturnType<typeof setTimeout> | null = null
+const _pendingDownloadFailNotifications = ref<string[]>([])
+let _downloadFailNotifyTimer: ReturnType<typeof setTimeout> | null = null
+const _notifiedDownloadTaskIds = new Set<string>()
+
 export function useTransferDownload() {
   const store = useTransferStore()
 
@@ -35,14 +43,8 @@ export function useTransferDownload() {
   // 下载进度数据（直接引用 store 的 state）
   const downloadProgressMap = store.downloadProgressMap
 
-  // 批量通知状态
-  const pendingDownloadNotifications = ref<Array<{ fileName: string; savePath: string }>>([])
-  let downloadNotifyTimer: ReturnType<typeof setTimeout> | null = null
-  const pendingDownloadFailNotifications = ref<string[]>([])
-  let downloadFailNotifyTimer: ReturnType<typeof setTimeout> | null = null
-
-  // 已通知的下载任务ID集合（去重用）
-  const notifiedDownloadTaskIds = new Set<string>()
+  // 已通知的下载任务ID集合（模块级共享，去重用）
+  const notifiedDownloadTaskIds = _notifiedDownloadTaskIds
 
   // 节流更新函数（每秒更新一次）
   const throttledProgressUpdate = throttle((data: {
@@ -82,14 +84,14 @@ export function useTransferDownload() {
 
   // 通知函数
   function scheduleDownloadNotification() {
-    if (downloadNotifyTimer) clearTimeout(downloadNotifyTimer)
+    if (_downloadNotifyTimer) clearTimeout(_downloadNotifyTimer)
     // 队列中还有活跃或等待中的任务时，延长等待
     const hasRemaining = activeDownloads.length > 0 || downloadQueue.length > 0
     if (!hasRemaining) {
       flushDownloadNotifications()
       return
     }
-    downloadNotifyTimer = setTimeout(() => {
+    _downloadNotifyTimer = setTimeout(() => {
       if (activeDownloads.length > 0 || downloadQueue.length > 0) {
         scheduleDownloadNotification()
         return
@@ -99,7 +101,7 @@ export function useTransferDownload() {
   }
 
   function flushDownloadNotifications() {
-    const files = pendingDownloadNotifications.value.splice(0)
+    const files = _pendingDownloadNotifications.value.splice(0)
     if (files.length === 0 || !isNotificationsEnabled()) return
     const title = '下载完成'
     if (files.length === 1) {
@@ -147,7 +149,7 @@ export function useTransferDownload() {
   }
 
   function flushDownloadFailNotifications() {
-    const files = pendingDownloadFailNotifications.value.splice(0)
+    const files = _pendingDownloadFailNotifications.value.splice(0)
     if (files.length === 0 || !isNotificationsEnabled()) return
     const title = '下载失败'
     const content = files.length === 1
@@ -357,7 +359,7 @@ export function useTransferDownload() {
     }, COMPLETED_TASK_CLEANUP_DELAY_MS)
 
     // 批量合并下载完成通知
-    pendingDownloadNotifications.value.push({ fileName: data.fileName, savePath: data.savePath })
+    _pendingDownloadNotifications.value.push({ fileName: data.fileName, savePath: data.savePath })
     scheduleDownloadNotification()
   }
 
@@ -373,9 +375,9 @@ export function useTransferDownload() {
     downloadProgressMap.delete(data.taskId)
 
     // 批量合并失败通知
-    pendingDownloadFailNotifications.value.push(data.fileName)
-    if (downloadFailNotifyTimer) clearTimeout(downloadFailNotifyTimer)
-    downloadFailNotifyTimer = setTimeout(flushDownloadFailNotifications, 1500)
+    _pendingDownloadFailNotifications.value.push(data.fileName)
+    if (_downloadFailNotifyTimer) clearTimeout(_downloadFailNotifyTimer)
+    _downloadFailNotifyTimer = setTimeout(flushDownloadFailNotifications, 1500)
   }
 
   // 下载取消处理函数
@@ -408,13 +410,16 @@ export function useTransferDownload() {
     }
   }
 
-  // 注册下载监听器
-  transferRendererService.onDownloadProgress(downloadProgressHandler)
-  transferRendererService.onDownloadCompleted(downloadCompletedHandler)
-  transferRendererService.onDownloadFailed(downloadFailedHandler)
-  transferRendererService.onDownloadCancelled(downloadCancelledHandler)
-  transferRendererService.onDownloadAuthFailed(downloadAuthFailedHandler)
-  transferRendererService.onQueueUpdated(queueUpdatedHandler)
+  // 注册下载监听器（模块级单例，避免多个组件重复注册导致重复弹窗）
+  if (!_listenersRegistered) {
+    _listenersRegistered = true
+    transferRendererService.onDownloadProgress(downloadProgressHandler)
+    transferRendererService.onDownloadCompleted(downloadCompletedHandler)
+    transferRendererService.onDownloadFailed(downloadFailedHandler)
+    transferRendererService.onDownloadCancelled(downloadCancelledHandler)
+    transferRendererService.onDownloadAuthFailed(downloadAuthFailedHandler)
+    transferRendererService.onQueueUpdated(queueUpdatedHandler)
+  }
 
   // ========== 另存为下载 ==========
 
@@ -523,22 +528,15 @@ export function useTransferDownload() {
 
   // 清理函数
   function cleanupDownload() {
-    // 清理下载进度监听器
-    transferRendererService.removeListener('transfer:download:progress', downloadProgressHandler)
-    transferRendererService.removeListener('transfer:download:completed', downloadCompletedHandler)
-    transferRendererService.removeListener('transfer:download:failed', downloadFailedHandler)
-    transferRendererService.removeListener('transfer:download:cancelled', downloadCancelledHandler)
-    transferRendererService.removeListener('transfer:download:auth-failed', downloadAuthFailedHandler)
-    transferRendererService.removeListener('transfer:queue:updated', queueUpdatedHandler)
-
-    // 清理通知定时器
-    if (downloadNotifyTimer) {
-      clearTimeout(downloadNotifyTimer)
-      downloadNotifyTimer = null
+    // IPC 监听器是模块级单例，不在此处移除（避免一个组件卸载影响其他组件）
+    // 只清理通知定时器
+    if (_downloadNotifyTimer) {
+      clearTimeout(_downloadNotifyTimer)
+      _downloadNotifyTimer = null
     }
-    if (downloadFailNotifyTimer) {
-      clearTimeout(downloadFailNotifyTimer)
-      downloadFailNotifyTimer = null
+    if (_downloadFailNotifyTimer) {
+      clearTimeout(_downloadFailNotifyTimer)
+      _downloadFailNotifyTimer = null
     }
   }
 

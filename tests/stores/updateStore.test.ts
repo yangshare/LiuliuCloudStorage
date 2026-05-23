@@ -1,24 +1,28 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
-import { useUpdateStore } from '../../src/renderer/src/stores/updateStore'
+import { useUpdateStore } from '@/features/update/stores/updateStore'
 
 const mockCheck = vi.fn()
 const mockInstallNow = vi.fn()
 const mockInstallOnQuit = vi.fn()
 const mockOnAvailable = vi.fn()
+const mockOnNotAvailable = vi.fn()
 const mockOnDownloadProgress = vi.fn()
 const mockOnDownloaded = vi.fn()
 const mockOnError = vi.fn()
 
-Object.defineProperty(window, 'updateAPI', {
+Object.defineProperty(window, 'electronAPI', {
   value: {
-    check: mockCheck,
-    installNow: mockInstallNow,
-    installOnQuit: mockInstallOnQuit,
-    onAvailable: mockOnAvailable,
-    onDownloadProgress: mockOnDownloadProgress,
-    onDownloaded: mockOnDownloaded,
-    onError: mockOnError
+    updateAPI: {
+      check: mockCheck,
+      installNow: mockInstallNow,
+      installOnQuit: mockInstallOnQuit,
+      onAvailable: mockOnAvailable,
+      onNotAvailable: mockOnNotAvailable,
+      onDownloadProgress: mockOnDownloadProgress,
+      onDownloaded: mockOnDownloaded,
+      onError: mockOnError
+    }
   },
   writable: true
 })
@@ -50,6 +54,7 @@ describe('UpdateStore', () => {
       store.init()
 
       expect(mockOnAvailable).toHaveBeenCalledTimes(1)
+      expect(mockOnNotAvailable).toHaveBeenCalledTimes(1)
       expect(mockOnDownloadProgress).toHaveBeenCalledTimes(1)
       expect(mockOnDownloaded).toHaveBeenCalledTimes(1)
       expect(mockOnError).toHaveBeenCalledTimes(1)

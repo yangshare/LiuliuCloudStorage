@@ -1,16 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
-import { useQuotaStore } from '@/renderer/src/stores/quotaStore'
+import { useQuotaStore } from '@/features/quota/stores/quotaStore'
 
 // Mock window.electronAPI
 const mockQuotaGet = vi.fn()
 const mockQuotaUpdate = vi.fn()
+const mockQuotaCalculate = vi.fn()
 
 Object.defineProperty(window, 'electronAPI', {
   value: {
     quota: {
       get: mockQuotaGet,
-      update: mockQuotaUpdate
+      update: mockQuotaUpdate,
+      calculate: mockQuotaCalculate
     }
   },
   writable: true

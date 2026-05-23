@@ -96,7 +96,6 @@
           <div class="records-header">
             <span class="records-title">转存记录</span>
             <el-space>
-              <!-- 批量删除功能暂不开放
               <el-button
                 type="danger"
                 plain
@@ -105,7 +104,6 @@
               >
                 批量删除 ({{ selectedIds.length }})
               </el-button>
-              -->
               <el-button @click="loadRecords" :loading="loading">
                 刷新
               </el-button>
@@ -887,9 +885,12 @@ async function handleDelete(id: number) {
 async function handleBatchDelete() {
   if (selectedIds.value.length === 0 || !authStore.user?.id) return
 
+  const ids = [...selectedIds.value]
+  const userId = authStore.user.id
+
   try {
     await ElMessageBox.confirm(
-      `确定要删除选中的 ${selectedIds.value.length} 条记录吗？`,
+      `确定要删除选中的 ${ids.length} 条记录吗？`,
       '确认批量删除',
       {
         confirmButtonText: '确定',
@@ -899,13 +900,13 @@ async function handleBatchDelete() {
     )
 
     const result = await window.electronAPI.shareTransfer.batchDelete({
-      ids: selectedIds.value,
-      userId: authStore.user.id
+      ids,
+      userId
     })
 
     if (result.success) {
       ElMessage.success('批量删除成功')
-      moveToPreviousPageIfCurrentPageEmpty(selectedIds.value.length)
+      moveToPreviousPageIfCurrentPageEmpty(ids.length)
       selectedIds.value = []
       await loadRecords()
     } else {

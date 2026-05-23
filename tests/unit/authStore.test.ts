@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
-import { useAuthStore, type User } from '@/stores/authStore'
+import { useAuthStore, type User } from '@/features/auth/stores/authStore'
+import { useAuth } from '@/features/auth/composables/useAuth'
+
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: vi.fn() })
+}))
 
 // Mock electronAPI
 const mockGetUsers = vi.fn()
@@ -91,7 +96,8 @@ describe('authStore - 管理员权限功能', () => {
       authStore.user = null
 
       // Act
-      const result = await authStore.checkAdminPermission()
+      const { checkAdminPermission } = useAuth()
+      const result = await checkAdminPermission()
 
       // Assert
       expect(result).toBe(false)
@@ -111,7 +117,8 @@ describe('authStore - 管理员权限功能', () => {
       mockGetUsers.mockResolvedValueOnce({ success: true, data: [] })
 
       // Act
-      const result = await authStore.checkAdminPermission()
+      const { checkAdminPermission } = useAuth()
+      const result = await checkAdminPermission()
 
       // Assert
       expect(result).toBe(true)
@@ -131,7 +138,8 @@ describe('authStore - 管理员权限功能', () => {
       mockGetUsers.mockResolvedValueOnce({ success: false })
 
       // Act
-      const result = await authStore.checkAdminPermission()
+      const { checkAdminPermission } = useAuth()
+      const result = await checkAdminPermission()
 
       // Assert
       expect(result).toBe(false)
@@ -150,7 +158,8 @@ describe('authStore - 管理员权限功能', () => {
       mockGetUsers.mockRejectedValueOnce(new Error('IPC error'))
 
       // Act
-      const result = await authStore.checkAdminPermission()
+      const { checkAdminPermission } = useAuth()
+      const result = await checkAdminPermission()
 
       // Assert
       expect(result).toBe(false)

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import UpdateButton from '../../../src/renderer/src/components/common/UpdateButton.vue'
-import { useUpdateStore } from '../../../src/renderer/src/stores/updateStore'
+import { useUpdateStore } from '../../../src/renderer/src/features/update/stores/updateStore'
 
 vi.mock('naive-ui', () => ({
   NButton: {
@@ -22,15 +22,18 @@ const mockOnDownloadProgress = vi.fn()
 const mockOnDownloaded = vi.fn()
 const mockOnError = vi.fn()
 
-Object.defineProperty(window, 'updateAPI', {
+Object.defineProperty(window, 'electronAPI', {
   value: {
-    check: mockCheck,
-    installNow: mockInstallNow,
-    installOnQuit: mockInstallOnQuit,
-    onAvailable: mockOnAvailable,
-    onDownloadProgress: mockOnDownloadProgress,
-    onDownloaded: mockOnDownloaded,
-    onError: mockOnError
+    updateAPI: {
+      check: mockCheck,
+      installNow: mockInstallNow,
+      installOnQuit: mockInstallOnQuit,
+      onAvailable: mockOnAvailable,
+      onNotAvailable: vi.fn(),
+      onDownloadProgress: mockOnDownloadProgress,
+      onDownloaded: mockOnDownloaded,
+      onError: mockOnError
+    }
   },
   writable: true
 })

@@ -1,18 +1,147 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { TransferService } from '../../../src/main/services/TransferService'
-import { initDatabase, closeDatabase } from '../../../src/main/database'
-import type { NewTransferQueue } from '../../../src/main/database/schema'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { TransferService } from '../../../src/main/features/transfer/transfer.service'
+import type { NewTransferQueue, TransferQueue } from '../../../src/main/database/schema'
+
+const { tasks, fakeDb } = vi.hoisted(() => {
+  let nextId = 1
+  const tasks: TransferQueue[] = []
+
+  function columnToProperty(field: string): string {
+    return field.replace(/_([a-z])/g, (_, char) => char.toUpperCase())
+  }
+
+  function matches(task: any, condition: any): boolean {
+    if (!condition) return true
+    if (condition.type === 'eq') {
+      return task[columnToProperty(condition.field)] === condition.value
+    }
+    if (condition.type === 'and') {
+      return condition.conditions.every((item: any) => matches(task, item))
+    }
+    if (condition.type === 'or') {
+      return condition.conditions.some((item: any) => matches(task, item))
+    }
+    return true
+  }
+
+  function query(condition?: any) {
+    const api: any = {
+      where(nextCondition: any) {
+        return query(nextCondition)
+      },
+      orderBy() {
+        return api
+      },
+      limit(count: number) {
+        return {
+          all: () => tasks.filter((task) => matches(task, condition)).slice(0, count)
+        }
+      },
+      get: () => tasks.find((task) => matches(task, condition)),
+      all: () => tasks.filter((task) => matches(task, condition))
+    }
+    return api
+  }
+
+  const fakeDb = {
+    insert: vi.fn(() => ({
+      values(value: NewTransferQueue | NewTransferQueue[]) {
+        const values = Array.isArray(value) ? value : [value]
+        const inserted = values.map((item) => {
+          const row = {
+            status: 'pending',
+            transferredSize: 0,
+            resumable: false,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            ...item,
+            id: nextId++
+          } as TransferQueue
+          tasks.push(row)
+          return row
+        })
+        return {
+          returning: () => ({
+            get: () => inserted[0],
+            all: () => inserted
+          })
+        }
+      }
+    })),
+    select: vi.fn(() => ({
+      from: vi.fn(() => query())
+    })),
+    update: vi.fn(() => ({
+      set(data: Partial<TransferQueue>) {
+        return {
+          where(condition: any) {
+            return {
+              run() {
+                for (const task of tasks) {
+                  if (matches(task, condition)) {
+                    Object.assign(task, data)
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })),
+    delete: vi.fn(() => ({
+      where(condition: any) {
+        return {
+          run() {
+            for (let index = tasks.length - 1; index >= 0; index--) {
+              if (matches(tasks[index], condition)) {
+                tasks.splice(index, 1)
+              }
+            }
+          }
+        }
+      }
+    }))
+  }
+
+  return {
+    tasks,
+    fakeDb
+  }
+})
+
+vi.mock('drizzle-orm/better-sqlite3', () => ({
+  drizzle: vi.fn(() => fakeDb)
+}))
+
+vi.mock('../../../src/main/core/logger/logger.service', () => ({
+  loggerService: {
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+    debug: vi.fn()
+  }
+}))
+
+vi.mock('drizzle-orm', () => ({
+  eq: vi.fn((field, value) => ({ type: 'eq', field: field?.name || field?.config?.name, value })),
+  desc: vi.fn((field) => field),
+  and: vi.fn((...conditions) => ({ type: 'and', conditions })),
+  or: vi.fn((...conditions) => ({ type: 'or', conditions })),
+  inArray: vi.fn((field, values) => ({ type: 'inArray', field: field?.name || field?.config?.name, values })),
+  count: vi.fn(() => ({ type: 'count' }))
+}))
+
+vi.mock('../../../src/main/database', () => ({
+  getDatabase: vi.fn(() => ({}))
+}))
 
 describe('TransferService', () => {
   let service: TransferService
 
   beforeEach(() => {
-    initDatabase()
+    tasks.splice(0, tasks.length)
+    vi.clearAllMocks()
     service = new TransferService()
-  })
-
-  afterEach(() => {
-    closeDatabase()
   })
 
   it('should create a new transfer task', async () => {
@@ -50,10 +179,10 @@ describe('TransferService', () => {
     expect(updated?.status).toBe('in_progress')
   })
 
-  it('should get pending tasks for user', async () => {
+  it('should get pending downloads for user', async () => {
     await service.create({
       userId: 1,
-      taskType: 'upload',
+      taskType: 'download',
       fileName: 'test1.txt',
       filePath: '/local/test1.txt',
       remotePath: '/remote/test1.txt',
@@ -63,7 +192,7 @@ describe('TransferService', () => {
 
     await service.create({
       userId: 1,
-      taskType: 'upload',
+      taskType: 'download',
       fileName: 'test2.txt',
       filePath: '/local/test2.txt',
       remotePath: '/remote/test2.txt',
@@ -71,7 +200,7 @@ describe('TransferService', () => {
       status: 'completed'
     })
 
-    const pending = await service.getPendingTasks(1)
+    const pending = await service.getPendingDownloads(1)
     expect(pending).toHaveLength(1)
     expect(pending[0].fileName).toBe('test1.txt')
   })

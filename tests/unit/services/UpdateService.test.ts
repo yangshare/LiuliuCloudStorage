@@ -54,7 +54,7 @@ describe('UpdateService', () => {
       return autoUpdater
     })
 
-    const module = await import('../../../src/main/services/UpdateService')
+    const module = await import('../../../src/main/features/update/update.core.service')
     updateService = module.updateService
   })
 
@@ -108,7 +108,7 @@ describe('UpdateService', () => {
       const handler = eventHandlers.get('update-available')
       handler!(updateInfo)
 
-      expect(mockWindow.webContents.send).toHaveBeenCalledWith('update:available', updateInfo)
+      expect(mockWindow.webContents.send).toHaveBeenCalledWith('update:event:available', updateInfo)
       expect(autoUpdater.downloadUpdate).toHaveBeenCalled()
     })
 
@@ -118,7 +118,7 @@ describe('UpdateService', () => {
       const handler = eventHandlers.get('update-not-available')
       handler!()
 
-      expect(mockWindow.webContents.send).toHaveBeenCalledWith('update:not-available', undefined)
+      expect(mockWindow.webContents.send).toHaveBeenCalledWith('update:event:not-available', undefined)
     })
 
     it('应该发送下载进度到渲染进程', () => {
@@ -128,7 +128,7 @@ describe('UpdateService', () => {
       const handler = eventHandlers.get('download-progress')
       handler!(progress)
 
-      expect(mockWindow.webContents.send).toHaveBeenCalledWith('update:download-progress', progress)
+      expect(mockWindow.webContents.send).toHaveBeenCalledWith('update:event:download-progress', progress)
     })
 
     it('当更新下载完成时应该发送消息到渲染进程', () => {
@@ -137,7 +137,7 @@ describe('UpdateService', () => {
       const handler = eventHandlers.get('update-downloaded')
       handler!()
 
-      expect(mockWindow.webContents.send).toHaveBeenCalledWith('update:downloaded', undefined)
+      expect(mockWindow.webContents.send).toHaveBeenCalledWith('update:event:downloaded', undefined)
     })
 
     it('当发生错误时应该发送错误消息到渲染进程', () => {
@@ -147,7 +147,7 @@ describe('UpdateService', () => {
       const handler = eventHandlers.get('error')
       handler!(error)
 
-      expect(mockWindow.webContents.send).toHaveBeenCalledWith('update:error', 'Update failed')
+      expect(mockWindow.webContents.send).toHaveBeenCalledWith('update:event:error', 'Update failed')
     })
   })
 
@@ -169,7 +169,7 @@ describe('UpdateService', () => {
       await updateService.checkForUpdates()
 
       expect(autoUpdater.checkForUpdates).not.toHaveBeenCalled()
-      expect(mockWindow.webContents.send).toHaveBeenCalledWith('update:not-available', undefined)
+      expect(mockWindow.webContents.send).toHaveBeenCalledWith('update:event:not-available', undefined)
     })
   })
 

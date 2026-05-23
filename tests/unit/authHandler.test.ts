@@ -1,82 +1,141 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { DEFAULT_QUOTA } from '@/shared/constants'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { DEFAULT_QUOTA } from '@shared/constants'
+import { AuthService } from '../../src/main/features/auth/auth.service'
 
-// Mock database
-const mockDb = {
-  prepare: vi.fn()
-}
+const {
+  mockDb,
+  mockInsertValues,
+  mockSelectGet,
+  mockAlistService,
+  mockCryptoService,
+  mockPreferencesService,
+  mockActivityService,
+  mockLoggerService
+} = vi.hoisted(() => {
+  const mockInsertRun = vi.fn()
+  const mockInsertValues = vi.fn(() => ({
+    onConflictDoNothing: vi.fn(() => ({ run: mockInsertRun })),
+    run: mockInsertRun
+  }))
+  const mockSelectGet = vi.fn()
+  const mockDb = {
+    insert: vi.fn(() => ({ values: mockInsertValues })),
+    select: vi.fn(() => ({
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({
+          get: mockSelectGet
+        }))
+      }))
+    })),
+    delete: vi.fn(() => ({
+      where: vi.fn(() => ({
+        run: vi.fn()
+      }))
+    }))
+  }
 
-vi.mock('@/main/database', () => ({
-  getDatabase: () => mockDb
+  return {
+    mockDb,
+    mockInsertValues,
+    mockSelectGet,
+    mockAlistService: {
+      login: vi.fn(),
+      getMe: vi.fn(),
+      setToken: vi.fn(),
+      setBasePath: vi.fn(),
+      setUserId: vi.fn()
+    },
+    mockCryptoService: {
+      encrypt: vi.fn((value: string) => `encrypted_${value}`)
+    },
+    mockPreferencesService: {
+      setValue: vi.fn(),
+      deleteValue: vi.fn(),
+      getValue: vi.fn()
+    },
+    mockActivityService: {
+      logActivity: vi.fn().mockResolvedValue(true)
+    },
+    mockLoggerService: {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn()
+    }
+  }
+})
+
+vi.mock('drizzle-orm/better-sqlite3', () => ({
+  drizzle: vi.fn(() => mockDb)
+}))
+
+vi.mock('../../src/main/database', () => ({
+  getDatabase: vi.fn(() => ({}))
+}))
+
+vi.mock('../../src/main/core/api/alist.service', () => ({
+  alistService: mockAlistService
+}))
+
+vi.mock('../../src/main/core/crypto/crypto.service', () => ({
+  cryptoService: mockCryptoService
+}))
+
+vi.mock('../../src/main/core/preferences/preferences.service', () => ({
+  preferencesService: mockPreferencesService
+}))
+
+vi.mock('../../src/main/features/activity/activity.core.service', () => ({
+  activityService: mockActivityService,
+  ActionType: {
+    LOGIN: 'login',
+    LOGOUT: 'logout'
+  }
+}))
+
+vi.mock('../../src/main/features/autoSync/auto-sync.core.service', () => ({
+  autoSyncService: {
+    resetStartupExecuted: vi.fn()
+  }
+}))
+
+vi.mock('../../src/main/core/logger/logger.service', () => ({
+  loggerService: mockLoggerService
 }))
 
 describe('auth handler - ensureUser function', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockAlistService.login.mockResolvedValue({ success: true, token: 'token' })
+    mockAlistService.getMe.mockResolvedValue({ username: 'testuser', basePath: '/', id: 1, role: [] })
+    mockSelectGet.mockReturnValue({ id: 123 })
   })
 
-  afterEach(() => {
-    vi.restoreAllMocks()
-  })
+  it('应该为本地用户设置默认配额（10GB）', async () => {
+    const service = new AuthService()
 
-  it('应该为新用户设置默认配额（10GB）', () => {
-    // Arrange
-    const username = 'newuser'
-    const newUserId = 123
+    await service.login({ username: 'newuser', password: 'password' })
 
-    // Mock 查询返回空（用户不存在）
-    mockDb.prepare.mockReturnValueOnce({
-      get: vi.fn().mockReturnValueOnce(undefined)
-    })
-
-    // Mock 插入返回新用户ID
-    mockDb.prepare.mockReturnValueOnce({
-      run: vi.fn().mockReturnValueOnce({ lastInsertRowid: newUserId })
-    })
-
-    // Act
-    // 注意：这里我们无法直接测试ensureUser函数，因为它是auth.ts的私有函数
-    // 但我们可以验证逻辑是否正确
-
-    // Assert
-    // 验证insert语句包含正确的配额值
-    const insertCall = mockDb.prepare.mock.calls[1]
-    expect(insertCall).toBeTruthy()
-
-    // 验证SQL语句包含quota_total和quota_used字段
-    const sql = insertCall[0]
-    expect(sql).toContain('quota_total')
-    expect(sql).toContain('quota_used')
-
-    // 验证参数包含DEFAULT_QUOTA和0
-    const params = insertCall[1]
-    expect(params).toContain(DEFAULT_QUOTA)
-    expect(params).toContain(0)
-  })
-
-  it('应该返回已存在用户的ID', () => {
-    // Arrange
-    const username = 'existinguser'
-    const existingUserId = 456
-
-    // Mock 查询返回现有用户
-    mockDb.prepare.mockReturnValueOnce({
-      get: vi.fn().mockReturnValueOnce({ id: existingUserId })
-    })
-
-    // Act & Assert
-    const selectCall = mockDb.prepare.mock.calls[0]
-    expect(selectCall).toBeTruthy()
-
-    // 验证没有调用insert
-    const insertCall = mockDb.prepare.mock.calls.find(call =>
-      call[0].includes('INSERT')
+    expect(mockInsertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        username: 'newuser',
+        passwordHash: '',
+        quotaTotal: DEFAULT_QUOTA,
+        quotaUsed: 0
+      })
     )
-    expect(insertCall).toBeUndefined()
+  })
+
+  it('应该返回已存在用户的ID', async () => {
+    const service = new AuthService()
+    mockSelectGet.mockReturnValueOnce({ id: 456 })
+
+    const result = await service.login({ username: 'existinguser', password: 'password' })
+
+    expect(result.success).toBe(true)
+    expect(result.data?.id).toBe(456)
   })
 
   it('DEFAULT_QUOTA应该等于10GB', () => {
-    // Arrange & Act & Assert
     const tenGBInBytes = 10 * 1024 * 1024 * 1024
     expect(DEFAULT_QUOTA).toBe(tenGBInBytes)
     expect(DEFAULT_QUOTA).toBe(10737418240)

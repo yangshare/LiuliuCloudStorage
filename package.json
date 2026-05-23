@@ -12,9 +12,10 @@
   "author": "yangc",
   "license": "MIT",
   "private": true,
+  "packageManager": "pnpm@11.1.2",
   "engines": {
     "node": ">=22.12.0",
-    "pnpm": ">=9.0.0"
+    "pnpm": ">=11.1.2"
   },
   "scripts": {
     "dev": "chcp 65001 && electron-vite dev",

@@ -14,11 +14,11 @@ const loading = ref(false)
 
 onMounted(async () => {
   try {
-    const prefs = await window.electronAPI.auth.getLoginPreferences()
-    if (prefs.username) {
-      formData.value.username = prefs.username
-      formData.value.password = prefs.password || ''
-      autoLogin.value = prefs.autoLogin
+    const result = await window.electronAPI.auth.getLoginPreferences()
+    if (result?.success && result.data?.username) {
+      formData.value.username = result.data.username
+      formData.value.password = result.data.password || ''
+      autoLogin.value = result.data.autoLogin
     }
   } catch (e) {
     console.warn('获取登录偏好失败:', e)

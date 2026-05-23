@@ -2,16 +2,14 @@
 // 文件导航相关逻辑：获取文件列表、目录跳转、创建文件夹
 
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
 import type { FileItem } from '../../../../../shared/types/electron'
+import { IPCErrorCode } from '../../../../../shared/types/ipc'
 
 // 常量
 const PATH_SEPARATOR = '/'
 const ROOT_PATH = '/'
 
 export function useFileNavigation() {
-  const router = useRouter()
-
   // State
   const files = ref<FileItem[]>([])
   const currentPath = ref<string>(ROOT_PATH)
@@ -56,16 +54,8 @@ export function useFileNavigation() {
           isOnline.value = true
         }
       } else {
-        // 检测 401 认证错误（token 失效），自动跳转登录页
-        if ((result as any)?.code === 'AUTH_REQUIRED') {
-          await window.electronAPI.auth.logout()
-          router.push('/login')
-          return
-        }
-        // 检测 403 权限错误，跳转登录页
-        if (result?.error?.includes('403') || result?.error?.includes('permission')) {
-          await window.electronAPI.auth.logout()
-          router.push('/login')
+        // 会话失效由 preload 全局拦截统一跳转登录页，这里不再显示业务错误，避免红色 alert 闪烁
+        if (result?.code === IPCErrorCode.UNAUTHORIZED) {
           return
         }
         filesError.value = result?.error || '获取文件列表失败'

@@ -17,6 +17,7 @@ export interface FileListResult {
     cachedAt?: string
   }
   error?: string
+  code?: string
 }
 
 export interface MkdirResult {
@@ -36,6 +37,7 @@ export interface ElectronAPI {
   invoke: (channel: string, ...args: unknown[]) => Promise<unknown>
   on: (channel: string, callback: (...args: unknown[]) => void) => void
   removeListener: (channel: string, callback: (...args: unknown[]) => void) => void
+  onAuthExpired: (handler: (code: string) => void | Promise<void>) => () => void
   auth: {
     login: (username: string, password: string, autoLogin?: boolean) => Promise<{ success: boolean; message?: string; token?: string }>
     logout: () => Promise<{ success: boolean }>
@@ -53,7 +55,11 @@ export interface ElectronAPI {
     getCurrentUser: () => Promise<any>
     getUsers: (params?: { page?: number; pageSize?: number; search?: string }) => Promise<any>
     getStorageStats: () => Promise<any>
-    getLoginPreferences: () => Promise<{ username: string; password: string; autoLogin: boolean }>
+    getLoginPreferences: () => Promise<{
+      success: boolean
+      data?: { username: string; password: string; autoLogin: boolean }
+      error?: string
+    }>
   }
   file: {
     list: (path: string) => Promise<FileListResult>

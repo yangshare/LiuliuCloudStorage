@@ -19,6 +19,8 @@ export interface DownloadQueueTask {
   remotePath: string
   priority: number  // 优先级（越小越优先）
   dbId?: number  // 数据库记录 ID(可选)
+  batchId?: string
+  batchTotal?: number
 }
 
 type DownloadProgressCallback = (data: {
@@ -118,9 +120,15 @@ class DownloadQueueManager {
    * @returns 返回成功创建的任务元数据 { taskId, dbId }[]
    */
   async addBatchToQueue(tasks: DownloadQueueTask[]): Promise<Array<{ taskId: string; dbId: number }>> {
-    // 批量去重：过滤掉已在队列中的任务
+    // 批量去重：同时过滤"输入数组内部重复"和"已在队列/数据库中的任务"
     const uniqueTasks: DownloadQueueTask[] = []
+    const seenInBatch = new Set<string>()
     for (const task of tasks) {
+      if (seenInBatch.has(task.remotePath)) {
+        loggerService.info('DownloadQueueManager', `跳过批内重复任务: ${task.fileName} (${task.remotePath})`)
+        continue
+      }
+      seenInBatch.add(task.remotePath)
       if (!(await this.isDuplicate(task.remotePath))) {
         uniqueTasks.push(task)
       } else {
@@ -142,9 +150,10 @@ class DownloadQueueManager {
     }))
     const dbTasks = await this.transferService.createBatch(records)
     const result: Array<{ taskId: string; dbId: number }> = []
+    const batchTotal = uniqueTasks.length
     dbTasks.forEach((dbTask, i) => {
       const task = uniqueTasks[i]
-      this.queue.set(task.id, { ...task, dbId: dbTask.id })
+      this.queue.set(task.id, { ...task, dbId: dbTask.id, batchTotal })
       result.push({ taskId: task.id, dbId: dbTask.id })
     })
     this.processQueue()
@@ -271,7 +280,9 @@ class DownloadQueueManager {
           win.webContents.send('transfer:download:completed', {
             taskId: task.id,
             fileName: task.fileName,
-            savePath: actualSavePath
+            savePath: actualSavePath,
+            batchId: task.batchId,
+            batchTotal: task.batchTotal
           })
         }
       })
@@ -312,7 +323,9 @@ class DownloadQueueManager {
           win.webContents.send('transfer:download:failed', {
             taskId: task.id,
             fileName: task.fileName,
-            error: isAuthError ? 'Alist 登录已过期' : errMsg
+            error: isAuthError ? 'Alist 登录已过期' : errMsg,
+            batchId: task.batchId,
+            batchTotal: task.batchTotal
           })
         }
       })
@@ -506,14 +519,25 @@ class DownloadQueueManager {
    * 从队列中移除指定任务
    */
   async removeFromQueue(taskId: string): Promise<void> {
+    let cancelledTask: DownloadQueueTask | undefined
+
     // 如果是活跃下载，先中止网络请求
     if (this.activeDownloads.has(taskId)) {
+      cancelledTask = this.activeDownloads.get(taskId)
       this.downloadManager.cancelDownload(taskId)
       this.activeDownloads.delete(taskId)
     }
 
     // 从等待队列移除
-    this.queue.delete(taskId)
+    if (this.queue.has(taskId)) {
+      cancelledTask = cancelledTask || this.queue.get(taskId)
+      this.queue.delete(taskId)
+    }
+
+    // 广播取消事件（含批次信息，让 renderer 完成 settled 计数）
+    if (cancelledTask) {
+      this.broadcastDownloadCancelled(cancelledTask)
+    }
 
     // 通知队列更新
     this.emitQueueUpdated()
@@ -549,6 +573,7 @@ class DownloadQueueManager {
   async clearActiveQueue(): Promise<void> {
     this.downloadManager.abortAllActive()
     for (const task of this.activeDownloads.values()) {
+      this.broadcastDownloadCancelled(task)
       if (task.savePath) {
         try { fs.unlinkSync(task.savePath) } catch (e: any) {
           if (e?.code !== 'ENOENT') loggerService.error('DownloadQueueManager', `清理文件失败: ${task.savePath} - ${e}`)
@@ -586,6 +611,23 @@ class DownloadQueueManager {
       pending: state.pending.length,
       maxConcurrent: this.maxConcurrent
     }
+  }
+
+  /**
+   * 广播下载取消事件到所有窗口（含批次信息）
+   */
+  private broadcastDownloadCancelled(task: DownloadQueueTask): void {
+    const windows = BrowserWindow.getAllWindows()
+    windows.forEach(win => {
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('transfer:download:cancelled', {
+          taskId: task.id,
+          fileName: task.fileName,
+          batchId: task.batchId,
+          batchTotal: task.batchTotal
+        })
+      }
+    })
   }
 
   /**

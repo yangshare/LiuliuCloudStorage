@@ -163,9 +163,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('transfer:upload:cancelled', wrapListener(callback)),
     onDownloadProgress: (callback: (data: { taskId: string, fileName: string, progress: number, downloadedBytes: number, totalBytes: number, speed: number }) => void) =>
       ipcRenderer.on('transfer:download:progress', wrapListener(callback)),
-    onDownloadCompleted: (callback: (data: { taskId: string, fileName: string, savePath: string }) => void) =>
+    onDownloadCompleted: (callback: (data: { taskId: string, fileName: string, savePath: string, batchId?: string, batchTotal?: number }) => void) =>
       ipcRenderer.on('transfer:download:completed', wrapListener(callback)),
-    onDownloadFailed: (callback: (data: { taskId: string, fileName: string, error: string }) => void) =>
+    onDownloadFailed: (callback: (data: { taskId: string, fileName: string, error: string, batchId?: string, batchTotal?: number }) => void) =>
       ipcRenderer.on('transfer:download:failed', wrapListener(callback)),
     removeCompletedListener: (callback: (data: { taskId: string | number, fileName: string }) => void) =>
       ipcRenderer.removeListener('transfer:upload:completed', unwrapListener(callback) as never),
@@ -175,13 +175,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('transfer:upload:cancelled', unwrapListener(callback) as never),
     removeDownloadProgressListener: (callback: (data: { taskId: string, fileName: string, progress: number, downloadedBytes: number, totalBytes: number, speed: number }) => void) =>
       ipcRenderer.removeListener('transfer:download:progress', unwrapListener(callback) as never),
-    removeDownloadCompletedListener: (callback: (data: { taskId: string, fileName: string, savePath: string }) => void) =>
+    removeDownloadCompletedListener: (callback: (data: { taskId: string, fileName: string, savePath: string, batchId?: string, batchTotal?: number }) => void) =>
       ipcRenderer.removeListener('transfer:download:completed', unwrapListener(callback) as never),
-    removeDownloadFailedListener: (callback: (data: { taskId: string, fileName: string, error: string }) => void) =>
+    removeDownloadFailedListener: (callback: (data: { taskId: string, fileName: string, error: string, batchId?: string, batchTotal?: number }) => void) =>
       ipcRenderer.removeListener('transfer:download:failed', unwrapListener(callback) as never),
-    onDownloadCancelled: (callback: (data: { taskId: string | number }) => void) =>
+    onDownloadCancelled: (callback: (data: { taskId: string | number, fileName?: string, batchId?: string, batchTotal?: number }) => void) =>
       ipcRenderer.on('transfer:download:cancelled', wrapListener(callback)),
-    removeDownloadCancelledListener: (callback: (data: { taskId: string | number }) => void) =>
+    removeDownloadCancelledListener: (callback: (data: { taskId: string | number, fileName?: string, batchId?: string, batchTotal?: number }) => void) =>
       ipcRenderer.removeListener('transfer:download:cancelled', unwrapListener(callback) as never),
     onDownloadAuthFailed: (callback: (data: { error: string }) => void) =>
       ipcRenderer.on('transfer:download:auth-failed', wrapListener(callback)),

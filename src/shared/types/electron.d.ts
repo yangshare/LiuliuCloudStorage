@@ -86,16 +86,16 @@ export interface ElectronAPI {
     onFailed: (callback: (data: { taskId: string | number, fileName: string, error: string }) => void) => void
     onCancelled: (callback: (data: { taskId: string | number, fileName: string }) => void) => void
     onDownloadProgress: (callback: (data: { taskId: string, fileName: string, progress: number, downloadedBytes: number, totalBytes: number, speed: number }) => void) => void
-    onDownloadCompleted: (callback: (data: { taskId: string, fileName: string, savePath: string }) => void) => void
-    onDownloadFailed: (callback: (data: { taskId: string, fileName: string, error: string }) => void) => void
+    onDownloadCompleted: (callback: (data: { taskId: string, fileName: string, savePath: string, batchId?: string, batchTotal?: number }) => void) => void
+    onDownloadFailed: (callback: (data: { taskId: string, fileName: string, error: string, batchId?: string, batchTotal?: number }) => void) => void
     removeCompletedListener: (callback: (data: { taskId: string | number, fileName: string }) => void) => void
     removeFailedListener: (callback: (data: { taskId: string | number, fileName: string, error: string }) => void) => void
     removeCancelledListener: (callback: (data: { taskId: string | number, fileName: string }) => void) => void
     removeDownloadProgressListener: (callback: (data: { taskId: string, fileName: string, progress: number, downloadedBytes: number, totalBytes: number, speed: number }) => void) => void
-    removeDownloadCompletedListener: (callback: (data: { taskId: string, fileName: string, savePath: string }) => void) => void
-    removeDownloadFailedListener: (callback: (data: { taskId: string, fileName: string, error: string }) => void) => void
-    onDownloadCancelled: (callback: (data: { taskId: string | number }) => void) => void
-    removeDownloadCancelledListener: (callback: (data: { taskId: string | number }) => void) => void
+    removeDownloadCompletedListener: (callback: (data: { taskId: string, fileName: string, savePath: string, batchId?: string, batchTotal?: number }) => void) => void
+    removeDownloadFailedListener: (callback: (data: { taskId: string, fileName: string, error: string, batchId?: string, batchTotal?: number }) => void) => void
+    onDownloadCancelled: (callback: (data: { taskId: string | number, fileName?: string, batchId?: string, batchTotal?: number }) => void) => void
+    removeDownloadCancelledListener: (callback: (data: { taskId: string | number, fileName?: string, batchId?: string, batchTotal?: number }) => void) => void
     // 下载队列管理
     initDownloadQueue: (params: { userId: number; userToken: string }) => Promise<{ success: boolean; restoredCount?: number; error?: string }>
     queueDownload: (task: { id: string; remotePath: string; fileName: string; savePath?: string; userId: number; userToken: string; priority?: number }) => Promise<{ success: boolean; taskId?: string; error?: string }>
@@ -105,7 +105,7 @@ export interface ElectronAPI {
     clearDownloadQueue: () => Promise<{ success: boolean; error?: string }>
     clearPendingQueue: () => Promise<{ success: boolean; error?: string }>
     clearActiveQueue: () => Promise<{ success: boolean; error?: string }>
-    batchQueueDownload: (params: { remotePaths: string[] }) => Promise<{ success: boolean; successCount?: number; failedCount?: number; error?: string }>
+    batchQueueDownload: (params: { remotePaths: string[] }) => Promise<{ success: boolean; successCount?: number; failedCount?: number; batchId?: string; error?: string }>
     resumeDownload: (taskId: number) => Promise<{ success: boolean; error?: string }>
     cancelDownload: (taskId: string | number) => Promise<{ success: boolean; error?: string }>
     cancelAllDownloads: (userId: number) => Promise<{ success: boolean; error?: string }>

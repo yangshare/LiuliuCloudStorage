@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto'
 import { transferQueueManager, type QueueTask } from './transfer-queue.manager'
 import { downloadQueueManager, type DownloadQueueTask } from './download-queue.manager'
 import { IPCError, IPCErrorCode } from '../../core/ipc/error-handler'
@@ -82,6 +83,10 @@ export class QueueService {
     await downloadQueueManager.clearActiveQueue()
   }
 
+  async cancelAllActiveDownloads(): Promise<void> {
+    await downloadQueueManager.clearActiveQueue()
+  }
+
   async removeDownloadFromQueue(taskId: string): Promise<void> {
     await downloadQueueManager.removeFromQueue(taskId)
   }
@@ -135,7 +140,7 @@ export class QueueService {
     if (!session) throw new IPCError('用户未登录', IPCErrorCode.UNAUTHORIZED)
 
     const task: DownloadQueueTask = {
-      id: taskData.id || `download_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: taskData.id || `download_${Date.now()}_${randomUUID()}`,
       fileName: taskData.fileName,
       fileSize: taskData.fileSize || 0,
       remotePath: taskData.remotePath,
@@ -154,18 +159,24 @@ export class QueueService {
     const session = authService.getCurrentSession()
     if (!session) throw new IPCError('用户未登录', IPCErrorCode.UNAUTHORIZED)
 
+    const batchId = `batch_${Date.now()}_${randomUUID()}`
     const tasks: DownloadQueueTask[] = remotePaths.map((remotePath, i) => ({
-      id: `download_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 9)}`,
+      id: `download_${Date.now()}_${i}_${randomUUID()}`,
       fileName: remotePath.split('/').pop() || 'unknown',
       fileSize: 0,
       remotePath,
       priority: i,
       userId: session.userId,
-      userToken: session.token
+      userToken: session.token,
+      batchId
     }))
 
     const batchResult = await this.addBatchDownloadTasks(tasks)
-    return { successCount: batchResult.length, failedCount: 0 }
+    return {
+      successCount: batchResult.length,
+      failedCount: tasks.length - batchResult.length,
+      batchId
+    }
   }
 
   async cancelDownloadTask(taskId: string): Promise<void> {

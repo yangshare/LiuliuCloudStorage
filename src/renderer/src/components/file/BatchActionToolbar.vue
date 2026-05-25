@@ -84,10 +84,13 @@ async function handleBatchDownload() {
     ElMessage.error(result.error || '添加失败，请稍后重试')
   } else if (result.successCount === 0) {
     ElMessage.warning('没有新的文件需要下载（可能已在队列中）')
-  } else if (result.failedCount === 0) {
-    ElMessage.success(`已添加 ${result.successCount} 个文件到下载队列`)
   } else {
-    ElMessage.warning(`成功添加 ${result.successCount} 个文件，失败 ${result.failedCount} 个`)
+    const skipped = totalFiles - (result.successCount ?? 0)
+    if (skipped > 0) {
+      ElMessage.success(`已添加 ${result.successCount} 个文件到下载队列(${skipped} 个已在队列)`)
+    } else {
+      ElMessage.success(`已添加 ${result.successCount} 个文件到下载队列`)
+    }
   }
 }
 

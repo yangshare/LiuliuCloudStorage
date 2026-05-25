@@ -120,16 +120,14 @@ export function registerTransferHandlers(): void {
   })
 
   ipcMain.handle('transfer:download:cancel', async (_event, { taskId }) => {
-    return handleIPC(async () => {
-      await queueService.cancelDownloadTask(taskId)
-      _event.sender.send('transfer:download:cancelled', { taskId })
-    })
+    return handleIPC(() => queueService.cancelDownloadTask(taskId))
   })
 
   ipcMain.handle('transfer:download:cancel-all', async (_event, { userId }) => {
     return handleIPC(async () => {
       await transferService.cancelAllUserTasks(userId, 'download')
       await queueService.clearDownloadQueue()
+      await queueService.cancelAllActiveDownloads()
     })
   })
 }

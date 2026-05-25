@@ -30,24 +30,24 @@ export function createTransferService() {
     },
 
     // ===== 下载 =====
-    async download(params: any): Promise<any> {
-      return invoke<any>(window.electronAPI.invoke('transfer:download:file', params))
+    async download(params: any): Promise<{ success: boolean; taskId?: string; savePath?: string; error?: string }> {
+      return invoke<{ success: boolean; taskId?: string; savePath?: string; error?: string }>(window.electronAPI.invoke('transfer:download:file', params))
     },
 
-    async saveAs(fileName: string, userId: number): Promise<any> {
-      return invoke<any>(window.electronAPI.invoke('transfer:download:saveAs', { fileName, userId }))
+    async saveAs(fileName: string, userId: number): Promise<{ success: boolean; filePath?: string; canceled?: boolean; error?: string }> {
+      return invoke<{ success: boolean; filePath?: string; canceled?: boolean; error?: string }>(window.electronAPI.invoke('transfer:download:saveAs', { fileName, userId }))
     },
 
-    async initDownloadQueue(userId: number, userToken: string): Promise<any> {
-      return invoke<any>(window.electronAPI.invoke('transfer:download:init-queue', { userId, userToken }))
+    async initDownloadQueue(userId: number, userToken: string): Promise<{ restoredCount?: number; error?: string }> {
+      return invoke<{ restoredCount?: number; error?: string }>(window.electronAPI.invoke('transfer:download:init-queue', { userId, userToken }))
     },
 
-    async queueDownload(taskData: any): Promise<any> {
-      return invoke<any>(window.electronAPI.invoke('transfer:download:queue', taskData))
+    async queueDownload(taskData: any): Promise<{ success: boolean; taskId?: string; dbId?: number; error?: string }> {
+      return invoke<{ success: boolean; taskId?: string; dbId?: number; error?: string }>(window.electronAPI.invoke('transfer:download:queue', taskData))
     },
 
-    async batchQueueDownload(remotePaths: string[]): Promise<any> {
-      return invoke<any>(window.electronAPI.invoke('transfer:download:batch-queue', { remotePaths }))
+    async batchQueueDownload(remotePaths: string[]): Promise<{ success: boolean; successCount?: number; failedCount?: number; batchId?: string; error?: string }> {
+      return invoke<{ success: boolean; successCount?: number; failedCount?: number; batchId?: string; error?: string }>(window.electronAPI.invoke('transfer:download:batch-queue', { remotePaths }))
     },
 
     async getDownloadQueue(): Promise<any> {
@@ -116,15 +116,15 @@ export function createTransferService() {
       window.electronAPI.on('transfer:download:progress', callback)
     },
 
-    onDownloadCompleted(callback: (data: any) => void) {
+    onDownloadCompleted(callback: (data: { taskId: string; fileName: string; savePath: string; batchId?: string; batchTotal?: number }) => void) {
       window.electronAPI.on('transfer:download:completed', callback)
     },
 
-    onDownloadFailed(callback: (data: any) => void) {
+    onDownloadFailed(callback: (data: { taskId: string; fileName: string; error: string; batchId?: string; batchTotal?: number }) => void) {
       window.electronAPI.on('transfer:download:failed', callback)
     },
 
-    onDownloadCancelled(callback: (data: any) => void) {
+    onDownloadCancelled(callback: (data: { taskId: string | number; fileName?: string; batchId?: string; batchTotal?: number }) => void) {
       window.electronAPI.on('transfer:download:cancelled', callback)
     },
 

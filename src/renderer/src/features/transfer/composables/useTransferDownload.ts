@@ -5,7 +5,6 @@ import { openFileDirectory } from '@/utils/openFileDirectory'
 import { isNotificationsEnabled } from './useTransferCommon'
 import { transferRendererService } from '../transfer.renderer.service'
 import { useTransferStore } from '../stores/transferStore'
-// DownloadTask type is available through store, no need to import separately
 
 // ==================== 常量定义 ====================
 
@@ -28,6 +27,42 @@ let _downloadNotifyTimer: ReturnType<typeof setTimeout> | null = null
 const _pendingDownloadFailNotifications = ref<string[]>([])
 let _downloadFailNotifyTimer: ReturnType<typeof setTimeout> | null = null
 const _notifiedDownloadTaskIds = new Set<string>()
+type PendingDownloadNotification = { fileName: string; savePath: string }
+type DownloadBatchNotification = {
+  total: number
+  completed: PendingDownloadNotification[]
+  failed: string[]
+  cancelled: string[]
+  settledTaskIds: Set<string>
+  timer: ReturnType<typeof setTimeout> | null
+}
+const _pendingBatchDownloadNotifications = new Map<string, DownloadBatchNotification>()
+
+// 已 flush 的批次 ID + TTL（防止迟到事件重新创建空批次条目导致永久泄漏）
+const _settledBatchIds = new Set<string>()
+
+type DownloadCompletedEvent = {
+  taskId: string
+  fileName: string
+  savePath: string
+  batchId?: string
+  batchTotal?: number
+}
+
+type DownloadFailedEvent = {
+  taskId: string
+  fileName: string
+  error: string
+  batchId?: string
+  batchTotal?: number
+}
+
+type DownloadCancelledEvent = {
+  taskId: string
+  fileName?: string
+  batchId?: string
+  batchTotal?: number
+}
 
 export function useTransferDownload() {
   const store = useTransferStore()
@@ -92,52 +127,171 @@ export function useTransferDownload() {
     }, 3000)
   }
 
-  function flushDownloadNotifications() {
-    const files = _pendingDownloadNotifications.value.splice(0)
-    if (files.length === 0 || !isNotificationsEnabled()) return
-    const title = '下载完成'
-    if (files.length === 1) {
-      const { fileName, savePath } = files[0]
-      ElNotification.success({
+  function showDownloadCompletionNotification(result: {
+    completed: PendingDownloadNotification[]
+    failed: string[]
+    cancelled: string[]
+  }) {
+    const { completed, failed, cancelled } = result
+    if (!isNotificationsEnabled()) return
+    if (completed.length === 0 && failed.length === 0 && cancelled.length === 0) return
+
+    const title = failed.length > 0 && completed.length === 0 && cancelled.length === 0
+      ? '下载失败'
+      : '下载完成'
+
+    // 构建消息片段
+    const segments: string[] = []
+    if (completed.length > 0) {
+      segments.push(`${completed.length} 个文件下载完成`)
+    }
+    if (failed.length > 0) {
+      segments.push(`${failed.length} 个文件下载失败`)
+    }
+    if (cancelled.length > 0) {
+      segments.push(`${cancelled.length} 个已取消`)
+    }
+    const content = segments.join(' / ')
+
+    // 确定打开文件夹的目标路径
+    const allCompleted = [...completed]
+    const dirs = allCompleted.map(f => (f.savePath || '').replace(/[\\/][^\\/]+$/, '').replace(/\\/g, '/'))
+    const validDirs = dirs.filter(d => d.length > 0)
+    const commonDir = validDirs.length > 0
+      ? validDirs.reduce((a, b) => {
+          const pa = a.split('/'), pb = b.split('/')
+          const common: string[] = []
+          for (let i = 0; i < Math.min(pa.length, pb.length); i++) {
+            if (pa[i] === pb[i]) common.push(pa[i])
+            else break
+          }
+          return common.join('/')
+        })
+      : ''
+    const lastSavePath = (commonDir || validDirs[0] || '').replace(/\//g, '\\')
+
+    if (title === '下载失败') {
+      ElNotification.error({
         title,
-        message: h('div', [
-          h('p', { style: 'margin: 0 0 8px' }, `文件 "${fileName}" 已成功下载`),
-          h('button', {
-            onClick: () => openFileDirectory(savePath),
-            style: 'padding: 4px 12px; background-color: #18a058; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px'
-          }, '打开文件夹')
-        ]),
+        message: h('div', [h('p', { style: 'margin: 0' }, content)]),
         duration: 5000
       })
     } else {
-      const content = `${files.length} 个文件下载完成`
-      const dirs = files.map(f => (f.savePath || '').replace(/[\\/][^\\/]+$/, '').replace(/\\/g, '/'))
-      const validDirs = dirs.filter(d => d.length > 0)
-      const commonDir = validDirs.length > 0
-        ? validDirs.reduce((a, b) => {
-            const pa = a.split('/'), pb = b.split('/')
-            const common: string[] = []
-            for (let i = 0; i < Math.min(pa.length, pb.length); i++) {
-              if (pa[i] === pb[i]) common.push(pa[i])
-              else break
-            }
-            return common.join('/')
-          })
-        : ''
-      const lastSavePath = (commonDir || validDirs[0] || '').replace(/\//g, '\\')
       ElNotification.success({
         title,
         message: h('div', [
           h('p', { style: 'margin: 0 0 8px' }, content),
           h('button', {
-            onClick: () => openFileDirectory(lastSavePath),
+            onClick: () => lastSavePath && openFileDirectory(lastSavePath),
             style: 'padding: 4px 12px; background-color: #18a058; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px'
           }, '打开文件夹')
         ]),
         duration: 5000
       })
     }
-    window.electronAPI?.notification?.show({ title: '溜溜网盘', body: `${files.length} 个文件下载完成` })
+    window.electronAPI?.notification?.show({ title: '溜溜网盘', body: content })
+  }
+
+  function flushDownloadNotifications() {
+    showDownloadCompletionNotification({
+      completed: _pendingDownloadNotifications.value.splice(0),
+      failed: [],
+      cancelled: []
+    })
+  }
+
+  function isBatchDownloadEvent(data: { batchId?: string; batchTotal?: number }): data is { batchId: string; batchTotal: number } {
+    return typeof data.batchId === 'string' && data.batchId.length > 0 && typeof data.batchTotal === 'number' && data.batchTotal > 0
+  }
+
+  function getBatchNotification(batchId: string, batchTotal: number) {
+    let batch = _pendingBatchDownloadNotifications.get(batchId)
+    if (!batch) {
+      batch = {
+        total: batchTotal,
+        completed: [],
+        failed: [],
+        cancelled: [],
+        settledTaskIds: new Set<string>(),
+        timer: null
+      }
+      _pendingBatchDownloadNotifications.set(batchId, batch)
+    } else if (batchTotal > batch.total) {
+      batch.total = batchTotal
+    }
+
+    // 重置/启动超时定时器（30s 后兜底 flush，防止主进程崩溃导致永久卡住）
+    if (batch.timer) clearTimeout(batch.timer)
+    batch.timer = setTimeout(() => {
+      flushBatchNotificationIfComplete(batchId, true)
+    }, 30_000)
+
+    return batch
+  }
+
+  function flushBatchNotificationIfComplete(batchId: string, force = false) {
+    const batch = _pendingBatchDownloadNotifications.get(batchId)
+    if (!batch) return
+
+    const isComplete = batch.settledTaskIds.size >= batch.total
+    if (!isComplete && !force) return
+
+    // 清理定时器
+    if (batch.timer) {
+      clearTimeout(batch.timer)
+      batch.timer = null
+    }
+
+    // 显示通知
+    showDownloadCompletionNotification({
+      completed: batch.completed,
+      failed: batch.failed,
+      cancelled: batch.cancelled
+    })
+
+    // 标记为已 settled，防止迟到事件重新创建空批次条目（60s TTL）
+    _pendingBatchDownloadNotifications.delete(batchId)
+    _settledBatchIds.add(batchId)
+    setTimeout(() => _settledBatchIds.delete(batchId), 60_000)
+  }
+
+  function recordBatchDownloadCompleted(data: DownloadCompletedEvent): boolean {
+    if (_settledBatchIds.has(data.batchId!)) return true
+    if (!isBatchDownloadEvent(data)) return false
+
+    const batch = getBatchNotification(data.batchId, data.batchTotal)
+    if (!batch.settledTaskIds.has(data.taskId)) {
+      batch.settledTaskIds.add(data.taskId)
+      batch.completed.push({ fileName: data.fileName, savePath: data.savePath })
+    }
+    flushBatchNotificationIfComplete(data.batchId)
+    return true
+  }
+
+  function recordBatchDownloadFailed(data: DownloadFailedEvent): boolean {
+    if (_settledBatchIds.has(data.batchId!)) return true
+    if (!isBatchDownloadEvent(data)) return false
+
+    const batch = getBatchNotification(data.batchId, data.batchTotal)
+    if (!batch.settledTaskIds.has(data.taskId)) {
+      batch.settledTaskIds.add(data.taskId)
+      batch.failed.push(data.fileName)
+    }
+    flushBatchNotificationIfComplete(data.batchId)
+    return true
+  }
+
+  function recordBatchDownloadCancelled(data: DownloadCancelledEvent): boolean {
+    if (_settledBatchIds.has(data.batchId!)) return true
+    if (!isBatchDownloadEvent(data)) return false
+
+    const batch = getBatchNotification(data.batchId, data.batchTotal)
+    if (!batch.settledTaskIds.has(data.taskId)) {
+      batch.settledTaskIds.add(data.taskId)
+      batch.cancelled.push(data.fileName || data.taskId)
+    }
+    flushBatchNotificationIfComplete(data.batchId)
+    return true
   }
 
   function flushDownloadFailNotifications() {
@@ -226,11 +380,16 @@ export function useTransferDownload() {
     try {
       const result = await transferRendererService.batchQueueDownload(filePaths)
       if (!result) {
-        return { success: false, successCount: 0, failedCount: filePaths.length, error: '批量添加到队列失败' }
+        return { success: false, successCount: 0, failedCount: filePaths.length, batchId: undefined, error: '批量添加到队列失败' }
       }
-      return { success: true, successCount: result.successCount, failedCount: result.failedCount }
+      return {
+        success: true,
+        successCount: result.successCount ?? 0,
+        failedCount: result.failedCount ?? 0,
+        batchId: result.batchId
+      }
     } catch (error: any) {
-      return { success: false, successCount: 0, failedCount: filePaths.length, error: error.message || '批量添加到队列失败' }
+      return { success: false, successCount: 0, failedCount: filePaths.length, batchId: undefined, error: error.message || '批量添加到队列失败' }
     }
   }
 
@@ -321,14 +480,18 @@ export function useTransferDownload() {
   }
 
   // 下载完成处理函数
-  const downloadCompletedHandler = (data: { taskId: string, fileName: string, savePath: string } | undefined) => {
+  const downloadCompletedHandler = (data: DownloadCompletedEvent | undefined) => {
     // 数据有效性检查
     if (!data || !data.taskId) {
       console.warn('[downloadCompletedHandler] 收到无效的下载完成数据:', data)
       return
     }
 
-    // 去重：同一个 taskId 只处理一次通知
+    // 先记录批次（内部基于 settledTaskIds 自身去重），再做 UI 通知去重
+    // 这样即使 IPC 抖动重复发送同一 taskId，settled 计数也不会丢失
+    const isBatch = recordBatchDownloadCompleted(data)
+
+    // UI 通知去重：同一个 taskId 只弹一次通知
     if (notifiedDownloadTaskIds.has(data.taskId)) return
     notifiedDownloadTaskIds.add(data.taskId)
     setTimeout(() => notifiedDownloadTaskIds.delete(data.taskId), 10000)
@@ -350,13 +513,15 @@ export function useTransferDownload() {
       downloadProgressMap.delete(data.taskId)
     }, COMPLETED_TASK_CLEANUP_DELAY_MS)
 
-    // 批量合并下载完成通知
-    _pendingDownloadNotifications.value.push({ fileName: data.fileName, savePath: data.savePath })
-    scheduleDownloadNotification()
+    if (!isBatch) {
+      // 非批次任务走 legacy 3s 防抖通知
+      _pendingDownloadNotifications.value.push({ fileName: data.fileName, savePath: data.savePath })
+      scheduleDownloadNotification()
+    }
   }
 
   // 下载失败处理函数
-  const downloadFailedHandler = (data: { taskId: string, fileName: string, error: string } | undefined) => {
+  const downloadFailedHandler = (data: DownloadFailedEvent | undefined) => {
     // 数据有效性检查
     if (!data || !data.taskId) {
       console.warn('[downloadFailedHandler] 收到无效的下载失败数据:', data)
@@ -366,14 +531,17 @@ export function useTransferDownload() {
     // 清理进度数据
     downloadProgressMap.delete(data.taskId)
 
-    // 批量合并失败通知
-    _pendingDownloadFailNotifications.value.push(data.fileName)
-    if (_downloadFailNotifyTimer) clearTimeout(_downloadFailNotifyTimer)
-    _downloadFailNotifyTimer = setTimeout(flushDownloadFailNotifications, 1500)
+    // 批次任务：合并到批次通知；非批次：走 legacy 防抖
+    const isBatch = recordBatchDownloadFailed(data)
+    if (!isBatch) {
+      _pendingDownloadFailNotifications.value.push(data.fileName)
+      if (_downloadFailNotifyTimer) clearTimeout(_downloadFailNotifyTimer)
+      _downloadFailNotifyTimer = setTimeout(flushDownloadFailNotifications, 1500)
+    }
   }
 
   // 下载取消处理函数
-  const downloadCancelledHandler = (data: { taskId: string | number } | undefined) => {
+  const downloadCancelledHandler = (data: DownloadCancelledEvent | undefined) => {
     // 数据有效性检查
     if (!data || data.taskId === undefined) {
       console.warn('[downloadCancelledHandler] 收到无效的下载取消数据:', data)
@@ -382,6 +550,9 @@ export function useTransferDownload() {
 
     // 清理进度数据
     downloadProgressMap.delete(data.taskId.toString())
+
+    // 批次任务计入 settled；非批次任务静默处理（已经在 UI 中移除）
+    recordBatchDownloadCancelled(data)
   }
 
   // 认证失败处理：Alist token 过期时显示一次性通知
@@ -530,6 +701,8 @@ export function useTransferDownload() {
       clearTimeout(_downloadFailNotifyTimer)
       _downloadFailNotifyTimer = null
     }
+    // 不清除模块级 _pendingBatchDownloadNotifications Map（F-11）
+    // Map 仅由 flushBatchNotificationIfComplete 管理生命周期
   }
 
   return {

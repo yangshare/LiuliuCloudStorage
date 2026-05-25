@@ -4,7 +4,7 @@ import { resolve } from 'path'
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin({ exclude: [] })],
+    plugins: [externalizeDepsPlugin({ exclude: ['winston', 'winston-daily-rotate-file'] })],
     build: {
       outDir: 'dist-electron/main',
       rollupOptions: {

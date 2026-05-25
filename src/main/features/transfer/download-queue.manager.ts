@@ -294,8 +294,29 @@ class DownloadQueueManager {
       // 从活跃集合移除
       this.activeDownloads.delete(task.id)
 
-      // 检测认证失败（401 / Guest user），暂停队列避免大量弹窗
       const errMsg: string = error.message || ''
+
+      // 更新数据库状态为 failed，避免重启后死循环恢复同一任务
+      try {
+        await this.transferService.markAsFailed(task.dbId, errMsg, 0)
+      } catch (dbErr) {
+        loggerService.error('DownloadQueueManager', `更新失败状态失败 - dbId: ${task.dbId}, 错误: ${dbErr}`)
+      }
+
+      // 清理本地残留的部分下载文件（仅当 getDownloadUrl 等阶段失败、未真正进入下载流程时可能残留）
+      if (task.savePath) {
+        try {
+          if (fs.existsSync(task.savePath)) {
+            fs.unlinkSync(task.savePath)
+          }
+        } catch (fsErr: any) {
+          if (fsErr?.code !== 'ENOENT') {
+            loggerService.error('DownloadQueueManager', `清理残留文件失败: ${task.savePath} - ${fsErr}`)
+          }
+        }
+      }
+
+      // 检测认证失败（401 / Guest user），暂停队列避免大量弹窗
       const isAuthError = errMsg.includes('401') || errMsg.toLowerCase().includes('guest user')
       if (isAuthError && !this.authFailedNotified) {
         this.authFailedNotified = true

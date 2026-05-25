@@ -83,19 +83,11 @@ export function useTransferDownload() {
   const totalDownloadProgress = computed(() => store.totalDownloadProgress)
 
   // 通知函数
+  // 纯防抖策略：每次新完成事件都重置计时器，3 秒内无新事件则 flush
+  // 不依赖 store.activeDownloads（受 200ms 防抖滞后影响），避免误判队列为空导致单文件通知
   function scheduleDownloadNotification() {
     if (_downloadNotifyTimer) clearTimeout(_downloadNotifyTimer)
-    // 队列中还有活跃或等待中的任务时，延长等待
-    const hasRemaining = activeDownloads.length > 0 || downloadQueue.length > 0
-    if (!hasRemaining) {
-      flushDownloadNotifications()
-      return
-    }
     _downloadNotifyTimer = setTimeout(() => {
-      if (activeDownloads.length > 0 || downloadQueue.length > 0) {
-        scheduleDownloadNotification()
-        return
-      }
       flushDownloadNotifications()
     }, 3000)
   }

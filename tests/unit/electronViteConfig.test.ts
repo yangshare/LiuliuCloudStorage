@@ -15,4 +15,10 @@ describe('Electron Vite 配置', () => {
 
     expect(configSource).toMatch(/external:\s*\[[^\]]*['"]moment['"]/s)
   })
+
+  it('外置的 moment 应声明为生产依赖，确保 Electron 运行时可以解析', () => {
+    const packageJson = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf-8'))
+
+    expect(packageJson.dependencies).toHaveProperty('moment')
+  })
 })

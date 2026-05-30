@@ -9,6 +9,8 @@ vi.mock('vue-router', () => ({
   useRoute: () => ({ query: {} })
 }))
 
+const initDownloadQueueMock = vi.fn()
+
 vi.mock('@/features/transfer/composables/useTransferUpload', () => ({
   useTransferUpload: () => ({
     addToUploadQueue: vi.fn()
@@ -17,7 +19,7 @@ vi.mock('@/features/transfer/composables/useTransferUpload', () => ({
 
 vi.mock('@/features/transfer/composables/useTransferDownload', () => ({
   useTransferDownload: () => ({
-    initDownloadQueue: vi.fn()
+    initDownloadQueue: initDownloadQueueMock
   })
 }))
 
@@ -126,5 +128,23 @@ describe('HomeView - Keyboard Shortcuts', () => {
 
     document.body.removeChild(textarea)
     wrapper.unmount()
+  })
+
+  it('初始化下载队列时传入 authStore.user.token', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const { useAuthStore } = await import('../../../src/renderer/src/features/auth/stores/authStore')
+    const authStore = useAuthStore()
+    authStore.setUser({ id: 7, username: 'alice', token: 'user-token', isAdmin: false })
+
+    mount(HomeView, {
+      global: {
+        plugins: [pinia],
+        stubs
+      }
+    })
+    await flushPromises()
+
+    expect(initDownloadQueueMock).toHaveBeenCalledWith(7, 'user-token')
   })
 })

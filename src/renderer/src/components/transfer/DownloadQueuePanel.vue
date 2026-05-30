@@ -279,7 +279,7 @@ async function handleResumeQueue() {
     })
   } else {
     ElNotification.error({
-      title: '恢复失败',
+      title: result.error?.includes('Alist 登录已过期') ? 'Alist 认证失效' : '恢复失败',
       message: result.error || '恢复下载队列失败'
     })
   }

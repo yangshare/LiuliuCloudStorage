@@ -38,20 +38,20 @@ async function handleLogin() {
       formData.value.password,
       autoLogin.value
     )
-    if (result.success) {
+    if (result.success && result.data) {
       const userResult = await window.electronAPI.auth.getCurrentUser()
-      if (userResult?.success && userResult.data) {
-        authStore.setUser({
-          id: userResult.data.id,
-          username: userResult.data.username,
-          token: '',
-          isAdmin: userResult.data.isAdmin
-        })
-      }
+      authStore.setUser({
+        id: result.data.id,
+        username: result.data.username,
+        token: result.data.token,
+        isAdmin: userResult?.success && userResult.data
+          ? userResult.data.isAdmin
+          : result.data.isAdmin
+      })
       ElMessage.success('登录成功')
       router.push('/')
     } else {
-      ElMessage.error(result.message || '登录失败')
+      ElMessage.error(result.message || result.error || '登录失败')
     }
   } catch (err) {
     ElMessage.error('网络错误，请稍后重试')
@@ -59,6 +59,8 @@ async function handleLogin() {
     loading.value = false
   }
 }
+
+defineExpose({ handleLogin })
 </script>
 
 <template>

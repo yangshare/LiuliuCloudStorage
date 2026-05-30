@@ -41,6 +41,17 @@ const _pendingBatchDownloadNotifications = new Map<string, DownloadBatchNotifica
 // 已 flush 的批次 ID + TTL（防止迟到事件重新创建空批次条目导致永久泄漏）
 const _settledBatchIds = new Set<string>()
 
+// 认证失败静默窗口：认证失败事件触发后 30 秒内，跳过普通下载失败通知
+let _authFailureSilenceUntil = 0
+
+function isAuthFailureMessage(error: string | undefined): boolean {
+  const value = (error || '').toLowerCase()
+  return value.includes('alist 登录已过期') ||
+    value.includes('token is expired') ||
+    value.includes('401') ||
+    value.includes('guest user')
+}
+
 type DownloadCompletedEvent = {
   taskId: string
   fileName: string
@@ -531,6 +542,11 @@ export function useTransferDownload() {
     // 清理进度数据
     downloadProgressMap.delete(data.taskId)
 
+    // 认证失败静默窗口内跳过普通下载失败通知
+    if (isAuthFailureMessage(data.error) && Date.now() < _authFailureSilenceUntil) {
+      return
+    }
+
     // 批次任务：合并到批次通知；非批次：走 legacy 防抖
     const isBatch = recordBatchDownloadFailed(data)
     if (!isBatch) {
@@ -558,6 +574,7 @@ export function useTransferDownload() {
   // 认证失败处理：Alist token 过期时显示一次性通知
   const downloadAuthFailedHandler = (data: { error: string } | undefined) => {
     if (!data) return
+    _authFailureSilenceUntil = Date.now() + 30_000
     store.setDownloadQueuePaused(true)
     ElNotification.error({
       title: 'Alist 认证失效',

@@ -224,4 +224,29 @@ describe('useTransferDownload 批量下载通知', () => {
     expect(notificationError).toHaveBeenCalledTimes(1)
     expect(notificationSuccess).not.toHaveBeenCalled()
   })
+
+  it('认证失败只显示 Alist 认证失效通知，不追加普通下载失败通知', async () => {
+    await setupModule()
+
+    function getAuthFailedListener() {
+      const l = listeners.get('transfer:download:auth-failed')
+      expect(l).toBeDefined()
+      return l!
+    }
+
+    const authFailed = getAuthFailedListener()
+    const failed = getFailedListener()
+
+    authFailed({ error: 'Alist 登录已过期，请重新登录后恢复下载' })
+    failed({ taskId: 'd_auth', fileName: 'auth.zip', error: 'Alist 登录已过期' })
+
+    vi.advanceTimersByTime(2000)
+
+    expect(notificationError).toHaveBeenCalledTimes(1)
+    expect(notificationError).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Alist 认证失效',
+      message: 'Alist 登录已过期，请重新登录后恢复下载',
+      duration: 0
+    }))
+  })
 })

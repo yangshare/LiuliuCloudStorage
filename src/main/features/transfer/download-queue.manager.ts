@@ -45,7 +45,6 @@ class DownloadQueueManager {
   private downloadManager: DownloadManager
   private onProgressCallback: DownloadProgressCallback | null = null
   private userId: number = 0
-  private userToken: string = ''
   private authFailedNotified: boolean = false  // 防止重复发送认证失败通知
   private emitTimer: ReturnType<typeof setTimeout> | null = null  // 防抖定时器
 
@@ -58,9 +57,8 @@ class DownloadQueueManager {
     this.onProgressCallback = callback
   }
 
-  setCredentials(userId: number, userToken: string): void {
+  setCredentials(userId: number, _userToken: string): void {
     this.userId = userId
-    this.userToken = userToken
   }
 
   /**

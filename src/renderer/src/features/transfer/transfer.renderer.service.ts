@@ -30,23 +30,23 @@ export function createTransferService() {
     },
 
     // ===== 下载 =====
-    async download(params: any): Promise<{ success: boolean; taskId?: string; savePath?: string; error?: string }> {
+    async download(params: any): Promise<{ success: boolean; taskId?: string; savePath?: string; error?: string } | null> {
       return invoke<{ success: boolean; taskId?: string; savePath?: string; error?: string }>(window.electronAPI.invoke('transfer:download:file', params))
     },
 
-    async saveAs(fileName: string, userId: number): Promise<{ success: boolean; filePath?: string; canceled?: boolean; error?: string }> {
+    async saveAs(fileName: string, userId: number): Promise<{ success: boolean; filePath?: string; canceled?: boolean; error?: string } | null> {
       return invoke<{ success: boolean; filePath?: string; canceled?: boolean; error?: string }>(window.electronAPI.invoke('transfer:download:saveAs', { fileName, userId }))
     },
 
-    async initDownloadQueue(userId: number, userToken: string): Promise<{ restoredCount?: number; error?: string }> {
+    async initDownloadQueue(userId: number, userToken: string): Promise<{ restoredCount?: number; error?: string } | null> {
       return invoke<{ restoredCount?: number; error?: string }>(window.electronAPI.invoke('transfer:download:init-queue', { userId, userToken }))
     },
 
-    async queueDownload(taskData: any): Promise<{ success: boolean; taskId?: string; dbId?: number; error?: string }> {
+    async queueDownload(taskData: any): Promise<{ success: boolean; taskId?: string; dbId?: number; error?: string } | null> {
       return invoke<{ success: boolean; taskId?: string; dbId?: number; error?: string }>(window.electronAPI.invoke('transfer:download:queue', taskData))
     },
 
-    async batchQueueDownload(remotePaths: string[]): Promise<{ success: boolean; successCount?: number; failedCount?: number; batchId?: string; error?: string }> {
+    async batchQueueDownload(remotePaths: string[]): Promise<{ success: boolean; successCount?: number; failedCount?: number; batchId?: string; error?: string } | null> {
       return invoke<{ success: boolean; successCount?: number; failedCount?: number; batchId?: string; error?: string }>(window.electronAPI.invoke('transfer:download:batch-queue', { remotePaths }))
     },
 

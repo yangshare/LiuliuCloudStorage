@@ -69,7 +69,7 @@ type DownloadFailedEvent = {
 }
 
 type DownloadCancelledEvent = {
-  taskId: string
+  taskId: string | number
   fileName?: string
   batchId?: string
   batchTotal?: number
@@ -297,9 +297,10 @@ export function useTransferDownload() {
     if (!isBatchDownloadEvent(data)) return false
 
     const batch = getBatchNotification(data.batchId, data.batchTotal)
-    if (!batch.settledTaskIds.has(data.taskId)) {
-      batch.settledTaskIds.add(data.taskId)
-      batch.cancelled.push(data.fileName || data.taskId)
+    const taskIdStr = String(data.taskId)
+    if (!batch.settledTaskIds.has(taskIdStr)) {
+      batch.settledTaskIds.add(taskIdStr)
+      batch.cancelled.push(data.fileName || taskIdStr)
     }
     flushBatchNotificationIfComplete(data.batchId)
     return true
@@ -557,7 +558,7 @@ export function useTransferDownload() {
   }
 
   // 下载取消处理函数
-  const downloadCancelledHandler = (data: DownloadCancelledEvent | undefined) => {
+  const downloadCancelledHandler = (data: { taskId: string | number; fileName?: string; batchId?: string; batchTotal?: number } | undefined) => {
     // 数据有效性检查
     if (!data || data.taskId === undefined) {
       console.warn('[downloadCancelledHandler] 收到无效的下载取消数据:', data)

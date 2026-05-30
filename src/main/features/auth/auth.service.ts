@@ -2,10 +2,12 @@
 
 import { eq, desc } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
+import { BrowserWindow } from 'electron'
 import { getDatabase } from '../../database'
 import { users, sessions } from '../../database/schema'
 import { IPCError, IPCErrorCode } from '../../core/ipc/error-handler'
 import { alistService } from '../../core/api/alist.service'
+import { isAlistAuthError } from '../../core/api/alist-auth-error'
 import { cryptoService } from '../../core/crypto/crypto.service'
 import { activityService, ActionType } from '../activity/activity.core.service'
 import { loggerService } from '../../core/logger/logger.service'
@@ -19,7 +21,14 @@ import type {
 } from '../../../shared/types/auth'
 
 // 内存中的当前会话缓存
-let currentSession: { userId: number; username: string; token: string } | null = null
+export interface AuthSession {
+  userId: number
+  username: string
+  token: string
+  basePath: string
+}
+
+let currentSession: AuthSession | null = null
 
 export interface LoginPreferences {
   username: string
@@ -176,7 +185,7 @@ export class AuthService {
    * 检查/恢复会话：从数据库恢复，支持自动重新登录
    */
   async checkSession(): Promise<AuthSessionResult> {
-    const session = await this.restoreSession()
+    const session = await this.ensureValidSession()
 
     if (!session) {
       return { success: true, data: { valid: false } }
@@ -200,7 +209,7 @@ export class AuthService {
    * 获取当前用户详情
    */
   async getCurrentUser(): Promise<{ success: boolean; data?: CurrentUserResult; error?: string }> {
-    const session = await this.restoreSession()
+    const session = await this.ensureValidSession()
     if (!session) {
       return { success: false, error: '用户未登录' }
     }
@@ -236,11 +245,135 @@ export class AuthService {
   /**
    * 获取当前会话（供其他服务使用）
    */
-  getCurrentSession(): { userId: number; username: string; token: string } | null {
+  getCurrentSession(): AuthSession | null {
     return currentSession
   }
 
+  /**
+   * 确保拥有有效的 Alist 会话：验证/恢复/自动刷新
+   */
+  async ensureValidSession(options: { forceRefresh?: boolean } = {}): Promise<AuthSession | null> {
+    const row = await this.getLatestSessionRow()
+
+    if (currentSession && !options.forceRefresh) {
+      const valid = await this.validateAlistSession(currentSession)
+      if (valid) return currentSession
+    }
+
+    if (!row) {
+      this.notifyAuthExpired()
+      return null
+    }
+
+    if (!options.forceRefresh && row.expiresAt && row.expiresAt.getTime() > Date.now()) {
+      try {
+        const token = cryptoService.decrypt(row.tokenEncrypted)
+        const restored = this.applySession(row.userId, row.username, token, row.basePath || '/')
+        if (await this.validateAlistSession(restored)) return restored
+      } catch (e) {
+        loggerService.error('AuthService', `Session restore validation failed: ${e}`)
+      }
+    }
+
+    const refreshed = await this.tryAutoLogin(row)
+    if (refreshed) return refreshed
+
+    this.clearMemorySession()
+    this.notifyAuthExpired()
+    return null
+  }
+
   // ==================== 私有方法 ====================
+
+  private getLatestSessionRow(): {
+    userId: number
+    username: string
+    tokenEncrypted: string
+    expiresAt: Date | null
+    basePath: string | null
+  } | null {
+    return this.db
+      .select({
+        userId: sessions.userId,
+        tokenEncrypted: sessions.tokenEncrypted,
+        expiresAt: sessions.expiresAt,
+        basePath: sessions.basePath,
+        username: users.username
+      })
+      .from(sessions)
+      .innerJoin(users, eq(sessions.userId, users.id))
+      .orderBy(desc(sessions.createdAt))
+      .limit(1)
+      .get() ?? null
+  }
+
+  private applySession(userId: number, username: string, token: string, basePath: string): AuthSession {
+    currentSession = { userId, username, token, basePath }
+    loggerService.info('AuthService', `Applying Alist session for user: ${username}, basePath: ${basePath}`)
+    alistService.setToken(token)
+    alistService.setBasePath(basePath)
+    alistService.setUserId(userId)
+    return currentSession
+  }
+
+  private async validateAlistSession(session: AuthSession): Promise<boolean> {
+    try {
+      this.applySession(session.userId, session.username, session.token, session.basePath)
+      await alistService.getMe()
+      return true
+    } catch (error) {
+      if (isAlistAuthError(error)) return false
+      loggerService.warn('AuthService', `Alist session validation failed with non-auth error: ${error}`)
+      throw error
+    }
+  }
+
+  private async tryAutoLogin(row: {
+    userId: number
+    username: string
+    basePath: string | null
+  }): Promise<AuthSession | null> {
+    const autoLogin = preferencesService.getValue(`auto_login_${row.username}`) === 'true'
+    if (!autoLogin) return null
+
+    const encryptedPwd = preferencesService.getValue(`auth_password_${row.username}`)
+    if (!encryptedPwd) return null
+
+    try {
+      const password = cryptoService.decrypt(encryptedPwd)
+      const result = await alistService.login(row.username, password)
+      if (!result.success || !result.token) return null
+
+      let basePath = row.basePath || '/'
+      try {
+        const userInfo = await alistService.getMe()
+        basePath = userInfo.basePath || basePath
+      } catch (error) {
+        loggerService.warn('AuthService', `Failed to get user info after auto-login: ${error}`)
+      }
+
+      this.saveSession(row.userId, row.username, result.token, basePath)
+      return currentSession
+    } catch (error) {
+      loggerService.error('AuthService', `Auto-login failed for ${row.username}: ${error}`)
+      return null
+    }
+  }
+
+  private notifyAuthExpired(): void {
+    const payload = { code: 'UNAUTHORIZED', message: 'Alist 登录已过期，请重新登录' }
+    BrowserWindow.getAllWindows().forEach(win => {
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('auth:session:expired', payload)
+      }
+    })
+  }
+
+  private clearMemorySession(): void {
+    currentSession = null
+    alistService.setToken('')
+    alistService.setBasePath('')
+  }
 
   /**
    * 确保用户存在，不存在则创建
@@ -292,109 +425,8 @@ export class AuthService {
       })
       .run()
 
-    currentSession = { userId, username, token }
-
-    // 初始化 AlistService
-    loggerService.info('AuthService', `Initializing AlistService for user: ${username}, basePath: ${basePath}`)
-    alistService.setToken(token)
-    alistService.setBasePath(basePath)
-    alistService.setUserId(userId)
-    loggerService.info('AuthService', 'AlistService initialized')
-  }
-
-  /**
-   * 从数据库恢复会话
-   */
-  private async restoreSession(): Promise<{ userId: number; username: string; token: string } | null> {
-    if (currentSession) return currentSession
-
-    // 获取最新会话
-    const row = this.db
-      .select({
-        userId: sessions.userId,
-        tokenEncrypted: sessions.tokenEncrypted,
-        expiresAt: sessions.expiresAt,
-        basePath: sessions.basePath,
-        username: users.username
-      })
-      .from(sessions)
-      .innerJoin(users, eq(sessions.userId, users.id))
-      .orderBy(desc(sessions.createdAt))
-      .limit(1)
-      .get()
-
-    if (!row) return null
-
-    // 检查自动登录偏好
-    const autoLogin = preferencesService.getValue(`auto_login_${row.username}`) === 'true'
-    if (!autoLogin) {
-      loggerService.info('AuthService', `Auto login disabled for user: ${row.username}`)
-      return null
-    }
-
-    const restoreAlist = (token: string, basePath: string) => {
-      loggerService.info(
-        'AuthService',
-        `Restoring AlistService for user: ${row.username}, basePath: ${basePath}`
-      )
-      alistService.setToken(token)
-      alistService.setBasePath(basePath)
-      alistService.setUserId(row.userId)
-      loggerService.info('AuthService', 'AlistService restored')
-    }
-
-    // 1. 会话未过期？
-    if (row.expiresAt && row.expiresAt.getTime() > Date.now()) {
-      try {
-        const token = cryptoService.decrypt(row.tokenEncrypted)
-        currentSession = { userId: row.userId, username: row.username, token }
-        restoreAlist(token, row.basePath || '/')
-        return currentSession
-      } catch (e) {
-        loggerService.error('AuthService', `Session decryption failed: ${e}`)
-        // 继续尝试自动重新登录
-      }
-    }
-
-    // 2. 会话过期或无效，尝试用存储的密码自动重新登录
-    loggerService.info(
-      'AuthService',
-      `Session expired or invalid for ${row.username}, attempting auto-login...`
-    )
-    const encryptedPwd = preferencesService.getValue(`auth_password_${row.username}`)
-
-    if (encryptedPwd) {
-      try {
-        const password = cryptoService.decrypt(encryptedPwd)
-        const result = await alistService.login(row.username, password)
-
-        if (result.success && result.token) {
-          loggerService.info('AuthService', `Auto-login successful for ${row.username}`)
-
-          let basePath = '/'
-          try {
-            const userInfo = await alistService.getMe()
-            basePath = userInfo.basePath || '/'
-          } catch (e) {
-            loggerService.warn(
-              'AuthService',
-              `Failed to get user info during auto-login, using default path: ${e}`
-            )
-          }
-
-          this.saveSession(row.userId, row.username, result.token, basePath)
-          return currentSession
-        } else {
-          loggerService.warn('AuthService', `Auto-login failed for ${row.username}: ${result.message}`)
-        }
-      } catch (e) {
-        loggerService.error('AuthService', `Auto-login exception for ${row.username}: ${e}`)
-      }
-    } else {
-      loggerService.info('AuthService', `No stored password for ${row.username}`)
-    }
-
-    return null
+    // 初始化内存会话和 AlistService
+    this.applySession(userId, username, token, basePath)
   }
 
   /**

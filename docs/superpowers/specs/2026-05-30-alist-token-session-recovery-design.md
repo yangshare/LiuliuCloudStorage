@@ -1,196 +1,196 @@
-# Alist Token Session Recovery Design
+# Alist Token 会话恢复设计
 
-## Context
+## 背景
 
-The application can show a misleading sequence of notifications after resuming downloads:
+应用在恢复下载队列后，可能连续出现一组误导性的通知：
 
-- "队列已恢复"
-- "Alist 认证失效"
-- "下载失败"
+- “队列已恢复”
+- “Alist 认证失效”
+- “下载失败”
 
-Logs show the underlying failure:
+日志显示底层故障是：
 
-- `AlistService.getDownloadUrl` returns `code=401, message=token is expired`.
-- `DownloadQueueManager` pauses the queue after detecting auth failure.
-- `AutoSyncService` can continue into a normal-looking remote scan result with `0` files when the real cause is expired authentication.
+- `AlistService.getDownloadUrl` 返回 `code=401, message=token is expired`。
+- `DownloadQueueManager` 检测到认证失败后暂停队列。
+- `AutoSyncService` 在真实原因是认证过期时，仍可能继续走到正常的远程扫描结果，并表现为扫描到 `0` 个文件。
 
-Code inspection found two renderer-side token propagation defects:
+代码检查发现两个渲染进程侧的 token 传递缺陷：
 
-- `LoginView` stores `token: ''` in `authStore` after login.
-- `HomeView` calls `initDownloadQueue(authStore.user.id, authStore.token)`, but the store has no top-level `token`; the token lives on `authStore.user.token`.
+- `LoginView` 登录后写入 `authStore` 时使用了 `token: ''`。
+- `HomeView` 调用 `initDownloadQueue(authStore.user.id, authStore.token)`，但 store 没有顶层 `token` 字段；真实 token 在 `authStore.user.token`。
 
-These renderer issues are real, but the deeper design issue is that download queue and auto-sync flows can depend on stale or missing renderer-provided tokens instead of a main-process session authority.
+这两个渲染进程问题需要修，但更深层的设计问题是：下载队列和自动同步流程会依赖渲染进程传来的 token，而不是由主进程统一管理和校验 Alist 会话。
 
-## Goals
+## 目标
 
-- Make the main process the authority for Alist token validity.
-- Prevent expired Alist tokens from being treated as ordinary download failures.
-- Avoid marking batches as failed when the only problem is authentication.
-- Prevent auto-sync from reporting normal empty scans when authentication failed.
-- Keep the user-facing state clear: either the queue resumes successfully, or the app asks the user to re-login before resuming.
+- 让主进程成为 Alist token 有效性的唯一权威来源。
+- 防止过期 Alist token 被当成普通下载失败处理。
+- 避免仅因认证问题就把批量任务标记为失败。
+- 防止自动同步在认证失败时报告正常的空扫描结果。
+- 保持用户看到的状态清晰：要么队列真正恢复成功，要么应用明确要求用户重新登录后再恢复。
 
-## Non-Goals
+## 非目标
 
-- Do not add new persistent transfer statuses such as `auth_waiting`.
-- Do not redesign the full queue database schema.
-- Do not implement long-term history pruning for the `completed=60480` case in this change. That is a separate performance-hardening task.
-- Do not change the app's visual design beyond notification wording and routing behavior needed for this flow.
+- 不新增 `auth_waiting` 这类持久化传输状态。
+- 不重设计整个队列数据库结构。
+- 不在本次改动中处理 `completed=60480` 对应的长期历史清理问题；这是单独的性能加固任务。
+- 不做无关的视觉设计改造，只调整本流程必要的通知文案和跳转行为。
 
-## Recommended Approach
+## 推荐方案
 
-Use centralized auth recovery in the main process.
+采用主进程集中式认证恢复。
 
-The renderer should still keep `authStore.user.token` correct for UI flows that need it, but download queue restoration, queued downloads, and auto-sync should acquire tokens from `AuthService` before touching Alist.
+渲染进程仍应保持 `authStore.user.token` 正确，供必要的 UI 流程使用。但下载队列恢复、排队下载、自动同步这些主流程，在访问 Alist 前都应从 `AuthService` 获取有效 token。
 
-When Alist returns an authentication error, the service that received the error should attempt exactly one session recovery. If recovery succeeds, retry the interrupted operation once. If recovery fails, pause or fail the current high-level workflow with an authentication-specific result instead of continuing as a normal transfer or scan failure.
+当 Alist 返回认证错误时，收到错误的服务只尝试一次会话恢复。恢复成功则重试被中断的操作一次；恢复失败则暂停队列或将当前高层流程标记为认证失败，而不是继续当作普通传输或扫描失败处理。
 
-## Authentication Design
+## 认证设计
 
-### Renderer Token State
+### 渲染进程 token 状态
 
-`LoginView` must store the token returned by `auth.login`:
+`LoginView` 必须保存 `auth.login` 返回的 token：
 
-- On successful login, use `result.data.token`.
-- Continue to fetch current user details if needed for quota/admin metadata, but do not overwrite the token with an empty string.
+- 登录成功后使用 `result.data.token`。
+- 如果仍需要获取当前用户详情用于配额或管理员信息，可以继续调用 `getCurrentUser`，但不能用空 token 覆盖登录结果里的 token。
 
-`HomeView` should pass `authStore.user.token` if the existing IPC signature still requires a token argument. This keeps current renderer code coherent, but main-process code must not depend on this value as the source of truth.
+如果现有 IPC 签名仍需要 token 参数，`HomeView` 应传入 `authStore.user.token`。这能保持当前渲染进程代码自洽，但主进程不能把这个值当作权威 token 来源。
 
-### Main-Process Session Authority
+### 主进程会话权威
 
-`AuthService` should expose a method with this behavior:
+`AuthService` 应暴露一个内部方法，行为如下：
 
-- Return the current valid session when one exists.
-- If no in-memory session exists, restore from the local session database.
-- Validate restored tokens against Alist before returning them.
-- If validation fails and auto-login credentials exist, perform automatic Alist login, save the new session, and return it.
-- If validation fails and recovery cannot be completed, return an authentication-expired result.
+- 当前内存会话存在且有效时，返回当前会话。
+- 如果没有内存会话，从本地 session 数据库恢复。
+- 返回恢复出的 token 前，先向 Alist 校验 token 是否仍有效。
+- 如果校验失败且存在自动登录凭据，自动重新登录 Alist，保存新 session，然后返回新会话。
+- 如果校验失败且无法恢复，返回认证过期结果。
 
-This can be implemented as a new method such as `ensureValidSession()` or by extending `checkSession()` while preserving existing IPC response shapes. Internal services should call the explicit internal method so they do not need to parse renderer-oriented IPC payloads.
+该能力可以通过新增 `ensureValidSession()` 实现，也可以扩展 `checkSession()`，但要保持现有 IPC 返回形状兼容。内部服务应调用明确的内部方法，避免解析面向渲染进程的 IPC 数据结构。
 
-`getCurrentUser()` remains a user-profile method. It should not become a token retrieval path.
+`getCurrentUser()` 继续只负责用户资料查询，不应变成获取 token 的路径。
 
-## Download Queue Design
+## 下载队列设计
 
-### Queue Initialization
+### 队列初始化
 
-`transfer:download:init-queue` may keep accepting `{ userId, userToken }` to avoid broad preload/type churn, but the handler should prefer the main-process session:
+`transfer:download:init-queue` 可以继续接收 `{ userId, userToken }`，以避免大范围修改 preload 和类型声明。但 handler 内部应优先使用主进程会话：
 
-1. Call the session authority to ensure the Alist token is valid.
-2. If valid, initialize queue credentials from that session.
-3. Restore pending and in-progress downloads.
-4. Fetch queue state.
-5. If invalid, do not restore or start downloads. Return an auth-specific failure that the renderer can present as "请重新登录后恢复下载".
+1. 调用会话权威方法，确保 Alist token 有效。
+2. 如果有效，使用该 session 初始化队列凭据。
+3. 恢复 pending 和 in-progress 下载。
+4. 拉取队列状态。
+5. 如果无效，不恢复也不启动下载，返回认证类失败，让渲染进程提示“请重新登录后恢复下载”。
 
-### Starting Downloads
+### 启动下载
 
-Before `DownloadQueueManager.startDownload()` calls `alistService.getDownloadUrl()`:
+`DownloadQueueManager.startDownload()` 调用 `alistService.getDownloadUrl()` 前：
 
-1. Ensure a valid session in the main process.
-2. Set `alistService` token, base path, and user id from that valid session.
-3. Get the download URL.
+1. 在主进程确保存在有效 session。
+2. 使用有效 session 设置 `alistService` 的 token、base path、user id。
+3. 获取下载链接。
 
-If `getDownloadUrl()` fails with an auth error:
+如果 `getDownloadUrl()` 因认证错误失败：
 
-1. Pause the queue immediately so no more tasks start with the same invalid token.
-2. Attempt one session recovery.
-3. If recovery succeeds, restore queue concurrency and retry the same task once.
-4. If recovery fails, keep the task pending or requeue it, send a single auth-failed event, and do not send ordinary download-failed events for that task.
+1. 立即暂停队列，防止更多任务继续用同一个失效 token 启动。
+2. 尝试一次会话恢复。
+3. 如果恢复成功，恢复队列并重试当前任务一次。
+4. 如果恢复失败，将当前任务保留为 pending 或重新放回队列，发送一次 auth-failed 事件，不发送普通 download-failed 事件。
 
-Only non-auth failures should mark a task `failed` and send `transfer:download:failed`.
+只有非认证错误才应把任务标记为 `failed` 并发送 `transfer:download:failed`。
 
-### Resume Button Behavior
+### 恢复队列按钮行为
 
-When the user clicks "恢复队列":
+用户点击“恢复队列”时：
 
-- If the session can be validated or refreshed, resume the queue and show "队列已恢复".
-- If the session is invalid and cannot be refreshed, keep the queue paused and show "Alist 登录已过期，请重新登录后恢复下载".
+- 如果 session 可以校验或刷新成功，恢复队列并显示“队列已恢复”。
+- 如果 session 无效且无法刷新，队列保持暂停，并显示“Alist 登录已过期，请重新登录后恢复下载”。
 
-This prevents the misleading notification combination where the UI says the queue resumed immediately before reporting auth failure and file failures.
+这样可以避免 UI 先提示“队列已恢复”，随后马上提示认证失败和文件失败的误导组合。
 
-## Auto-Sync Design
+## 自动同步设计
 
-Auto-sync should treat authentication failure as a workflow-level failure, not as an empty scan.
+自动同步应把认证失败视为工作流级失败，而不是一次正常的空扫描。
 
-Before these stages, auto-sync should ensure a valid session:
+以下阶段开始前，自动同步应先确保 session 有效：
 
-- Share transfer execution that requires Alist follow-up.
-- Remote root scan.
-- Recursive remote directory scan.
-- Diff-to-download queue creation.
+- 需要后续访问 Alist 的分享转存执行。
+- 远程根目录扫描。
+- 递归远程目录扫描。
+- 差异文件加入下载队列。
 
-If an Alist operation fails with `token is expired`, `401`, or a guest-user auth response:
+如果 Alist 操作失败，且错误属于 `token is expired`、`401` 或 guest/未认证用户：
 
-1. Attempt one session recovery.
-2. Retry the interrupted stage once if recovery succeeds.
-3. If recovery fails, mark the sync run as `failed`.
-4. Emit progress with a clear message: `Alist 登录已过期，请重新登录后重试同步`.
-5. Do not log or emit a normal "scanned 0 directories, found 0 files" completion for the auth-failed scan.
+1. 尝试一次会话恢复。
+2. 如果恢复成功，重试被中断的阶段一次。
+3. 如果恢复失败，将本次同步 run 标记为 `failed`。
+4. 发送明确进度消息：`Alist 登录已过期，请重新登录后重试同步`。
+5. 不再记录或发送“扫描 0 个目录，发现 0 个文件”这类正常完成信息。
 
-The global auto-sync progress card should show the failed state. Clicking an authentication-failed sync card should route to the login page or a session recovery entry point, not only to the share-transfer page.
+全局自动同步进度卡片应显示失败状态。点击认证失败的同步卡片时，应跳转到登录页或会话恢复入口，而不是只跳到分享转存页。
 
-## Error Classification
+## 错误分类
 
-Introduce a small shared classifier in the main process for Alist auth errors. It should identify:
+在主进程引入一个小型 Alist 认证错误分类器，识别：
 
-- HTTP status `401`.
-- Alist response code `401`.
-- Messages containing `token is expired`.
-- Messages indicating guest or unauthenticated user.
+- HTTP 状态码 `401`。
+- Alist 响应 code `401`。
+- 包含 `token is expired` 的消息。
+- 表示 guest 或未认证用户的消息。
 
-Download queue and auto-sync should both use this classifier so auth handling does not drift across features.
+下载队列和自动同步都应使用同一个分类器，避免认证处理逻辑在不同功能里逐渐分叉。
 
-## Notification Behavior
+## 通知行为
 
-Download auth failure should produce one durable notification:
+下载认证失败应产生一条常驻通知：
 
-- Title: `Alist 认证失效`
-- Message: `Alist 登录已过期，请重新登录后恢复下载`
+- 标题：`Alist 认证失效`
+- 内容：`Alist 登录已过期，请重新登录后恢复下载`
 
-On successful re-login or successful queue resume, the app should replace or close the stale auth-failed notification where practical. If the notification API cannot close prior notifications cleanly, the app should at least avoid adding ordinary `下载失败 N 个文件` notifications for auth-only failures.
+重新登录成功或队列恢复成功后，应用应尽量替换或关闭旧的认证失败通知。如果当前通知 API 不方便关闭旧通知，至少要避免再为纯认证失败追加普通的 `下载失败 N 个文件` 通知。
 
-Batch notifications should count auth-blocked tasks separately from true failures. For this change, auth-blocked tasks should be silent at the file level because the global auth notification already explains the blocker.
+批量通知中，认证阻塞任务应与真实失败任务分开处理。本次变更中，认证阻塞的单文件任务保持静默，因为全局认证通知已经解释了阻塞原因。
 
-## Testing
+## 测试
 
-### Unit Tests
+### 单元测试
 
-Add or update tests for `AuthService`:
+新增或更新 `AuthService` 测试：
 
-- Restored local session with valid Alist token returns a valid session.
-- Restored local session with expired Alist token and available auto-login credentials refreshes the token and returns the new session.
-- Restored local session with expired Alist token and no usable credentials returns an auth-expired result.
+- 本地 session 恢复后 Alist token 有效时，返回有效 session。
+- 本地 session 未过期但 Alist token 已失效，且存在自动登录凭据时，刷新 token 并返回新 session。
+- 本地 session 未过期但 Alist token 已失效，且没有可用凭据时，返回认证过期结果。
 
-Add or update tests for `DownloadQueueManager`:
+新增或更新 `DownloadQueueManager` 测试：
 
-- Auth failure from `getDownloadUrl()` pauses the queue and emits one auth-failed event.
-- Auth failure does not mark the task as ordinary `failed` when session recovery fails.
-- Successful recovery retries the current task once and continues the queue.
-- Non-auth `getDownloadUrl()` failures still mark the task failed.
+- `getDownloadUrl()` 返回认证失败时，暂停队列并只发送一次 auth-failed 事件。
+- session 恢复失败时，认证失败不会把任务标记为普通 `failed`。
+- session 恢复成功时，当前任务重试一次并继续队列。
+- 非认证类 `getDownloadUrl()` 失败仍按普通失败处理。
 
-Add or update tests for `AutoSyncService`:
+新增或更新 `AutoSyncService` 测试：
 
-- Remote scan auth failure does not produce a normal zero-file scan success.
-- Successful session recovery retries the failed scan stage once.
-- Failed session recovery marks the run failed with the auth-expired message.
+- 远程扫描认证失败时，不产生正常的零文件扫描成功结果。
+- session 恢复成功时，重试失败的扫描阶段一次。
+- session 恢复失败时，将 run 标记为 failed，并使用认证过期消息。
 
-### Renderer Tests
+### 渲染进程测试
 
-Update renderer tests for:
+更新渲染进程测试：
 
-- `LoginView` stores the login result token in `authStore`.
-- `HomeView` initializes the download queue with `authStore.user.token` if the IPC signature still receives a token.
-- Auth-only download failures do not show an additional `下载失败 N 个文件` notification.
+- `LoginView` 将登录结果里的 token 写入 `authStore`。
+- 如果 IPC 签名仍接收 token，`HomeView` 使用 `authStore.user.token` 初始化下载队列。
+- 纯认证失败不会额外显示 `下载失败 N 个文件` 通知。
 
-## Acceptance Criteria
+## 验收标准
 
-- After login, `authStore.user.token` is non-empty when the login response contains a token.
-- Download queue initialization does not rely on `authStore.token`.
-- A locally unexpired but Alist-expired token is detected before queue restoration starts downloads.
-- If auto-login can refresh the token, downloads and auto-sync continue without user action.
-- If auto-login cannot refresh the token, the queue stays paused and tasks are not marked as ordinary failed solely because of auth expiration.
-- Auto-sync auth expiration results in a failed run with an authentication message, not a successful empty scan.
-- The user no longer sees the misleading sequence "队列已恢复" followed by "下载失败" for auth-only failures.
+- 登录响应包含 token 时，登录后 `authStore.user.token` 非空。
+- 下载队列初始化不再依赖不存在的 `authStore.token`。
+- 本地 session 未过期但 Alist token 已过期时，会在恢复队列启动下载前被检测出来。
+- 如果自动登录能刷新 token，下载和自动同步可在无需用户操作的情况下继续。
+- 如果自动登录无法刷新 token，队列保持暂停，任务不会仅因认证过期被标记为普通失败。
+- 自动同步遇到认证过期时，run 结果为带认证消息的 failed，而不是成功的空扫描。
+- 用户不再看到纯认证失败场景下“队列已恢复”随后又“下载失败”的误导序列。
 
-## Implementation Boundaries
+## 实现边界
 
-The implementation should touch only the authentication, download queue, auto-sync, and directly related renderer notification paths. It should not perform unrelated UI redesign, queue schema expansion, or historical task pruning.
+实现只应触及认证、下载队列、自动同步，以及直接相关的渲染进程通知路径。不做无关 UI 改造、队列 schema 扩展或历史任务清理。

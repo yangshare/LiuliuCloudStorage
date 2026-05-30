@@ -32,6 +32,8 @@ function readCode(error: unknown): string {
 }
 
 export function isAlistAuthError(error: unknown): boolean {
+  if (error instanceof AlistAuthError) return true
+
   const code = readCode(error).toUpperCase()
   if (code === '401' || code === 'ALIST_401') return true
 

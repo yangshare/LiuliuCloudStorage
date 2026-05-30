@@ -31,6 +31,18 @@ describe('alist auth error classifier', () => {
     expect(isAlistAuthError({ code: 'ALIST_500', message: 'storage unavailable' })).toBe(false)
   })
 
+  it('识别 AlistAuthError 实例本身', () => {
+    expect(isAlistAuthError(new AlistAuthError(ALIST_AUTH_EXPIRED_SYNC_MESSAGE))).toBe(true)
+    expect(isAlistAuthError(new AlistAuthError(ALIST_AUTH_EXPIRED_DOWNLOAD_MESSAGE))).toBe(true)
+  })
+
+  it('null、undefined 和空对象不是认证错误', () => {
+    expect(isAlistAuthError(null)).toBe(false)
+    expect(isAlistAuthError(undefined)).toBe(false)
+    expect(isAlistAuthError({})).toBe(false)
+    expect(isAlistAuthError('')).toBe(false)
+  })
+
   it('提供下载和自动同步固定文案', () => {
     expect(ALIST_AUTH_EXPIRED_DOWNLOAD_MESSAGE).toBe('Alist 登录已过期，请重新登录后恢复下载')
     expect(ALIST_AUTH_EXPIRED_SYNC_MESSAGE).toBe('Alist 登录已过期，请重新登录后重试同步')

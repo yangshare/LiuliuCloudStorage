@@ -81,6 +81,8 @@ vi.mock('fs', () => ({ default: { mkdirSync: vi.fn(), accessSync: vi.fn(), const
 
 describe('AutoSyncService auth recovery', () => {
   beforeEach(() => {
+    // 重置单例，避免测试间状态泄漏
+    ;(AutoSyncService as any).instance = null
     vi.clearAllMocks()
     mockEnsureValidSession.mockResolvedValue({ userId: 7, username: 'alice', token: 'valid-token', basePath: '/alist/' })
     mockShareTransferService.execTransfer.mockResolvedValue({

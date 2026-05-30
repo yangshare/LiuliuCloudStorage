@@ -11,7 +11,6 @@ import { isAlistAuthError } from '../../core/api/alist-auth-error'
 import { cryptoService } from '../../core/crypto/crypto.service'
 import { activityService, ActionType } from '../activity/activity.core.service'
 import { loggerService } from '../../core/logger/logger.service'
-import { autoSyncService } from '../autoSync/auto-sync.core.service'
 import { preferencesService } from '../../core/preferences/preferences.service'
 import { DEFAULT_QUOTA } from '../../../shared/constants'
 import type {
@@ -26,7 +25,12 @@ export interface AuthSession {
   username: string
   token: string
   basePath: string
+  /** 上次通过 Alist getMe 校验的时间戳（ms），用于短期缓存避免重复网络请求 */
+  validatedAt?: number
 }
+
+// 会话短期缓存 TTL：在此窗口内跳过重复的 getMe 网络校验
+const SESSION_CACHE_TTL_MS = 30_000
 
 let currentSession: AuthSession | null = null
 
@@ -153,17 +157,14 @@ export class AuthService {
   }
 
   /**
-   * 登出：清除会话、重置自动同步状态、记录日志
+   * 登出：清除会话、记录日志
+   * 注意：重置自动同步状态由 auth.handlers.ts 负责（避免 auth ↔ autoSync 循环依赖）
    */
   async logout(): Promise<{ success: boolean }> {
     const userId = currentSession?.userId
     const username = currentSession?.username
 
     this.clearSession()
-
-    if (userId) {
-      autoSyncService.resetStartupExecuted(userId)
-    }
 
     // 记录登出操作日志
     if (userId && username) {
@@ -256,6 +257,10 @@ export class AuthService {
     const row = await this.getLatestSessionRow()
 
     if (currentSession && !options.forceRefresh) {
+      // 短期缓存：30 秒内已验证过的 session 跳过网络校验
+      if (currentSession.validatedAt && Date.now() - currentSession.validatedAt < SESSION_CACHE_TTL_MS) {
+        return currentSession
+      }
       const valid = await this.validateAlistSession(currentSession)
       if (valid) return currentSession
     }
@@ -320,6 +325,8 @@ export class AuthService {
     try {
       this.applySession(session.userId, session.username, session.token, session.basePath)
       await alistService.getMe()
+      // 校验通过，记录时间戳
+      if (currentSession) currentSession.validatedAt = Date.now()
       return true
     } catch (error) {
       if (isAlistAuthError(error)) return false

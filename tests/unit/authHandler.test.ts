@@ -92,12 +92,6 @@ vi.mock('../../src/main/features/activity/activity.core.service', () => ({
   }
 }))
 
-vi.mock('../../src/main/features/autoSync/auto-sync.core.service', () => ({
-  autoSyncService: {
-    resetStartupExecuted: vi.fn()
-  }
-}))
-
 vi.mock('../../src/main/core/logger/logger.service', () => ({
   loggerService: mockLoggerService
 }))

@@ -3,6 +3,7 @@
 import { ipcMain } from 'electron'
 import { authService } from './auth.service'
 import { handleIPC } from '../../core/ipc/error-handler'
+import { autoSyncService } from '../autoSync/auto-sync.core.service'
 
 export function registerAuthHandlers() {
   // 登录：保持与旧 preload API 一致的参数格式 (username, password, autoLogin)
@@ -15,9 +16,16 @@ export function registerAuthHandlers() {
     return handleIPC(() => authService.getLoginPreferences())
   })
 
-  // 登出
+  // 登出：清除会话后重置自动同步状态（避免 auth ↔ autoSync 循环依赖）
   ipcMain.handle('auth:session:logout', async () => {
-    return handleIPC(() => authService.logout())
+    return handleIPC(async () => {
+      const userId = authService.getCurrentSession()?.userId
+      const result = await authService.logout()
+      if (userId) {
+        autoSyncService.resetStartupExecuted(userId)
+      }
+      return result
+    })
   })
 
   // 检查/恢复会话

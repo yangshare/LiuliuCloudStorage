@@ -8,8 +8,8 @@ import { loggerService } from '../../core/logger/logger.service'
 import { SimplePQueue } from '../../utils/SimplePQueue'
 import { authService, type AuthSession } from '../auth/auth.service'
 import {
-  ALIST_AUTH_EXPIRED_SYNC_MESSAGE,
   AlistAuthError,
+  ALIST_AUTH_EXPIRED_SYNC_MESSAGE,
   isAlistAuthError
 } from '../../core/api/alist-auth-error'
 
@@ -867,6 +867,7 @@ export class AutoSyncService {
           })
         })
       )
+      activeSession = scanAttempt.session
       const remoteFiles = scanAttempt.result
       this.notifyProgress(planId, { stage: 'scan', status: 'completed', message: `扫描完成，共 ${remoteFiles.length} 个文件`, current: 65, total: 100 })
 

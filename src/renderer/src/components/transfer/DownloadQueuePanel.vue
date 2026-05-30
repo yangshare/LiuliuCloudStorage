@@ -197,6 +197,7 @@ import { useTransferStore } from '@/features/transfer'
 import { useTransferDownload } from '@/features/transfer/composables/useTransferDownload'
 import { formatFileSizePrecise as formatBytes, formatSpeedPrecise as formatSpeed } from '@/utils/formatters'
 import { openFileDirectory } from '@/utils/openFileDirectory'
+import { isAlistAuthFailureMessage } from '@shared/auth-error-utils'
 
 const transferStore = useTransferStore()
 const {
@@ -279,7 +280,7 @@ async function handleResumeQueue() {
     })
   } else {
     ElNotification.error({
-      title: result.error?.includes('Alist 登录已过期') ? 'Alist 认证失效' : '恢复失败',
+      title: isAlistAuthFailureMessage(result.error) ? 'Alist 认证失效' : '恢复失败',
       message: result.error || '恢复下载队列失败'
     })
   }

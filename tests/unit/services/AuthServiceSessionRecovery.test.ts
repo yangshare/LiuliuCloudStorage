@@ -78,7 +78,6 @@ vi.mock('../../../src/main/core/api/alist.service', () => ({ alistService: mockA
 vi.mock('../../../src/main/core/crypto/crypto.service', () => ({ cryptoService: mockCryptoService }))
 vi.mock('../../../src/main/core/preferences/preferences.service', () => ({ preferencesService: mockPreferencesService }))
 vi.mock('../../../src/main/features/activity/activity.core.service', () => ({ activityService: { logActivity: vi.fn() }, ActionType: { LOGIN: 'login', LOGOUT: 'logout' } }))
-vi.mock('../../../src/main/features/autoSync/auto-sync.core.service', () => ({ autoSyncService: { resetStartupExecuted: vi.fn() } }))
 vi.mock('../../../src/main/core/logger/logger.service', () => ({ loggerService: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 vi.mock('electron', () => ({
   BrowserWindow: {

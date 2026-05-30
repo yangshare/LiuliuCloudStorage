@@ -8,10 +8,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { MAX_CONCURRENT_DOWNLOADS } from '../../../shared/constants'
 import { authService, type AuthSession } from '../auth/auth.service'
-import {
-  ALIST_AUTH_EXPIRED_DOWNLOAD_MESSAGE,
-  isAlistAuthError
-} from '../../core/api/alist-auth-error'
+import { isAlistAuthError, ALIST_AUTH_EXPIRED_DOWNLOAD_MESSAGE } from '../../core/api/alist-auth-error'
 
 export interface DownloadQueueTask {
   id: string
@@ -304,8 +301,8 @@ class DownloadQueueManager {
 
       // 认证失败：尝试恢复 session 并重试一次，不标记为普通失败
       if (isAlistAuthError(error) || isAlistAuthError(errMsg)) {
-        const handled = await this.handleAuthFailure(task, authRetryCount)
-        if (handled) return
+        await this.handleAuthFailure(task, authRetryCount)
+        return
       }
 
       // 更新数据库状态为 failed，避免重启后死循环恢复同一任务
@@ -361,17 +358,18 @@ class DownloadQueueManager {
   }
 
   /**
-   * 处理认证失败：尝试恢复 session 并重试一次
+   * 处理认证失败：尝试恢复 session 并重试一次，否则暂停队列并通知
    */
   private async handleAuthFailure(
     task: DownloadQueueTask & { dbId: number },
     authRetryCount: number
-  ): Promise<boolean> {
+  ): Promise<void> {
     this.pauseQueue()
 
     if (authRetryCount === 0) {
       const recovered = await authService.ensureValidSession({ forceRefresh: true })
       if (recovered) {
+        this.authFailedNotified = false
         this.applySessionToAlist(recovered)
         task.userId = recovered.userId
         task.userToken = recovered.token
@@ -381,7 +379,7 @@ class DownloadQueueManager {
         this.maxConcurrent = MAX_CONCURRENT_DOWNLOADS
         this.activeDownloads.set(task.id, task)
         await this.startDownload(task, authRetryCount + 1)
-        return true
+        return
       }
     }
 
@@ -401,7 +399,6 @@ class DownloadQueueManager {
     }
 
     this.emitQueueUpdated()
-    return true
   }
 
   /**

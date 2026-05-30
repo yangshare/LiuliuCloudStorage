@@ -3,6 +3,7 @@ import { throttle } from 'lodash-es'
 import { ElNotification, ElMessage } from 'element-plus'
 import { openFileDirectory } from '@/utils/openFileDirectory'
 import { isNotificationsEnabled } from './useTransferCommon'
+import { isAlistAuthFailureMessage } from '@shared/auth-error-utils'
 import { transferRendererService } from '../transfer.renderer.service'
 import { useTransferStore } from '../stores/transferStore'
 
@@ -43,14 +44,6 @@ const _settledBatchIds = new Set<string>()
 
 // 认证失败静默窗口：认证失败事件触发后 30 秒内，跳过普通下载失败通知
 let _authFailureSilenceUntil = 0
-
-function isAuthFailureMessage(error: string | undefined): boolean {
-  const value = (error || '').toLowerCase()
-  return value.includes('alist 登录已过期') ||
-    value.includes('token is expired') ||
-    value.includes('401') ||
-    value.includes('guest user')
-}
 
 type DownloadCompletedEvent = {
   taskId: string
@@ -544,7 +537,7 @@ export function useTransferDownload() {
     downloadProgressMap.delete(data.taskId)
 
     // 认证失败静默窗口内跳过普通下载失败通知
-    if (isAuthFailureMessage(data.error) && Date.now() < _authFailureSilenceUntil) {
+    if (isAlistAuthFailureMessage(data.error) && Date.now() < _authFailureSilenceUntil) {
       return
     }
 
@@ -558,7 +551,7 @@ export function useTransferDownload() {
   }
 
   // 下载取消处理函数
-  const downloadCancelledHandler = (data: { taskId: string | number; fileName?: string; batchId?: string; batchTotal?: number } | undefined) => {
+  const downloadCancelledHandler = (data: DownloadCancelledEvent | undefined) => {
     // 数据有效性检查
     if (!data || data.taskId === undefined) {
       console.warn('[downloadCancelledHandler] 收到无效的下载取消数据:', data)

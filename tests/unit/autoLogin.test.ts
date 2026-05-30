@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { mockIpcMain, mockAuthService } = vi.hoisted(() => ({
+const { mockIpcMain, mockAuthService, mockAutoSyncService } = vi.hoisted(() => ({
   mockIpcMain: {
     handle: vi.fn()
   },
@@ -9,7 +9,11 @@ const { mockIpcMain, mockAuthService } = vi.hoisted(() => ({
     logout: vi.fn(),
     checkSession: vi.fn(),
     getCurrentUser: vi.fn(),
+    getCurrentSession: vi.fn(),
     getLoginPreferences: vi.fn()
+  },
+  mockAutoSyncService: {
+    resetStartupExecuted: vi.fn()
   }
 }))
 
@@ -25,6 +29,10 @@ vi.mock('../../src/main/core/logger/logger.service', () => ({
 
 vi.mock('../../src/main/features/auth/auth.service', () => ({
   authService: mockAuthService
+}))
+
+vi.mock('../../src/main/features/autoSync/auto-sync.core.service', () => ({
+  autoSyncService: mockAutoSyncService
 }))
 
 import { registerAuthHandlers } from '../../src/main/features/auth/auth.handlers'
@@ -110,11 +118,14 @@ describe('Auto Login Feature', () => {
   })
 
   it('登出时应该委托 AuthService 清理会话', async () => {
+    mockAuthService.getCurrentSession.mockReturnValue({ userId: 1, username: 'testuser', token: 'token', basePath: '/' })
     mockAuthService.logout.mockResolvedValueOnce({ success: true })
 
     const result = await handlers['auth:session:logout']()
 
+    expect(mockAuthService.getCurrentSession).toHaveBeenCalled()
     expect(mockAuthService.logout).toHaveBeenCalled()
+    expect(mockAutoSyncService.resetStartupExecuted).toHaveBeenCalledWith(1)
     expect(result).toEqual({ success: true, data: { success: true } })
   })
 })

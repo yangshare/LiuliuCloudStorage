@@ -42,6 +42,7 @@ export function isAlistAuthError(error: unknown): boolean {
   if (message.includes('token is expired')) return true
   if (message.includes('guest user')) return true
   if (message.includes('unauthorized')) return true
+  if (message.includes('登录已过期')) return true
   if (message.includes('未认证')) return true
   if (message.includes('未登录')) return true
 

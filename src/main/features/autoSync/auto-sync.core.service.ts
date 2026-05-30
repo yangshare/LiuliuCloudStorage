@@ -570,7 +570,6 @@ export class AutoSyncService {
       const queueAttempt = await this.withAlistSessionRetry(activeSession, (s) =>
         this.queueMissingFiles(newFiles, s)
       )
-      activeSession = queueAttempt.session
       const queuedCount = queueAttempt.result
       this.notifyProgress(planId, { stage: 'queue', status: 'completed', message: `已加入 ${queuedCount} 个下载任务`, current: 90, total: 100 })
 

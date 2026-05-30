@@ -26,6 +26,11 @@ describe('alist auth error classifier', () => {
     expect(isAlistAuthError(new Error('用户未登录'))).toBe(true)
   })
 
+  it('识别内部固定的 Alist 登录过期文案', () => {
+    expect(isAlistAuthError(new Error(ALIST_AUTH_EXPIRED_DOWNLOAD_MESSAGE))).toBe(true)
+    expect(isAlistAuthError(new Error(ALIST_AUTH_EXPIRED_SYNC_MESSAGE))).toBe(true)
+  })
+
   it('不把普通下载错误识别为认证失败', () => {
     expect(isAlistAuthError(new Error('object not found'))).toBe(false)
     expect(isAlistAuthError({ code: 'ALIST_500', message: 'storage unavailable' })).toBe(false)

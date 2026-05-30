@@ -108,6 +108,7 @@ describe('DownloadQueueManager - 云端文件不存在时的处理', () => {
     ;(downloadQueueManager as any).queue.clear()
     ;(downloadQueueManager as any).activeDownloads.clear()
     ;(downloadQueueManager as any).authFailedNotified = false
+    ;(downloadQueueManager as any).maxConcurrent = 5
     downloadQueueManager.setCredentials(1, 'fake-token')
     mockEnsureValidSession.mockResolvedValue({ userId: 1, username: 'alice', token: 'fake-token', basePath: '/alist/' })
   })
@@ -225,6 +226,41 @@ describe('DownloadQueueManager - 云端文件不存在时的处理', () => {
     await (downloadQueueManager as any).startDownload(task)
 
     expect((downloadQueueManager as any).maxConcurrent).toBe(0)
+    expect(mockTransferServiceMethods.markAsFailed).not.toHaveBeenCalled()
+    expect(sent.some(e => e.channel === 'transfer:download:auth-failed')).toBe(true)
+    expect(sent.some(e => e.channel === 'transfer:download:failed')).toBe(false)
+  })
+
+  it('初始 session 已失效时暂停队列并只发送 auth-failed，不标记 failed', async () => {
+    const sent: Array<{ channel: string; payload: any }> = []
+    const { BrowserWindow } = await import('electron')
+    ;(BrowserWindow.getAllWindows as any).mockReturnValue([{
+      isDestroyed: () => false,
+      webContents: {
+        send: (channel: string, payload: any) => sent.push({ channel, payload })
+      }
+    }])
+
+    mockEnsureValidSession
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+
+    const task = {
+      id: 'download_auth_initial',
+      fileName: 'initial-expired.zip',
+      fileSize: 1024,
+      userId: 1,
+      userToken: 'old-token',
+      remotePath: '/initial-expired.zip',
+      priority: 0,
+      dbId: 203
+    }
+
+    ;(downloadQueueManager as any).activeDownloads.set(task.id, task)
+    await (downloadQueueManager as any).startDownload(task)
+
+    expect((downloadQueueManager as any).maxConcurrent).toBe(0)
+    expect(mockGetDownloadUrl).not.toHaveBeenCalled()
     expect(mockTransferServiceMethods.markAsFailed).not.toHaveBeenCalled()
     expect(sent.some(e => e.channel === 'transfer:download:auth-failed')).toBe(true)
     expect(sent.some(e => e.channel === 'transfer:download:failed')).toBe(false)

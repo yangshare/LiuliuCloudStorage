@@ -50,10 +50,6 @@ export class QueueService {
     return session
   }
 
-  setDownloadCredentials(userId: number, userToken: string): void {
-    downloadQueueManager.setCredentials(userId, userToken)
-  }
-
   async restoreDownloadQueue(_userId: number, _userToken: string): Promise<number> {
     const session = await this.getValidDownloadSession()
     downloadQueueManager.setCredentials(session.userId, session.token)

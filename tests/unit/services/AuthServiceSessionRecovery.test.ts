@@ -17,8 +17,7 @@ const {
       basePath: '/alist/',
       expiresAt: new Date(Date.now() + 60_000),
       createdAt: new Date()
-    },
-    savedSession: null as any
+    }
   }
 
   const selectBuilder = {
@@ -40,8 +39,7 @@ const {
   const mockDb = {
     select: vi.fn(() => selectBuilder),
     insert: vi.fn(() => ({
-      values: vi.fn((value) => {
-        dbState.savedSession = value
+      values: vi.fn(() => {
         return {
           onConflictDoNothing: vi.fn(() => ({ run: vi.fn() })),
           run: vi.fn()

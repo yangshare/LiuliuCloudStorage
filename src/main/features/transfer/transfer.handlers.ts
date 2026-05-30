@@ -64,7 +64,6 @@ export function registerTransferHandlers(): void {
   // ========== 下载队列管理 ==========
   ipcMain.handle('transfer:download:init-queue', async (_event, { userId, userToken }) => {
     return handleIPC(async () => {
-      queueService.setDownloadCredentials(userId, userToken)
       const restoredCount = await queueService.restoreDownloadQueue(userId, userToken)
       const { downloadQueueManager } = await import('./download-queue.manager')
       downloadQueueManager.setProgressCallback((data: any) => {
@@ -94,10 +93,7 @@ export function registerTransferHandlers(): void {
   })
 
   ipcMain.handle('transfer:download:resume-queue', async () => {
-    return handleIPC(() => {
-      queueService.resumeDownloadQueue()
-      return Promise.resolve()
-    })
+    return handleIPC(() => queueService.resumeDownloadQueue())
   })
 
   ipcMain.handle('transfer:download:clear-queue', async () => {

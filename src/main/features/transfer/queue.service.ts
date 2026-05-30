@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto'
 import { transferQueueManager, type QueueTask } from './transfer-queue.manager'
 import { downloadQueueManager, type DownloadQueueTask } from './download-queue.manager'
+import { authService } from '../auth/auth.service'
 import { IPCError, IPCErrorCode } from '../../core/ipc/error-handler'
 
 export interface TransferQueueStatus {
@@ -43,12 +44,20 @@ export class QueueService {
 
   // ========== 下载队列 ==========
 
+  private async getValidDownloadSession(): Promise<{ userId: number; username: string; token: string; basePath: string }> {
+    const session = await authService.ensureValidSession()
+    if (!session) throw new IPCError('Alist 登录已过期，请重新登录后恢复下载', IPCErrorCode.UNAUTHORIZED)
+    return session
+  }
+
   setDownloadCredentials(userId: number, userToken: string): void {
     downloadQueueManager.setCredentials(userId, userToken)
   }
 
-  async restoreDownloadQueue(userId: number, userToken: string): Promise<number> {
-    return downloadQueueManager.restoreQueue(userId, userToken)
+  async restoreDownloadQueue(_userId: number, _userToken: string): Promise<number> {
+    const session = await this.getValidDownloadSession()
+    downloadQueueManager.setCredentials(session.userId, session.token)
+    return downloadQueueManager.restoreQueue(session.userId, session.token)
   }
 
   async addDownloadTask(task: DownloadQueueTask): Promise<number> {
@@ -67,7 +76,9 @@ export class QueueService {
     downloadQueueManager.pauseQueue()
   }
 
-  resumeDownloadQueue(): void {
+  async resumeDownloadQueue(): Promise<void> {
+    const session = await this.getValidDownloadSession()
+    downloadQueueManager.setCredentials(session.userId, session.token)
     downloadQueueManager.resumeQueue()
   }
 
@@ -135,9 +146,7 @@ export class QueueService {
   }
 
   async queueDownloadWithSession(taskData: any) {
-    const { authService } = await import('../auth/auth.service')
-    const session = authService.getCurrentSession()
-    if (!session) throw new IPCError('用户未登录', IPCErrorCode.UNAUTHORIZED)
+    const session = await this.getValidDownloadSession()
 
     const task: DownloadQueueTask = {
       id: taskData.id || `download_${Date.now()}_${randomUUID()}`,
@@ -155,10 +164,7 @@ export class QueueService {
   }
 
   async batchQueueDownloadWithSession(remotePaths: string[]) {
-    const { authService } = await import('../auth/auth.service')
-    const session = authService.getCurrentSession()
-    if (!session) throw new IPCError('用户未登录', IPCErrorCode.UNAUTHORIZED)
-
+    const session = await this.getValidDownloadSession()
     const batchId = `batch_${Date.now()}_${randomUUID()}`
     const tasks: DownloadQueueTask[] = remotePaths.map((remotePath, i) => ({
       id: `download_${Date.now()}_${i}_${randomUUID()}`,

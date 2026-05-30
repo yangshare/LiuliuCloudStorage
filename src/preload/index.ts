@@ -82,8 +82,14 @@ const validChannels = [
   'autoSync:plan:createAndRun', 'autoSync:plan:list', 'autoSync:plan:update', 'autoSync:plan:pause', 'autoSync:plan:resume',
   'autoSync:plan:delete', 'autoSync:plan:run', 'autoSync:run:list', 'autoSync:run:startup', 'autoSync:plan:resetBaseline',
   'autoSync:event:progress',
+  'auth:session:expired',
   'config:status:check', 'config:data:get', 'config:data:save', 'config:data:reinit'
 ]
+
+// 监听主进程广播的会话失效事件，转发到所有 onAuthExpired 订阅者
+ipcRenderer.on('auth:session:expired', (_event, payload: { code?: string } | undefined) => {
+  notifyAuthExpired(payload?.code || 'UNAUTHORIZED')
+})
 
 contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,

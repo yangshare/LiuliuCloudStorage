@@ -1,15 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { mockContextBridge, mockIpcRenderer } = vi.hoisted(() => ({
-  mockContextBridge: {
+const { mockContextBridge, mockIpcRenderer, listeners } = vi.hoisted(() => {
+  const listenerMap = new Map<string, Function>()
+
+  const mockContextBridge = {
     exposeInMainWorld: vi.fn()
-  },
-  mockIpcRenderer: {
+  }
+
+  const mockIpcRenderer = {
     invoke: vi.fn(),
-    on: vi.fn(),
+    on: vi.fn((channel: string, listener: Function) => {
+      listenerMap.set(channel, listener)
+      return mockIpcRenderer
+    }),
     removeListener: vi.fn()
   }
-}))
+
+  return { mockContextBridge, mockIpcRenderer, listeners: listenerMap }
+})
 
 vi.mock('electron', () => ({
   contextBridge: mockContextBridge,
@@ -25,6 +33,7 @@ describe('preload 鉴权失效通知', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.clearAllMocks()
+    listeners.clear()
     vi.useFakeTimers()
   })
 
@@ -79,5 +88,33 @@ describe('preload 鉴权失效通知', () => {
     await vi.runAllTimersAsync()
 
     expect(consoleError).toHaveBeenCalledWith('[preload] onAuthExpired handler error:', error)
+  })
+
+  it('主进程 auth:session:expired 事件会触发 onAuthExpired 订阅者', async () => {
+    const api = await loadPreloadAPI()
+    const handler = vi.fn()
+    api.onAuthExpired(handler)
+
+    const expiredListener = listeners.get('auth:session:expired')
+    expect(expiredListener).toBeDefined()
+
+    expiredListener!({}, { code: 'UNAUTHORIZED', message: 'Alist 登录已过期，请重新登录' })
+    await vi.runAllTimersAsync()
+
+    expect(handler).toHaveBeenCalledWith('UNAUTHORIZED')
+  })
+
+  it('auth:session:expired payload 无 code 时默认使用 UNAUTHORIZED', async () => {
+    const api = await loadPreloadAPI()
+    const handler = vi.fn()
+    api.onAuthExpired(handler)
+
+    const expiredListener = listeners.get('auth:session:expired')
+    expect(expiredListener).toBeDefined()
+
+    expiredListener!({}, {})
+    await vi.runAllTimersAsync()
+
+    expect(handler).toHaveBeenCalledWith('UNAUTHORIZED')
   })
 })

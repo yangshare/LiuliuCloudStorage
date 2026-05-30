@@ -22,6 +22,8 @@ describe('alist auth error classifier', () => {
     expect(isAlistAuthError(new Error('token is expired'))).toBe(true)
     expect(isAlistAuthError(new Error('guest user cannot access'))).toBe(true)
     expect(isAlistAuthError(new Error('用户未认证，请登录'))).toBe(true)
+    expect(isAlistAuthError(new Error('Unauthorized access'))).toBe(true)
+    expect(isAlistAuthError(new Error('用户未登录'))).toBe(true)
   })
 
   it('不把普通下载错误识别为认证失败', () => {

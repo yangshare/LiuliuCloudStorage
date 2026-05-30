@@ -376,6 +376,13 @@ export class AuthService {
   }
 
   /**
+   * 恢复会话（委托给 ensureValidSession）
+   */
+  private async restoreSession(): Promise<AuthSession | null> {
+    return this.ensureValidSession()
+  }
+
+  /**
    * 确保用户存在，不存在则创建
    */
   private async ensureUser(username: string): Promise<number> {

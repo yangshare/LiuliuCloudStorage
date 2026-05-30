@@ -6,6 +6,12 @@ import { shareTransferService } from '../shareTransfer/share-transfer.core.servi
 import { downloadQueueManager, type DownloadQueueTask } from '../transfer/download-queue.manager'
 import { loggerService } from '../../core/logger/logger.service'
 import { SimplePQueue } from '../../utils/SimplePQueue'
+import { authService, type AuthSession } from '../auth/auth.service'
+import {
+  ALIST_AUTH_EXPIRED_SYNC_MESSAGE,
+  AlistAuthError,
+  isAlistAuthError
+} from '../../core/api/alist-auth-error'
 
 export type AutoSyncPlanStatus = 'enabled' | 'paused' | 'syncing' | 'expired' | 'failed' | 'deleted'
 export type AutoSyncRunStatus = 'running' | 'completed' | 'partial_failed' | 'failed' | 'skipped'
@@ -212,6 +218,30 @@ export class AutoSyncService {
       AutoSyncService.instance = new AutoSyncService()
     }
     return AutoSyncService.instance
+  }
+
+  private async ensureWorkflowSession(session: { userId: number; username: string; token: string }): Promise<AuthSession> {
+    const validSession = await authService.ensureValidSession()
+    if (!validSession || validSession.userId !== session.userId) {
+      throw new AlistAuthError(ALIST_AUTH_EXPIRED_SYNC_MESSAGE)
+    }
+    return validSession
+  }
+
+  private async withAlistSessionRetry<T>(
+    session: AuthSession,
+    operation: (activeSession: AuthSession) => Promise<T>
+  ): Promise<{ result: T; session: AuthSession }> {
+    try {
+      return { result: await operation(session), session }
+    } catch (error) {
+      if (!isAlistAuthError(error)) throw error
+      const recovered = await authService.ensureValidSession({ forceRefresh: true })
+      if (!recovered || recovered.userId !== session.userId) {
+        throw new AlistAuthError(ALIST_AUTH_EXPIRED_SYNC_MESSAGE)
+      }
+      return { result: await operation(recovered), session: recovered }
+    }
   }
 
   setProgressCallback(cb: (planId: number, event: AutoSyncProgressEvent) => void): void {
@@ -490,6 +520,7 @@ export class AutoSyncService {
 
     this.runningPlans.add(planId)
     const runId = await this.insertRun(planId, session.userId, triggerType)
+    let activeSession = await this.ensureWorkflowSession(session)
 
     try {
       const syncStartTs = now()
@@ -500,7 +531,11 @@ export class AutoSyncService {
 
       // 阶段 1：转存
       this.notifyProgress(planId, { stage: 'transfer', status: 'started', message: '开始转存...' })
-      const transfer = await shareTransferService.execTransfer(plan.shareUrl, session.userId)
+      const transferAttempt = await this.withAlistSessionRetry(activeSession, (s) =>
+        shareTransferService.execTransfer(plan.shareUrl, s.userId)
+      )
+      activeSession = transferAttempt.session
+      const transfer = transferAttempt.result
       if (!transfer.success || !transfer.alistPath) {
         this.notifyProgress(planId, { stage: 'transfer', status: 'failed', message: transfer.message || '转存失败' })
         throw new Error(transfer.message || '转存失败')
@@ -510,15 +545,19 @@ export class AutoSyncService {
       // 阶段 2：扫描远程文件
       this.notifyProgress(planId, { stage: 'scan', status: 'started', message: '正在扫描远程文件...' })
       const remoteRoot = extractRemotePathFromAlistUrl(transfer.alistPath)
-      const remoteFiles = await this.scanRemoteFiles(remoteRoot, (scannedFiles, scannedDirs) => {
-        this.notifyProgress(planId, {
-          stage: 'scan',
-          status: 'in_progress',
-          message: `已扫描 ${scannedDirs} 个目录，发现 ${scannedFiles} 个文件...`,
-          current: 30 + Math.min(scannedFiles, 35),
-          total: 100
+      const scanAttempt = await this.withAlistSessionRetry(activeSession, () =>
+        this.scanRemoteFiles(remoteRoot, (scannedFiles, scannedDirs) => {
+          this.notifyProgress(planId, {
+            stage: 'scan',
+            status: 'in_progress',
+            message: `已扫描 ${scannedDirs} 个目录，发现 ${scannedFiles} 个文件...`,
+            current: 30 + Math.min(scannedFiles, 35),
+            total: 100
+          })
         })
-      })
+      )
+      activeSession = scanAttempt.session
+      const remoteFiles = scanAttempt.result
       this.notifyProgress(planId, { stage: 'scan', status: 'completed', message: `扫描完成，共 ${remoteFiles.length} 个文件`, current: 65, total: 100 })
 
       // 阶段 3：对比快照
@@ -528,7 +567,11 @@ export class AutoSyncService {
 
       // 阶段 4：入队下载
       this.notifyProgress(planId, { stage: 'queue', status: 'started', message: '正在加入下载队列...' })
-      const queuedCount = await this.queueMissingFiles(newFiles, session)
+      const queueAttempt = await this.withAlistSessionRetry(activeSession, (s) =>
+        this.queueMissingFiles(newFiles, s)
+      )
+      activeSession = queueAttempt.session
+      const queuedCount = queueAttempt.result
       this.notifyProgress(planId, { stage: 'queue', status: 'completed', message: `已加入 ${queuedCount} 个下载任务`, current: 90, total: 100 })
 
       const status: AutoSyncRunStatus = queuedCount === newFiles.length ? 'completed' : 'partial_failed'
@@ -569,7 +612,9 @@ export class AutoSyncService {
           : `同步完成，已加入 ${queuedCount} 个下载任务`
       }
     } catch (error: any) {
-      const message = error.message || '自动同步失败'
+      const message = error instanceof AlistAuthError || isAlistAuthError(error)
+        ? ALIST_AUTH_EXPIRED_SYNC_MESSAGE
+        : error.message || '自动同步失败'
       const errorTs = now()
       loggerService.error('AutoSyncService', `计划 ${planId} 同步失败: ${message}`)
       this.finishRun(runId, {
@@ -598,10 +643,12 @@ export class AutoSyncService {
     let scannedDirs = 0
     let lastProgressFiles = 0
     let lastProgressTime = 0
+    let authError: unknown = null
 
     const queue = new SimplePQueue({ concurrency: this.maxScanConcurrency })
 
     const scanDir = async (current: string, depth: number): Promise<void> => {
+      if (authError) return
       if (depth > this.maxScanDepth) {
         loggerService.warn('AutoSyncService', `远程目录扫描深度超过 ${this.maxScanDepth}: ${current}`)
         return
@@ -613,6 +660,9 @@ export class AutoSyncService {
         result = await alistService.listFiles(current)
       } catch (error: any) {
         loggerService.error('AutoSyncService', `扫描目录失败: ${current}, error=${error.message || error}`)
+        if (isAlistAuthError(error)) {
+          authError = error
+        }
         return
       }
       scannedDirs++
@@ -646,6 +696,8 @@ export class AutoSyncService {
 
     queue.add(() => scanDir(root, 0))
     await queue.onIdle()
+
+    if (authError) throw authError
 
     const filtered = files.filter(file => file.relativePath && !file.relativePath.startsWith('..'))
     loggerService.info('AutoSyncService', `远程文件扫描结束，共扫描 ${scannedDirs} 个目录，发现 ${filtered.length} 个文件`)
@@ -780,6 +832,7 @@ export class AutoSyncService {
 
     this.runningPlans.add(planId)
     const runId = await this.insertRun(planId, session.userId, 'created')
+    let activeSession = await this.ensureWorkflowSession(session)
 
     try {
       const syncStartTs = now()
@@ -790,7 +843,11 @@ export class AutoSyncService {
 
       // 阶段 1：转存
       this.notifyProgress(planId, { stage: 'transfer', status: 'started', message: '开始转存...' })
-      const transfer = await shareTransferService.execTransfer(plan.shareUrl, session.userId)
+      const transferAttempt = await this.withAlistSessionRetry(activeSession, (s) =>
+        shareTransferService.execTransfer(plan.shareUrl, s.userId)
+      )
+      activeSession = transferAttempt.session
+      const transfer = transferAttempt.result
       if (!transfer.success || !transfer.alistPath) {
         this.notifyProgress(planId, { stage: 'transfer', status: 'failed', message: transfer.message || '转存失败' })
         throw new Error(transfer.message || '转存失败')
@@ -800,15 +857,18 @@ export class AutoSyncService {
       // 阶段 2：扫描远程文件
       this.notifyProgress(planId, { stage: 'scan', status: 'started', message: '正在扫描远程文件...' })
       const remoteRoot = extractRemotePathFromAlistUrl(transfer.alistPath)
-      const remoteFiles = await this.scanRemoteFiles(remoteRoot, (scannedFiles, scannedDirs) => {
-        this.notifyProgress(planId, {
-          stage: 'scan',
-          status: 'in_progress',
-          message: `已扫描 ${scannedDirs} 个目录，发现 ${scannedFiles} 个文件...`,
-          current: 30 + Math.min(scannedFiles, 35),
-          total: 100
+      const scanAttempt = await this.withAlistSessionRetry(activeSession, () =>
+        this.scanRemoteFiles(remoteRoot, (scannedFiles, scannedDirs) => {
+          this.notifyProgress(planId, {
+            stage: 'scan',
+            status: 'in_progress',
+            message: `已扫描 ${scannedDirs} 个目录，发现 ${scannedFiles} 个文件...`,
+            current: 30 + Math.min(scannedFiles, 35),
+            total: 100
+          })
         })
-      })
+      )
+      const remoteFiles = scanAttempt.result
       this.notifyProgress(planId, { stage: 'scan', status: 'completed', message: `扫描完成，共 ${remoteFiles.length} 个文件`, current: 65, total: 100 })
 
       // 阶段 3：建立基线
@@ -850,7 +910,9 @@ export class AutoSyncService {
         message: `首次同步完成，已记录 ${remoteFiles.length} 个文件的快照基线`
       }
     } catch (error: any) {
-      const message = error.message || '首次同步失败'
+      const message = error instanceof AlistAuthError || isAlistAuthError(error)
+        ? ALIST_AUTH_EXPIRED_SYNC_MESSAGE
+        : error.message || '首次同步失败'
       const errorTs = now()
       loggerService.error('AutoSyncService', `计划 ${planId} 建立基线失败: ${message}`)
       this.finishRun(runId, {

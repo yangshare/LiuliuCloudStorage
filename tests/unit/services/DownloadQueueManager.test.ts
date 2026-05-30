@@ -8,7 +8,8 @@ const {
   mockDownloadManagerStartDownload,
   mockCancelDownload,
   mockAbortAllActive,
-  mockGetDefaultDownloadPath
+  mockGetDefaultDownloadPath,
+  mockEnsureValidSession
 } = vi.hoisted(() => ({
   mockTransferServiceMethods: {
     create: vi.fn(),
@@ -35,7 +36,8 @@ const {
   mockDownloadManagerStartDownload: vi.fn(),
   mockCancelDownload: vi.fn(),
   mockAbortAllActive: vi.fn(),
-  mockGetDefaultDownloadPath: vi.fn(() => 'C:\\Downloads')
+  mockGetDefaultDownloadPath: vi.fn(() => 'C:\\Downloads'),
+  mockEnsureValidSession: vi.fn()
 }))
 
 vi.mock('../../../src/main/features/transfer/transfer.service', () => ({
@@ -92,6 +94,12 @@ vi.mock('electron', () => ({
   }
 }))
 
+vi.mock('../../../src/main/features/auth/auth.service', () => ({
+  authService: {
+    ensureValidSession: mockEnsureValidSession
+  }
+}))
+
 import { downloadQueueManager } from '../../../src/main/features/transfer/download-queue.manager'
 
 describe('DownloadQueueManager - 云端文件不存在时的处理', () => {
@@ -101,6 +109,7 @@ describe('DownloadQueueManager - 云端文件不存在时的处理', () => {
     ;(downloadQueueManager as any).activeDownloads.clear()
     ;(downloadQueueManager as any).authFailedNotified = false
     downloadQueueManager.setCredentials(1, 'fake-token')
+    mockEnsureValidSession.mockResolvedValue({ userId: 1, username: 'alice', token: 'fake-token', basePath: '/alist/' })
   })
 
   it('当 getDownloadUrl 失败时应将数据库状态更新为 failed', async () => {
@@ -184,5 +193,68 @@ describe('DownloadQueueManager - 云端文件不存在时的处理', () => {
       expect.stringContaining('object not found'),
       0
     )
+  })
+
+  it('getDownloadUrl 返回认证失败时暂停队列并只发送 auth-failed，不标记 failed', async () => {
+    const sent: Array<{ channel: string; payload: any }> = []
+    const { BrowserWindow } = await import('electron')
+    ;(BrowserWindow.getAllWindows as any).mockReturnValue([{
+      isDestroyed: () => false,
+      webContents: {
+        send: (channel: string, payload: any) => sent.push({ channel, payload })
+      }
+    }])
+
+    mockEnsureValidSession
+      .mockResolvedValueOnce({ userId: 1, username: 'alice', token: 'old-token', basePath: '/alist/' })
+      .mockResolvedValueOnce(null)
+    mockGetDownloadUrl.mockResolvedValue({ success: false, error: 'Alist错误(401): token is expired' })
+
+    const task = {
+      id: 'download_auth_1',
+      fileName: 'expired.zip',
+      fileSize: 1024,
+      userId: 1,
+      userToken: 'old-token',
+      remotePath: '/expired.zip',
+      priority: 0,
+      dbId: 201
+    }
+
+    ;(downloadQueueManager as any).activeDownloads.set(task.id, task)
+    await (downloadQueueManager as any).startDownload(task)
+
+    expect((downloadQueueManager as any).maxConcurrent).toBe(0)
+    expect(mockTransferServiceMethods.markAsFailed).not.toHaveBeenCalled()
+    expect(sent.some(e => e.channel === 'transfer:download:auth-failed')).toBe(true)
+    expect(sent.some(e => e.channel === 'transfer:download:failed')).toBe(false)
+  })
+
+  it('session 恢复成功时使用新 token 重试当前任务一次', async () => {
+    mockEnsureValidSession
+      .mockResolvedValueOnce({ userId: 1, username: 'alice', token: 'old-token', basePath: '/alist/' })
+      .mockResolvedValueOnce({ userId: 1, username: 'alice', token: 'new-token', basePath: '/alist/' })
+    mockGetDownloadUrl
+      .mockResolvedValueOnce({ success: false, error: 'Alist错误(401): token is expired' })
+      .mockResolvedValueOnce({ success: true, rawUrl: 'https://download/a.zip', fileSize: 1024 })
+    mockDownloadManagerStartDownload.mockResolvedValue('C:\\Downloads\\a.zip')
+
+    const task = {
+      id: 'download_retry_1',
+      fileName: 'a.zip',
+      fileSize: 1024,
+      userId: 1,
+      userToken: 'old-token',
+      remotePath: '/a.zip',
+      priority: 0,
+      dbId: 202
+    }
+
+    ;(downloadQueueManager as any).activeDownloads.set(task.id, task)
+    await (downloadQueueManager as any).startDownload(task)
+
+    expect(mockGetDownloadUrl).toHaveBeenCalledTimes(2)
+    expect(mockDownloadManagerStartDownload).toHaveBeenCalledTimes(1)
+    expect(mockTransferServiceMethods.markAsFailed).not.toHaveBeenCalled()
   })
 })

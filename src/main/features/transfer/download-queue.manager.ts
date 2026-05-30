@@ -7,6 +7,11 @@ import { BrowserWindow } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
 import { MAX_CONCURRENT_DOWNLOADS } from '../../../shared/constants'
+import { authService, type AuthSession } from '../auth/auth.service'
+import {
+  ALIST_AUTH_EXPIRED_DOWNLOAD_MESSAGE,
+  isAlistAuthError
+} from '../../core/api/alist-auth-error'
 
 export interface DownloadQueueTask {
   id: string
@@ -185,7 +190,10 @@ class DownloadQueueManager {
   /**
    * 启动单个下载任务
    */
-  private async startDownload(task: DownloadQueueTask & { dbId: number }): Promise<void> {
+  private async startDownload(
+    task: DownloadQueueTask & { dbId: number },
+    authRetryCount = 0
+  ): Promise<void> {
     // task 已由 processQueue 放入 activeDownloads，此处无需再操作
 
     // 立即通知渲染进程：任务进入 active 状态
@@ -194,13 +202,13 @@ class DownloadQueueManager {
     try {
       // 获取下载链接（如果还没有）
       if (!task.url) {
-        if (this.userToken) {
-          alistService.setToken(this.userToken)
+        const session = await authService.ensureValidSession()
+        if (!session) {
+          throw new Error(ALIST_AUTH_EXPIRED_DOWNLOAD_MESSAGE)
         }
-        alistService.setBasePath('/alist/')
-        if (this.userId) {
-          alistService.setUserId(this.userId)
-        }
+        this.applySessionToAlist(session)
+        task.userId = session.userId
+        task.userToken = session.token
         const dlResult = await alistService.getDownloadUrl(task.remotePath)
         if (!dlResult.success || !dlResult.rawUrl) {
           throw new Error(dlResult.error || '获取下载链接失败')
@@ -296,6 +304,12 @@ class DownloadQueueManager {
 
       const errMsg: string = error.message || ''
 
+      // 认证失败：尝试恢复 session 并重试一次，不标记为普通失败
+      if (isAlistAuthError(error) || isAlistAuthError(errMsg)) {
+        const handled = await this.handleAuthFailure(task, authRetryCount)
+        if (handled) return
+      }
+
       // 更新数据库状态为 failed，避免重启后死循环恢复同一任务
       try {
         await this.transferService.markAsFailed(task.dbId, errMsg, 0)
@@ -316,24 +330,6 @@ class DownloadQueueManager {
         }
       }
 
-      // 检测认证失败（401 / Guest user），暂停队列避免大量弹窗
-      const isAuthError = errMsg.includes('401') || errMsg.toLowerCase().includes('guest user')
-      if (isAuthError && !this.authFailedNotified) {
-        this.authFailedNotified = true
-        this.pauseQueue()
-        loggerService.error('DownloadQueueManager', 'Alist 认证失效，已暂停下载队列')
-
-        // 只发一次认证失败通知
-        const windows = BrowserWindow.getAllWindows()
-        windows.forEach(win => {
-          if (win && !win.isDestroyed()) {
-            win.webContents.send('transfer:download:auth-failed', {
-              error: 'Alist 登录已过期，请重新登录后恢复下载'
-            })
-          }
-        })
-      }
-
       // 通知前端队列状态变更
       this.emitQueueUpdated()
 
@@ -344,18 +340,70 @@ class DownloadQueueManager {
           win.webContents.send('transfer:download:failed', {
             taskId: task.id,
             fileName: task.fileName,
-            error: isAuthError ? 'Alist 登录已过期' : errMsg,
+            error: errMsg,
             batchId: task.batchId,
             batchTotal: task.batchTotal
           })
         }
       })
 
-      // 仅非认证错误时继续处理队列
-      if (!isAuthError) {
-        this.processQueue()
+      // 继续处理队列
+      this.processQueue()
+    }
+  }
+
+  /**
+   * 将 session 应用到 AlistService
+   */
+  private applySessionToAlist(session: AuthSession): void {
+    this.setCredentials(session.userId, session.token)
+    alistService.setToken(session.token)
+    alistService.setBasePath(session.basePath)
+    alistService.setUserId(session.userId)
+  }
+
+  /**
+   * 处理认证失败：尝试恢复 session 并重试一次
+   */
+  private async handleAuthFailure(
+    task: DownloadQueueTask & { dbId: number },
+    authRetryCount: number
+  ): Promise<boolean> {
+    this.pauseQueue()
+
+    if (authRetryCount === 0) {
+      const recovered = await authService.ensureValidSession({ forceRefresh: true })
+      if (recovered) {
+        this.applySessionToAlist(recovered)
+        task.userId = recovered.userId
+        task.userToken = recovered.token
+        task.url = undefined
+        await this.transferService.updateStatus(task.dbId, 'pending')
+
+        this.maxConcurrent = MAX_CONCURRENT_DOWNLOADS
+        this.activeDownloads.set(task.id, task)
+        await this.startDownload(task, authRetryCount + 1)
+        return true
       }
     }
+
+    await this.transferService.updateStatus(task.dbId, 'pending')
+    this.queue.set(task.id, { ...task, url: undefined })
+
+    if (!this.authFailedNotified) {
+      this.authFailedNotified = true
+      loggerService.error('DownloadQueueManager', 'Alist 认证失效，已暂停下载队列')
+      BrowserWindow.getAllWindows().forEach(win => {
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('transfer:download:auth-failed', {
+            error: ALIST_AUTH_EXPIRED_DOWNLOAD_MESSAGE
+          })
+        }
+      })
+    }
+
+    this.emitQueueUpdated()
+    return true
   }
 
   /**

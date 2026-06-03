@@ -326,15 +326,19 @@ export class ShareTransferService {
         return true
       }
 
-      // 使用 inArray 进行批量删除，避免 N+1 查询
-      await this.db
-        .delete(shareTransferRecords)
-        .where(
-          and(
-            inArray(shareTransferRecords.id, ids),
-            eq(shareTransferRecords.userId, userId)
+      // SQLite 参数上限约 999，保守按 500 个 ID/批分批删除
+      const IDS_PER_BATCH = 500
+      for (let i = 0; i < ids.length; i += IDS_PER_BATCH) {
+        const batch = ids.slice(i, i + IDS_PER_BATCH)
+        await this.db
+          .delete(shareTransferRecords)
+          .where(
+            and(
+              inArray(shareTransferRecords.id, batch),
+              eq(shareTransferRecords.userId, userId)
+            )
           )
-        )
+      }
 
       return true
     } catch (error) {

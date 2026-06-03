@@ -21,6 +21,9 @@ const { tasks, fakeDb } = vi.hoisted(() => {
     if (condition.type === 'or') {
       return condition.conditions.some((item: any) => matches(task, item))
     }
+    if (condition.type === 'inArray') {
+      return condition.values.includes(task[columnToProperty(condition.field)])
+    }
     return true
   }
 
@@ -239,5 +242,60 @@ describe('TransferService', () => {
     const resumable = await service.getResumableTasks(1)
     expect(resumable).toHaveLength(1)
     expect(resumable[0].resumable).toBe(true)
+  })
+
+  it('should cancel large task id lists in batches', async () => {
+    const createdTasks: TransferQueue[] = []
+    for (let index = 0; index < 1201; index++) {
+      const task = await service.create({
+        userId: 1,
+        taskType: 'download',
+        fileName: `file-${index}.txt`,
+        filePath: `/local/file-${index}.txt`,
+        remotePath: `/remote/file-${index}.txt`,
+        fileSize: 1024,
+        status: 'pending'
+      })
+      createdTasks.push(task)
+    }
+
+    fakeDb.update.mockClear()
+    await service.cancelTasks(createdTasks.map(task => task.id))
+
+    expect(fakeDb.update).toHaveBeenCalledTimes(3)
+    expect(createdTasks.every(task => task.status === 'cancelled')).toBe(true)
+  })
+
+  it('should query large remote path lists in batches', async () => {
+    const remotePaths: string[] = []
+    for (let index = 0; index < 1201; index++) {
+      const remotePath = `/remote/file-${index}.txt`
+      remotePaths.push(remotePath)
+      await service.create({
+        userId: 1,
+        taskType: 'download',
+        fileName: `file-${index}.txt`,
+        filePath: `/local/file-${index}.txt`,
+        remotePath,
+        fileSize: 1024,
+        status: 'pending'
+      })
+    }
+    await service.create({
+      userId: 1,
+      taskType: 'upload',
+      fileName: 'upload-only.txt',
+      filePath: '/local/upload-only.txt',
+      remotePath: remotePaths[0],
+      fileSize: 1024,
+      status: 'pending'
+    })
+
+    fakeDb.select.mockClear()
+    const taskMap = await service.getTasksByRemotePaths(remotePaths, 'download')
+
+    expect(fakeDb.select).toHaveBeenCalledTimes(3)
+    expect(taskMap).toHaveLength(1201)
+    expect([...taskMap.values()].every(task => task.taskType === 'download')).toBe(true)
   })
 })

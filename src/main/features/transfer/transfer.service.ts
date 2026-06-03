@@ -98,10 +98,15 @@ export class TransferService {
 
   async cancelTasks(taskIds: number[]): Promise<void> {
     if (taskIds.length === 0) return
-    this.db.update(transferQueue)
-      .set({ status: 'cancelled', updatedAt: new Date() })
-      .where(inArray(transferQueue.id, taskIds))
-      .run()
+    // SQLite 参数上限约 999，保守按 500 个 ID/批分批更新
+    const IDS_PER_BATCH = 500
+    for (let i = 0; i < taskIds.length; i += IDS_PER_BATCH) {
+      const batch = taskIds.slice(i, i + IDS_PER_BATCH)
+      this.db.update(transferQueue)
+        .set({ status: 'cancelled', updatedAt: new Date() })
+        .where(inArray(transferQueue.id, batch))
+        .run()
+    }
   }
 
   async cancelAllUserTasks(userId: number, taskType: 'upload' | 'download'): Promise<void> {
@@ -246,17 +251,21 @@ export class TransferService {
       return new Map()
     }
 
-    const tasks = this.db.select()
-      .from(transferQueue)
-      .where(and(
-        eq(transferQueue.taskType, taskType),
-        inArray(transferQueue.remotePath, remotePaths)
-      ))
-      .all()
-
+    // SQLite 参数上限约 999，保守按 500 个路径/批分批查询
+    const PATHS_PER_BATCH = 500
     const taskMap = new Map<string, TransferQueue>()
-    for (const task of tasks) {
-      taskMap.set(task.remotePath, task)
+    for (let i = 0; i < remotePaths.length; i += PATHS_PER_BATCH) {
+      const batch = remotePaths.slice(i, i + PATHS_PER_BATCH)
+      const tasks = this.db.select()
+        .from(transferQueue)
+        .where(and(
+          eq(transferQueue.taskType, taskType),
+          inArray(transferQueue.remotePath, batch)
+        ))
+        .all()
+      for (const task of tasks) {
+        taskMap.set(task.remotePath, task)
+      }
     }
 
     return taskMap

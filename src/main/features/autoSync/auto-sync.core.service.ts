@@ -729,12 +729,17 @@ export class AutoSyncService {
     }
 
     if (idsToUpdate.length > 0) {
-      const placeholders = idsToUpdate.map(() => '?').join(',')
-      this.db.prepare(`
-        UPDATE auto_sync_remote_snapshots
-        SET last_verified_at = ?
-        WHERE id IN (${placeholders})
-      `).run(t, ...idsToUpdate)
+      // SQLite 参数上限约 999，保守按 500 个 ID/批分批更新
+      const IDS_PER_BATCH = 500
+      for (let i = 0; i < idsToUpdate.length; i += IDS_PER_BATCH) {
+        const batch = idsToUpdate.slice(i, i + IDS_PER_BATCH)
+        const placeholders = batch.map(() => '?').join(',')
+        this.db.prepare(`
+          UPDATE auto_sync_remote_snapshots
+          SET last_verified_at = ?
+          WHERE id IN (${placeholders})
+        `).run(t, ...batch)
+      }
     }
 
     return result

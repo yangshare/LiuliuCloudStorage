@@ -4,15 +4,18 @@ import { ShareTransferService } from '../../../src/main/features/shareTransfer/s
 const { fakeDb } = vi.hoisted(() => {
   const fakeDb = {
     delete: vi.fn(() => ({
-      where: vi.fn()
-    }))
+      where: vi.fn(() => ({
+        run: vi.fn()
+      }))
+    })),
+    transaction: vi.fn((fn: () => void) => () => fn())
   }
 
   return { fakeDb }
 })
 
 vi.mock('axios', () => ({ default: { post: vi.fn(), get: vi.fn() } }))
-vi.mock('../../../src/main/database', () => ({ getDatabase: vi.fn(() => ({})) }))
+vi.mock('../../../src/main/database', () => ({ getDatabase: vi.fn(() => fakeDb) }))
 vi.mock('../../../src/main/config', () => ({
   loadConfig: vi.fn(() => ({ ambApiBaseUrl: 'https://test-api.example.com', ambTransferToken: 'token' }))
 }))
@@ -36,7 +39,8 @@ describe('ShareTransferService batching', () => {
 
   it('should delete large record id lists in batches', async () => {
     const service = ShareTransferService.getInstance()
-    const ids = Array.from({ length: 1201 }, (_, index) => index + 1)
+    // 使用 1801 条数据确保 SQLITE_BATCH_SIZE=900 时产生 3 个批次
+    const ids = Array.from({ length: 1801 }, (_, index) => index + 1)
 
     const result = await service.deleteRecords(ids, 7)
 

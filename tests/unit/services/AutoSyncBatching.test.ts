@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AutoSyncService } from '../../../src/main/features/autoSync/auto-sync.core.service'
 
-const { mockDb, snapshotRows, updateRuns } = vi.hoisted(() => {
+const { mockDb, snapshotRows, updateRuns, insertRuns } = vi.hoisted(() => {
   const snapshotRows: any[] = []
   const updateRuns: any[][] = []
+  const insertRuns: any[][] = []
 
   const mockDb = {
     prepare: vi.fn((sql: string) => ({
@@ -18,11 +19,15 @@ const { mockDb, snapshotRows, updateRuns } = vi.hoisted(() => {
         if (sql.includes('UPDATE auto_sync_remote_snapshots')) {
           updateRuns.push(args)
         }
+        if (sql.includes('INSERT OR IGNORE INTO auto_sync_remote_snapshots')) {
+          insertRuns.push(args)
+        }
       })
-    }))
+    })),
+    transaction: vi.fn((fn: () => void) => () => fn())
   }
 
-  return { mockDb, snapshotRows, updateRuns }
+  return { mockDb, snapshotRows, updateRuns, insertRuns }
 })
 
 vi.mock('../../../src/main/database', () => ({ getDatabase: vi.fn(() => mockDb) }))
@@ -50,12 +55,14 @@ describe('AutoSyncService batching', () => {
   beforeEach(() => {
     snapshotRows.splice(0, snapshotRows.length)
     updateRuns.splice(0, updateRuns.length)
+    insertRuns.splice(0, insertRuns.length)
     vi.clearAllMocks()
   })
 
   it('should update existing snapshot verification times in batches', async () => {
     const planId = 15
-    const remoteFiles = Array.from({ length: 1201 }, (_, index) => ({
+    // 使用 1801 条数据确保 SQLITE_BATCH_SIZE=900 时产生 3 个批次
+    const remoteFiles = Array.from({ length: 1801 }, (_, index) => ({
       relativePath: `dir/file-${index}.txt`,
       remotePath: `/alist/dir/file-${index}.txt`,
       fileName: `file-${index}.txt`,
@@ -76,6 +83,23 @@ describe('AutoSyncService batching', () => {
 
     expect(result).toEqual([])
     expect(updateRuns).toHaveLength(3)
-    expect(updateRuns.map(args => args.length)).toEqual([501, 501, 202])
+    // 每个 batch 的 run() 参数：1 个时间戳 + N 个 ID
+    expect(updateRuns.map(args => args.length)).toEqual([901, 901, 2])
+  })
+
+  it('should keep snapshot insert batches within the SQLite parameter budget', () => {
+    const files = Array.from({ length: 181 }, (_, index) => ({
+      relativePath: `dir/file-${index}.txt`,
+      remotePath: `/alist/dir/file-${index}.txt`,
+      fileName: `file-${index}.txt`,
+      fileSize: 1024,
+      modified: ''
+    }))
+
+    const service = new AutoSyncService()
+    ;(service as any).insertSnapshotsBatch(15, files, 100)
+
+    expect(insertRuns.map(args => args.length)).toEqual([900, 5])
+    expect(insertRuns.every(args => args.length <= 900)).toBe(true)
   })
 })

@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { getDatabase } from '../../database'
+import { SQLITE_BATCH_SIZE } from '../../database/constants'
 import { shareTransferRecords } from '../../database/schema'
 import type { NewShareTransferRecord, ShareTransferRecord } from '../../database/schema'
 import { count, desc, eq, and, inArray } from 'drizzle-orm'
@@ -318,7 +319,7 @@ export class ShareTransferService {
   }
 
   /**
-   * 批量删除记录（使用 inArray 优化）
+   * 批量删除记录（使用 inArray 优化，事务保证原子性）
    */
   async deleteRecords(ids: number[], userId: number): Promise<boolean> {
     try {
@@ -326,19 +327,21 @@ export class ShareTransferService {
         return true
       }
 
-      // SQLite 参数上限约 999，保守按 500 个 ID/批分批删除
-      const IDS_PER_BATCH = 500
-      for (let i = 0; i < ids.length; i += IDS_PER_BATCH) {
-        const batch = ids.slice(i, i + IDS_PER_BATCH)
-        await this.db
-          .delete(shareTransferRecords)
-          .where(
-            and(
-              inArray(shareTransferRecords.id, batch),
-              eq(shareTransferRecords.userId, userId)
+      // better-sqlite3 事务回调是同步的，必须用同步 for 循环而非 async processInBatches
+      getDatabase().transaction(() => {
+        for (let i = 0; i < ids.length; i += SQLITE_BATCH_SIZE) {
+          const batch = ids.slice(i, i + SQLITE_BATCH_SIZE)
+          this.db
+            .delete(shareTransferRecords)
+            .where(
+              and(
+                inArray(shareTransferRecords.id, batch),
+                eq(shareTransferRecords.userId, userId)
+              )
             )
-          )
-      }
+            .run()
+        }
+      })()
 
       return true
     } catch (error) {

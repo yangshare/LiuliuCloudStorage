@@ -1,9 +1,11 @@
 import { eq, desc, and, or, inArray, count } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { getDatabase } from '../../database'
+import { SQLITE_BATCH_SIZE } from '../../database/constants'
 import { transferQueue, type NewTransferQueue, type TransferQueue } from '../../database/schema'
 import { IPCError, IPCErrorCode } from '../../core/ipc/error-handler'
 import type { TransferTask, TransferStatus } from '../../../shared/types/transfer'
+import { processInBatches } from '../../utils/batch'
 
 export class TransferService {
   private get db() { return drizzle(getDatabase()) }
@@ -98,15 +100,16 @@ export class TransferService {
 
   async cancelTasks(taskIds: number[]): Promise<void> {
     if (taskIds.length === 0) return
-    // SQLite 参数上限约 999，保守按 500 个 ID/批分批更新
-    const IDS_PER_BATCH = 500
-    for (let i = 0; i < taskIds.length; i += IDS_PER_BATCH) {
-      const batch = taskIds.slice(i, i + IDS_PER_BATCH)
-      this.db.update(transferQueue)
-        .set({ status: 'cancelled', updatedAt: new Date() })
-        .where(inArray(transferQueue.id, batch))
-        .run()
-    }
+    // better-sqlite3 事务回调是同步的，必须用同步 for 循环而非 async processInBatches
+    getDatabase().transaction(() => {
+      for (let i = 0; i < taskIds.length; i += SQLITE_BATCH_SIZE) {
+        const batch = taskIds.slice(i, i + SQLITE_BATCH_SIZE)
+        this.db.update(transferQueue)
+          .set({ status: 'cancelled', updatedAt: new Date() })
+          .where(inArray(transferQueue.id, batch))
+          .run()
+      }
+    })()
   }
 
   async cancelAllUserTasks(userId: number, taskType: 'upload' | 'download'): Promise<void> {
@@ -251,11 +254,8 @@ export class TransferService {
       return new Map()
     }
 
-    // SQLite 参数上限约 999，保守按 500 个路径/批分批查询
-    const PATHS_PER_BATCH = 500
     const taskMap = new Map<string, TransferQueue>()
-    for (let i = 0; i < remotePaths.length; i += PATHS_PER_BATCH) {
-      const batch = remotePaths.slice(i, i + PATHS_PER_BATCH)
+    await processInBatches(remotePaths, (batch) => {
       const tasks = this.db.select()
         .from(transferQueue)
         .where(and(
@@ -266,7 +266,7 @@ export class TransferService {
       for (const task of tasks) {
         taskMap.set(task.remotePath, task)
       }
-    }
+    })
 
     return taskMap
   }

@@ -103,7 +103,8 @@ const { tasks, fakeDb } = vi.hoisted(() => {
           }
         }
       }
-    }))
+    })),
+    transaction: vi.fn((fn: () => void) => () => fn())
   }
 
   return {
@@ -135,7 +136,7 @@ vi.mock('drizzle-orm', () => ({
 }))
 
 vi.mock('../../../src/main/database', () => ({
-  getDatabase: vi.fn(() => ({}))
+  getDatabase: vi.fn(() => fakeDb)
 }))
 
 describe('TransferService', () => {
@@ -246,7 +247,8 @@ describe('TransferService', () => {
 
   it('should cancel large task id lists in batches', async () => {
     const createdTasks: TransferQueue[] = []
-    for (let index = 0; index < 1201; index++) {
+    // 使用 1801 条数据确保 SQLITE_BATCH_SIZE=900 时产生 3 个批次
+    for (let index = 0; index < 1801; index++) {
       const task = await service.create({
         userId: 1,
         taskType: 'download',
@@ -268,7 +270,8 @@ describe('TransferService', () => {
 
   it('should query large remote path lists in batches', async () => {
     const remotePaths: string[] = []
-    for (let index = 0; index < 1201; index++) {
+    // 使用 1801 条数据确保 SQLITE_BATCH_SIZE=900 时产生 3 个批次
+    for (let index = 0; index < 1801; index++) {
       const remotePath = `/remote/file-${index}.txt`
       remotePaths.push(remotePath)
       await service.create({
@@ -295,7 +298,7 @@ describe('TransferService', () => {
     const taskMap = await service.getTasksByRemotePaths(remotePaths, 'download')
 
     expect(fakeDb.select).toHaveBeenCalledTimes(3)
-    expect(taskMap).toHaveLength(1201)
+    expect(taskMap).toHaveLength(1801)
     expect([...taskMap.values()].every(task => task.taskType === 'download')).toBe(true)
   })
 })

@@ -1,6 +1,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { getDatabase } from '../../database'
+import { SQLITE_BATCH_SIZE } from '../../database/constants'
 import { alistService } from '../../core/api/alist.service'
 import { shareTransferService } from '../shareTransfer/share-transfer.core.service'
 import { downloadQueueManager, type DownloadQueueTask } from '../transfer/download-queue.manager'
@@ -729,17 +730,17 @@ export class AutoSyncService {
     }
 
     if (idsToUpdate.length > 0) {
-      // SQLite 参数上限约 999，保守按 500 个 ID/批分批更新
-      const IDS_PER_BATCH = 500
-      for (let i = 0; i < idsToUpdate.length; i += IDS_PER_BATCH) {
-        const batch = idsToUpdate.slice(i, i + IDS_PER_BATCH)
-        const placeholders = batch.map(() => '?').join(',')
-        this.db.prepare(`
-          UPDATE auto_sync_remote_snapshots
-          SET last_verified_at = ?
-          WHERE id IN (${placeholders})
-        `).run(t, ...batch)
-      }
+      this.db.transaction(() => {
+        for (let i = 0; i < idsToUpdate.length; i += SQLITE_BATCH_SIZE) {
+          const batch = idsToUpdate.slice(i, i + SQLITE_BATCH_SIZE)
+          const placeholders = batch.map(() => '?').join(',')
+          this.db.prepare(`
+            UPDATE auto_sync_remote_snapshots
+            SET last_verified_at = ?
+            WHERE id IN (${placeholders})
+          `).run(t, ...batch)
+        }
+      })()
     }
 
     return result
@@ -801,8 +802,8 @@ export class AutoSyncService {
 
   private insertSnapshotsBatch(planId: number, files: RemoteFile[], timestamp: number): void {
     if (files.length === 0) return
-    // SQLite 参数上限约 32766，每行 5 个参数，保守按 500 行/批
-    const ROWS_PER_BATCH = 500
+    const PARAMS_PER_ROW = 5
+    const ROWS_PER_BATCH = Math.floor(SQLITE_BATCH_SIZE / PARAMS_PER_ROW)
     const VALUES_PLACEHOLDER = '(?, ?, ?, ?, ?)'
 
     for (let i = 0; i < files.length; i += ROWS_PER_BATCH) {

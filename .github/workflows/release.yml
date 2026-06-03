@@ -14,8 +14,9 @@ jobs:
         include:
           - os: windows-latest
             package-cmd: pnpm exec electron-builder --win --publish never
-          - os: macos-latest
-            package-cmd: pnpm exec electron-builder --mac --publish never
+          # 暂时跳过 macOS 构建以提升 Release 执行效率，后续需要时取消注释即可。
+          # - os: macos-latest
+          #   package-cmd: pnpm exec electron-builder --mac --publish never
 
     runs-on: ${{ matrix.os }}
 

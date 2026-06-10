@@ -154,6 +154,30 @@ release/
 *.sqlite
 *.sqlite3
 
+# OS generated files
+.DS_Store
+.DS_Store?
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Editor directories and files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# Temporary files
+tmp/
+temp/
+
+# CodeGraph
+.codegraph/
+
 # Claude Code temporary files
 tmpclaude-*
 

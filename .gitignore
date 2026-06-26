@@ -183,3 +183,5 @@ tmpclaude-*
 
 # Playwright test results
 test-results/
+
+.claude/

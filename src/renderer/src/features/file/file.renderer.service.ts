@@ -23,7 +23,7 @@ export const fileRendererService = {
     return window.electronAPI.file.rename(path, newName)
   },
 
-  async getAllFilesInDirectory(remotePath: string): Promise<{ success: boolean; data?: string[]; error?: string }> {
-    return window.electronAPI.file.getAllFilesInDirectory(remotePath)
+  async getAllFilesInDirectory(remotePath: string, maxFiles?: number): Promise<{ success: boolean; data?: { files: string[]; truncated: boolean }; error?: string }> {
+    return window.electronAPI.file.getAllFilesInDirectory(remotePath, maxFiles)
   }
 }

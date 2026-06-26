@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { ElText, ElButton, ElIcon, ElDialog, ElSpace, ElMessage, ElMessageBox, ElInput } from 'element-plus'
-import { Download, Delete, Refresh, Search } from '@element-plus/icons-vue'
+import { ElText, ElButton, ElDialog, ElSpace, ElMessage, ElMessageBox, ElInput } from 'element-plus'
+import { Download, Refresh, Search } from '@element-plus/icons-vue'
 import { useFileStore } from '@/features/file'
 import { useTransferDownload } from '@/features/transfer/composables/useTransferDownload'
 import { MAX_BATCH_DOWNLOAD_FILES } from '@shared/constants'
@@ -26,7 +26,6 @@ async function handleBatchDownload() {
   ElMessage.info(`正在准备添加 ${selectedItems.length} 个项目到下载队列...`)
 
   const currentPath = fileStore.currentPath === '/' ? '' : fileStore.currentPath
-  let successCount = 0
   let failedCount = 0
 
   // 收集所有需要下载的文件路径
@@ -45,15 +44,21 @@ async function handleBatchDownload() {
   })
 
   // 处理目录：获取所有文件路径
+  // 传入 maxFiles：递归遍历达到阈值即提前中断，避免上万文件目录白等十几秒
+  let dirTruncated = false
   for (const dir of directories) {
     const dirRemotePath = currentPath ? `${currentPath}/${dir.name}` : `/${dir.name}`
     console.log('[BatchActionToolbar] 获取目录文件: dirRemotePath=', dirRemotePath)
     try {
-      const result = await window.electronAPI.file.getAllFilesInDirectory(dirRemotePath)
+      const result = await window.electronAPI.file.getAllFilesInDirectory(dirRemotePath, MAX_BATCH_DOWNLOAD_FILES)
       console.log('[BatchActionToolbar] 目录文件结果:', result)
       if (result.success && result.data) {
-        console.log('[BatchActionToolbar] 找到文件数:', result.data.length)
-        filePaths.push(...result.data)
+        console.log('[BatchActionToolbar] 找到文件数:', result.data.files.length, 'truncated=', result.data.truncated)
+        filePaths.push(...result.data.files)
+        if (result.data.truncated) {
+          dirTruncated = true
+          break  // 已超阈值，无需继续展开剩余目录
+        }
       } else {
         console.log('[BatchActionToolbar] 获取目录文件失败:', result.error)
         failedCount++
@@ -72,11 +77,11 @@ async function handleBatchDownload() {
     return
   }
 
-  // 文件数量上限拦截：超过阈值时阻断，避免后端批量 INSERT 触发
-  // Drizzle mergeQueries 递归爆栈 / SQLite 单语句绑定参数超限
-  if (totalFiles > MAX_BATCH_DOWNLOAD_FILES) {
+  // 文件数量上限拦截：目录展开时已超阈值（dirTruncated）或累计超限，
+  // 阻断以避免后端批量 INSERT 触发 Drizzle mergeQueries 递归爆栈 / SQLite 参数超限
+  if (dirTruncated || totalFiles > MAX_BATCH_DOWNLOAD_FILES) {
     await ElMessageBox.alert(
-      `本次共 ${totalFiles} 个文件，超过单次批量下载上限 ${MAX_BATCH_DOWNLOAD_FILES} 个。\n为避免程序异常，请缩小选中范围（如减少文件夹）或分多次下载。`,
+      `选中的文件超过单次批量下载上限 ${MAX_BATCH_DOWNLOAD_FILES} 个。\n为避免程序异常，请缩小选中范围（如减少文件夹）或分多次下载。`,
       '文件数量过多',
       { confirmButtonText: '我知道了', type: 'warning' }
     )
@@ -104,10 +109,6 @@ async function handleBatchDownload() {
       ElMessage.success(`已添加 ${result.successCount} 个文件到下载队列`)
     }
   }
-}
-
-function handleBatchDelete() {
-  showDeleteConfirm.value = true
 }
 
 async function confirmBatchDelete() {
@@ -153,7 +154,6 @@ function handleCancelSelection() {
 function getDeleteConfirmContent() {
   const files = fileStore.selectedFiles
   const folderCount = files.filter(f => f.isDir).length
-  const fileCount = files.filter(f => !f.isDir).length
 
   let content = `确定要删除 ${files.length} 项吗？`
   if (folderCount > 0) {

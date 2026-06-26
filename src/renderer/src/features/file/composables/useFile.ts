@@ -130,7 +130,7 @@ export function useFile() {
     try {
       const result = await fileRendererService.getAllFilesInDirectory(remotePath)
       if (result.success && result.data) {
-        return result.data
+        return result.data.files
       } else {
         showError('获取失败', result.error || '获取目录文件失败')
         return []

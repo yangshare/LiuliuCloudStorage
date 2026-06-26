@@ -407,16 +407,26 @@ class AlistService {
   /**
    * 递归获取目录下所有文件（包括子目录）
    * @param remotePath 目录路径（相对于 storagePath）
-   * @returns 所有文件的相对路径列表（不包含 storagePath 前缀）
+   * @param maxFiles 可选上限：递归过程中累计达到该值即提前中断，避免遍历超大目录树耗时
+   * @returns files 为文件相对路径列表；truncated 表示是否因达到 maxFiles 而被截断
    */
-  async getAllFilesInDirectory(remotePath: string): Promise<string[]> {
+  async getAllFilesInDirectory(
+    remotePath: string,
+    maxFiles?: number
+  ): Promise<{ files: string[]; truncated: boolean }> {
     const filePaths: string[] = []
     const self = this
+    let truncated = false
+
+    // 达到上限即停止：避免递归遍历超大目录树（上万文件）时白等十几秒
+    const isFull = (): boolean => maxFiles !== undefined && filePaths.length >= maxFiles
 
     const traverse = async (path: string): Promise<void> => {
+      if (isFull()) { truncated = true; return }
       try {
         const result = await self.listFiles(path)
         for (const item of result.content) {
+          if (isFull()) { truncated = true; return }
           if (item.isDir) {
             const subPath = path === '/' ? `/${item.name}` : `${path}/${item.name}`
             await traverse(subPath)
@@ -431,8 +441,8 @@ class AlistService {
     }
 
     await traverse(remotePath)
-    loggerService.info('AlistService', `getAllFilesInDirectory: 找到 ${filePaths.length} 个文件`)
-    return filePaths
+    loggerService.info('AlistService', `getAllFilesInDirectory: 找到 ${filePaths.length} 个文件${truncated ? '（已截断）' : ''}`)
+    return { files: filePaths, truncated }
   }
 }
 

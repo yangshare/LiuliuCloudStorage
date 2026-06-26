@@ -168,12 +168,15 @@ export class FileService {
   /**
    * 获取目录下所有文件（递归子目录）
    */
-  async getAllFilesInDirectory(remotePath: string): Promise<string[]> {
+  async getAllFilesInDirectory(
+    remotePath: string,
+    maxFiles?: number
+  ): Promise<{ files: string[]; truncated: boolean }> {
     try {
       loggerService.info('FileService', `[getAllFilesInDirectory] Fetching all files in: ${remotePath}`)
-      const filePaths = await alistService.getAllFilesInDirectory(remotePath || '/')
-      loggerService.info('FileService', `[getAllFilesInDirectory] Success: found ${filePaths.length} files`)
-      return filePaths
+      const result = await alistService.getAllFilesInDirectory(remotePath || '/', maxFiles)
+      loggerService.info('FileService', `[getAllFilesInDirectory] Success: found ${result.files.length} files${result.truncated ? '（已截断）' : ''}`)
+      return result
     } catch (error) {
       const appError = error as AppError
       loggerService.error('FileService', `[getAllFilesInDirectory] Error: ${JSON.stringify(appError)}`)

@@ -31,7 +31,7 @@ export function registerFileHandlers() {
   })
 
   // 获取目录下所有文件（递归子目录）
-  ipcMain.handle('file:directory:getAllFiles', async (_event, remotePath: string) => {
-    return handleIPC(() => fileService.getAllFilesInDirectory(remotePath))
+  ipcMain.handle('file:directory:getAllFiles', async (_event, remotePath: string, maxFiles?: number) => {
+    return handleIPC(() => fileService.getAllFilesInDirectory(remotePath, maxFiles))
   })
 }

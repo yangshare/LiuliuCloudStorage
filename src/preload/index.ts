@@ -135,7 +135,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     delete: (dir: string, fileName: string) => wrappedInvoke('file:item:delete', dir, fileName),
     batchDelete: (dir: string, fileNames: string[]) => wrappedInvoke('file:item:batchDelete', dir, fileNames),
     rename: (path: string, newName: string) => wrappedInvoke('file:item:rename', path, newName),
-    getAllFilesInDirectory: (remotePath: string) => wrappedInvoke('file:directory:getAllFiles', remotePath)
+    getAllFilesInDirectory: (remotePath: string, maxFiles?: number) => wrappedInvoke('file:directory:getAllFiles', remotePath, maxFiles)
   },
 
   transfer: {

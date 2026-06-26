@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { ElText, ElButton, ElIcon, ElDialog, ElSpace, ElMessage, ElInput } from 'element-plus'
+import { ElText, ElButton, ElIcon, ElDialog, ElSpace, ElMessage, ElMessageBox, ElInput } from 'element-plus'
 import { Download, Delete, Refresh, Search } from '@element-plus/icons-vue'
 import { useFileStore } from '@/features/file'
 import { useTransferDownload } from '@/features/transfer/composables/useTransferDownload'
+import { MAX_BATCH_DOWNLOAD_FILES } from '@shared/constants'
 
 const fileStore = useFileStore()
 const { batchQueueDownload } = useTransferDownload()
@@ -68,6 +69,17 @@ async function handleBatchDownload() {
 
   if (totalFiles === 0) {
     ElMessage.warning('没有可下载的文件')
+    return
+  }
+
+  // 文件数量上限拦截：超过阈值时阻断，避免后端批量 INSERT 触发
+  // Drizzle mergeQueries 递归爆栈 / SQLite 单语句绑定参数超限
+  if (totalFiles > MAX_BATCH_DOWNLOAD_FILES) {
+    await ElMessageBox.alert(
+      `本次共 ${totalFiles} 个文件，超过单次批量下载上限 ${MAX_BATCH_DOWNLOAD_FILES} 个。\n为避免程序异常，请缩小选中范围（如减少文件夹）或分多次下载。`,
+      '文件数量过多',
+      { confirmButtonText: '我知道了', type: 'warning' }
+    )
     return
   }
 

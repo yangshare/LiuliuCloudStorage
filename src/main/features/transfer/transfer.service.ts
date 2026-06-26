@@ -1,7 +1,7 @@
 import { eq, desc, and, or, inArray, count } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { getDatabase } from '../../database'
-import { SQLITE_BATCH_SIZE } from '../../database/constants'
+import { SQLITE_BATCH_SIZE, SQLITE_INSERT_BATCH_ROWS } from '../../database/constants'
 import { transferQueue, type NewTransferQueue, type TransferQueue } from '../../database/schema'
 import { IPCError, IPCErrorCode } from '../../core/ipc/error-handler'
 import type { TransferTask, TransferStatus } from '../../../shared/types/transfer'
@@ -33,7 +33,21 @@ export class TransferService {
   }
 
   async createBatch(tasks: NewTransferQueue[]): Promise<TransferQueue[]> {
-    return this.db.insert(transferQueue).values(tasks).returning().all()
+    if (tasks.length === 0) return []
+
+    const result: TransferQueue[] = []
+    // better-sqlite3 事务回调是同步的，必须用同步 for 循环分批插入。
+    // 单批行数受 SQLite 参数上限 (999) 约束：transferQueue 每行 9 列，
+    // 故用 SQLITE_INSERT_BATCH_ROWS (100) 而非 SQLITE_BATCH_SIZE (900)，
+    // 否则会触发 "too many SQL variables" 及 Drizzle mergeQueries 递归爆栈。
+    getDatabase().transaction(() => {
+      for (let i = 0; i < tasks.length; i += SQLITE_INSERT_BATCH_ROWS) {
+        const chunk = tasks.slice(i, i + SQLITE_INSERT_BATCH_ROWS)
+        const inserted = this.db.insert(transferQueue).values(chunk).returning().all()
+        result.push(...inserted)
+      }
+    })()
+    return result
   }
 
   // ========== 更新 ==========

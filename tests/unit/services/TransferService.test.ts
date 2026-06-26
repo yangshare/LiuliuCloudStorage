@@ -301,4 +301,39 @@ describe('TransferService', () => {
     expect(taskMap).toHaveLength(1801)
     expect([...taskMap.values()].every(task => task.taskType === 'download')).toBe(true)
   })
+
+  it('should batch large inserts to avoid SQLite variable limit', async () => {
+    const records: NewTransferQueue[] = []
+    // 使用 250 条数据确保 SQLITE_INSERT_BATCH_ROWS=100 时产生 3 个批次 (100 + 100 + 50)
+    for (let index = 0; index < 250; index++) {
+      records.push({
+        userId: 1,
+        taskType: 'download',
+        fileName: `file-${index}.txt`,
+        filePath: `/local/file-${index}.txt`,
+        remotePath: `/remote/file-${index}.txt`,
+        fileSize: 1024,
+        status: 'pending'
+      })
+    }
+
+    fakeDb.insert.mockClear()
+    const inserted = await service.createBatch(records)
+
+    // 修复核心：分 3 批插入，而非一次性传入超大数组（否则触发
+    // Drizzle mergeQueries 递归爆栈 / "too many SQL variables"）
+    expect(fakeDb.insert).toHaveBeenCalledTimes(3)
+    expect(inserted).toHaveLength(250)
+    // 返回顺序需与输入一致（addBatchToQueue 依赖 dbTasks[i] 对应 uniqueTasks[i]）
+    expect(inserted[0].fileName).toBe('file-0.txt')
+    expect(inserted[249].fileName).toBe('file-249.txt')
+    // 事务包裹保证原子性
+    expect(fakeDb.transaction).toHaveBeenCalled()
+  })
+
+  it('should skip insert entirely for empty createBatch input', async () => {
+    const inserted = await service.createBatch([])
+    expect(inserted).toHaveLength(0)
+    expect(fakeDb.insert).not.toHaveBeenCalled()
+  })
 })

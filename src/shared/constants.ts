@@ -31,6 +31,16 @@ export const MAX_CONCURRENT_UPLOADS = 10
 export const MAX_CONCURRENT_DOWNLOADS = 5
 
 /**
+ * 单次批量下载的文件数量上限
+ *
+ * 限制原因：批量下载最终会一次性 INSERT 到 SQLite，受单语句绑定参数上限
+ * （better-sqlite3 默认 32766）约束，且去重检查为每文件一次串行 DB 查询，
+ * 文件过多会触发 Drizzle mergeQueries 递归爆栈或显著拖慢。
+ * 超过此值时前端拦截并提示用户分批下载。
+ */
+export const MAX_BATCH_DOWNLOAD_FILES = 1000
+
+/**
  * API 超时时间（10秒）
  * 单位：毫秒
  */

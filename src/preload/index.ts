@@ -57,7 +57,7 @@ async function wrappedInvoke(channel: string, ...args: unknown[]): Promise<unkno
 const validChannels = [
   'auth:session:login', 'auth:session:logout', 'auth:session:check', 'auth:user:current',
   'auth:get-users', 'auth:get-storage-stats', 'auth:preference:login',
-  'file:item:list', 'file:directory:create', 'file:item:delete', 'file:item:batchDelete', 'file:item:rename', 'file:directory:getAllFiles',
+  'file:item:list', 'file:directory:create', 'file:item:delete', 'file:item:batchDelete', 'file:item:rename', 'file:directory:getAllFiles', 'file:directory:cancelGetAllFiles', 'file:directory:getAllFilesProgress',
   'transfer:upload:file', 'transfer:download:file', 'transfer:download:saveAs', 'transfer:upload:cancel', 'transfer:task:list', 'transfer:upload:progress',
   'transfer:upload:add-to-queue', 'transfer:upload:queue-status', 'transfer:upload:restore-queue',
   'transfer:upload:completed', 'transfer:upload:failed', 'transfer:upload:cancelled',
@@ -135,7 +135,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     delete: (dir: string, fileName: string) => wrappedInvoke('file:item:delete', dir, fileName),
     batchDelete: (dir: string, fileNames: string[]) => wrappedInvoke('file:item:batchDelete', dir, fileNames),
     rename: (path: string, newName: string) => wrappedInvoke('file:item:rename', path, newName),
-    getAllFilesInDirectory: (remotePath: string, maxFiles?: number) => wrappedInvoke('file:directory:getAllFiles', remotePath, maxFiles)
+    getAllFilesInDirectory: (remotePath: string, maxFiles?: number, sessionId?: string) => wrappedInvoke('file:directory:getAllFiles', remotePath, maxFiles, sessionId),
+    cancelGetAllFiles: (sessionId: string) => wrappedInvoke('file:directory:cancelGetAllFiles', sessionId),
+    onGetAllFilesProgress: (callback: (data: { sessionId: string; count: number }) => void) =>
+      ipcRenderer.on('file:directory:getAllFilesProgress', wrapListener(callback)),
+    removeGetAllFilesProgressListener: (callback: (data: { sessionId: string; count: number }) => void) =>
+      ipcRenderer.removeListener('file:directory:getAllFilesProgress', unwrapListener(callback) as never)
   },
 
   transfer: {

@@ -2,6 +2,7 @@ import { createHttpClient, AppError } from '../http/http-client'
 import { AxiosInstance } from 'axios'
 import * as fs from 'fs'
 import { loggerService } from '../logger/logger.service'
+import { DIRECTORY_SCAN_CONCURRENCY } from '../../../shared/constants'
 
 export interface FileItem {
   name: string
@@ -194,7 +195,7 @@ class AlistService {
     return response.data.data
   }
 
-  async listFiles(path: string = '/'): Promise<ListFilesResponse> {
+  async listFiles(path: string = '/', options?: { signal?: AbortSignal }): Promise<ListFilesResponse> {
     if (!this.client) {
       throw { code: 'NOT_INITIALIZED', message: 'AlistService 未初始化' } as AppError
     }
@@ -206,7 +207,7 @@ class AlistService {
     const response = await this.client.post<AlistApiResponse<ListFilesResponse>>(
       '/api/fs/list',
       { path: fullPath, refresh: false },
-      { headers: this.getHeaders() }
+      { headers: this.getHeaders(), signal: options?.signal }
     )
 
     loggerService.info('AlistService', `listFiles: Response status=${response.status}`)
@@ -406,43 +407,112 @@ class AlistService {
 
   /**
    * 递归获取目录下所有文件（包括子目录）
+   *
+   * 采用「广度优先 + 受控并发 worker 池」（并发度 DIRECTORY_SCAN_CONCURRENCY），
+   * 取代原先深度优先串行递归——后者在文件分散于大量子目录时，触发 maxFiles
+   * 中断前需串行完成几十次 HTTP，累计耗时数十秒。
+   *
    * @param remotePath 目录路径（相对于 storagePath）
-   * @param maxFiles 可选上限：递归过程中累计达到该值即提前中断，避免遍历超大目录树耗时
-   * @returns files 为文件相对路径列表；truncated 表示是否因达到 maxFiles 而被截断
+   * @param maxFiles 可选上限：累计达到该值即提前中断，避免遍历超大目录树耗时
+   * @param options.signal 可选 AbortSignal，abort 后立即收尾并置 cancelled=true（不 reject）
+   * @param options.onProgress 可选进度回调，参数为目前已累计的文件数
+   * @returns files 为文件相对路径列表；truncated 表示是否因达到 maxFiles 而被截断；
+   *          cancelled 表示是否因 signal 中止
    */
   async getAllFilesInDirectory(
     remotePath: string,
-    maxFiles?: number
-  ): Promise<{ files: string[]; truncated: boolean }> {
+    maxFiles?: number,
+    options?: { signal?: AbortSignal; onProgress?: (count: number) => void }
+  ): Promise<{ files: string[]; truncated: boolean; cancelled: boolean }> {
     const filePaths: string[] = []
     const self = this
-    let truncated = false
+    const { signal, onProgress } = options || {}
+    let limitReached = false
+    let cancelled = false
 
-    // 达到上限即停止：避免递归遍历超大目录树（上万文件）时白等十几秒
     const isFull = (): boolean => maxFiles !== undefined && filePaths.length >= maxFiles
+    const aborted = (): boolean => signal?.aborted === true
 
-    const traverse = async (path: string): Promise<void> => {
-      if (isFull()) { truncated = true; return }
-      try {
-        const result = await self.listFiles(path)
-        for (const item of result.content) {
-          if (isFull()) { truncated = true; return }
-          if (item.isDir) {
-            const subPath = path === '/' ? `/${item.name}` : `${path}/${item.name}`
-            await traverse(subPath)
-          } else {
-            const filePath = path === '/' ? `/${item.name}` : `${path}/${item.name}`
-            filePaths.push(filePath)
-          }
-        }
-      } catch (error) {
-        loggerService.error('AlistService', `getAllFilesInDirectory: 遍历目录失败 path=${path}, error=${error}`)
+    // 待遍历目录队列（广度优先）；running 为当前在途的 listFiles 请求数
+    const dirQueue: string[] = [remotePath]
+    let running = 0
+
+    return new Promise<{ files: string[]; truncated: boolean; cancelled: boolean }>((resolve) => {
+      let settled = false
+      const finish = (): void => {
+        if (settled) return
+        settled = true
+        cancelled = aborted()
+        const truncated = !cancelled && limitReached
+        loggerService.info('AlistService', `getAllFilesInDirectory: 找到 ${filePaths.length} 个文件${truncated ? '（已截断）' : ''}${cancelled ? '（已取消）' : ''}`)
+        resolve({ files: filePaths, truncated, cancelled })
       }
-    }
 
-    await traverse(remotePath)
-    loggerService.info('AlistService', `getAllFilesInDirectory: 找到 ${filePaths.length} 个文件${truncated ? '（已截断）' : ''}`)
-    return { files: filePaths, truncated }
+      const pump = (): void => {
+        if (settled) return
+        // 取消：等在途请求结束后收尾
+        if (aborted()) {
+          if (running === 0) finish()
+          return
+        }
+        // 达到上限：只有确认仍有未遍历内容时才标记截断；精确等于上限且遍历完成不算截断
+        if (isFull() && dirQueue.length > 0) {
+          limitReached = true
+          dirQueue.length = 0
+        }
+        if (limitReached) {
+          if (running === 0) finish()
+          return
+        }
+        if (isFull()) {
+          if (running === 0) finish()
+          return
+        }
+        // 队列空且无在途：正常完成
+        if (dirQueue.length === 0 && running === 0) {
+          finish()
+          return
+        }
+
+        // 按并发度派发新任务
+        while (!settled && running < DIRECTORY_SCAN_CONCURRENCY && dirQueue.length > 0 && !aborted() && !isFull()) {
+          const dir = dirQueue.shift() as string
+          running++
+          self.listFiles(dir, signal ? { signal } : undefined)
+            .then((result) => {
+              for (let index = 0; index < result.content.length; index++) {
+                if (aborted()) break
+                if (isFull()) {
+                  limitReached = true
+                  break
+                }
+                const item = result.content[index]
+                const childPath = dir === '/' ? `/${item.name}` : `${dir}/${item.name}`
+                if (item.isDir) {
+                  dirQueue.push(childPath)
+                } else {
+                  filePaths.push(childPath)
+                }
+              }
+              if (onProgress && filePaths.length > 0) onProgress(filePaths.length)
+            })
+            .catch((error) => {
+              loggerService.error('AlistService', `getAllFilesInDirectory: 遍历目录失败 path=${dir}, error=${error}`)
+            })
+            .finally(() => {
+              running--
+              pump()
+            })
+        }
+      }
+
+      // abort 可能在遍历进行中触发，监听一次以确保及时收尾
+      if (signal) {
+        signal.addEventListener('abort', () => pump(), { once: true })
+      }
+
+      pump()
+    })
   }
 }
 

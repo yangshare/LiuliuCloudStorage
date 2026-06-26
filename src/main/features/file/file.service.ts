@@ -170,12 +170,13 @@ export class FileService {
    */
   async getAllFilesInDirectory(
     remotePath: string,
-    maxFiles?: number
-  ): Promise<{ files: string[]; truncated: boolean }> {
+    maxFiles?: number,
+    options?: { signal?: AbortSignal; onProgress?: (count: number) => void }
+  ): Promise<{ files: string[]; truncated: boolean; cancelled: boolean }> {
     try {
       loggerService.info('FileService', `[getAllFilesInDirectory] Fetching all files in: ${remotePath}`)
-      const result = await alistService.getAllFilesInDirectory(remotePath || '/', maxFiles)
-      loggerService.info('FileService', `[getAllFilesInDirectory] Success: found ${result.files.length} files${result.truncated ? '（已截断）' : ''}`)
+      const result = await alistService.getAllFilesInDirectory(remotePath || '/', maxFiles, options)
+      loggerService.info('FileService', `[getAllFilesInDirectory] Success: found ${result.files.length} files${result.truncated ? '（已截断）' : ''}${result.cancelled ? '（已取消）' : ''}`)
       return result
     } catch (error) {
       const appError = error as AppError

@@ -67,7 +67,10 @@ export interface ElectronAPI {
     delete: (dir: string, fileName: string) => Promise<MkdirResult>
     batchDelete: (dir: string, fileNames: string[]) => Promise<MkdirResult>
     rename: (path: string, newName: string) => Promise<MkdirResult>
-    getAllFilesInDirectory: (remotePath: string, maxFiles?: number) => Promise<{ success: boolean; data?: { files: string[]; truncated: boolean }; error?: string }>
+    getAllFilesInDirectory: (remotePath: string, maxFiles?: number, sessionId?: string) => Promise<{ success: boolean; data?: { files: string[]; truncated: boolean; cancelled: boolean }; error?: string }>
+    cancelGetAllFiles: (sessionId: string) => Promise<{ success: boolean }>
+    onGetAllFilesProgress: (callback: (data: { sessionId: string; count: number }) => void) => void
+    removeGetAllFilesProgressListener: (callback: (data: { sessionId: string; count: number }) => void) => void
   }
   transfer: {
     upload: (filePath: string, remotePath: string, userId: number, userToken: string, username: string, localTaskId: string) => Promise<{ success: boolean; taskId?: string; error?: string }>

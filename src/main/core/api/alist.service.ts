@@ -206,7 +206,7 @@ class AlistService {
 
     const response = await this.client.post<AlistApiResponse<ListFilesResponse>>(
       '/api/fs/list',
-      { path: fullPath, refresh: false },
+      { path: fullPath, refresh: true },
       { headers: this.getHeaders(), signal: options?.signal }
     )
 

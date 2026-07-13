@@ -4,7 +4,7 @@
  */
 
 import { watch } from 'vue'
-import { useTransferStore } from '@/stores/transferStore'
+import { useTransferStore } from '@/features/transfer'
 
 export class TrayMonitorService {
   private static instance: TrayMonitorService | null = null

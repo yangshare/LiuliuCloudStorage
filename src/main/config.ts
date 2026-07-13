@@ -1,9 +1,9 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync, renameSync, unlinkSync } from 'fs'
-import { loggerService } from './services/LoggerService'
-import { alistService } from './services/AlistService'
-import { orchestrationService } from './services/OrchestrationService'
+import { loggerService } from './core/logger/logger.service'
+import { alistService } from './core/api/alist.service'
+import { orchestrationService } from './features/transfer/orchestration.service'
 
 /**
  * 应用配置接口

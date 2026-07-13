@@ -18,41 +18,85 @@ function unwrapListener(callback: Function): Function {
   return callback
 }
 
+// 会话失效相关：UNAUTHORIZED 时通知所有订阅者，由 renderer 统一处理跳转
+const AUTH_EXPIRED_CODES = new Set(['UNAUTHORIZED'])
+const authExpiredHandlers = new Set<(code: string) => void | Promise<void>>()
+
+function notifyAuthExpired(code: string) {
+  // 异步派发，避免同一次 invoke 中订阅者抛错影响 invoke 返回
+  setTimeout(() => {
+    for (const handler of authExpiredHandlers) {
+      Promise.resolve()
+        .then(() => handler(code))
+        .catch((err) => {
+          console.error('[preload] onAuthExpired handler error:', err)
+        })
+    }
+  }, 0)
+}
+
+// 包装 ipcRenderer.invoke：拦截会话失效 code 的失败结果，触发全局通知
+const rawInvoke: (channel: string, ...args: unknown[]) => Promise<unknown> =
+  ipcRenderer.invoke.bind(ipcRenderer)
+
+async function wrappedInvoke(channel: string, ...args: unknown[]): Promise<unknown> {
+  const result = await rawInvoke(channel, ...args)
+  if (
+    result &&
+    typeof result === 'object' &&
+    (result as { success?: boolean }).success === false &&
+    typeof (result as { code?: string }).code === 'string' &&
+    AUTH_EXPIRED_CODES.has((result as { code: string }).code)
+  ) {
+    notifyAuthExpired((result as { code: string }).code)
+  }
+  return result
+}
+
 // 允许的 IPC 通道白名单
 const validChannels = [
-  'auth:login', 'auth:logout', 'auth:check-session', 'auth:get-current-user',
-  'auth:get-users', 'auth:get-storage-stats', 'auth:get-login-preferences',
-  'file:list', 'file:mkdir', 'file:delete', 'file:batchDelete', 'file:rename', 'file:getAllFilesInDirectory',
-  'transfer:upload', 'transfer:download', 'transfer:saveAs', 'transfer:cancel', 'transfer:list', 'transfer:progress',
-  'transfer:add-to-queue', 'transfer:queue-status', 'transfer:restore-queue',
-  'transfer:completed', 'transfer:failed', 'transfer:cancelled',
-  'transfer:resume', 'transfer:auto-retry-all',
-  'transfer:download-progress', 'transfer:download-completed', 'transfer:download-failed', 'transfer:download-cancelled', 'transfer:download-auth-failed',
-  'transfer:initDownloadQueue', 'transfer:queueDownload', 'transfer:batchQueueDownload', 'transfer:getDownloadQueue',
-  'transfer:pauseDownloadQueue', 'transfer:resumeDownloadQueue', 'transfer:clearDownloadQueue',
-  'transfer:clearPendingQueue', 'transfer:clearActiveQueue',
-  'transfer:resumeDownload', 'transfer:cancelDownload', 'transfer:cancelAllDownloads',
-  'transfer:queue-updated',
-  'quota:get', 'quota:update', 'quota:calculate', 'quota:admin-update',
+  'auth:session:login', 'auth:session:logout', 'auth:session:check', 'auth:user:current',
+  'auth:get-users', 'auth:get-storage-stats', 'auth:preference:login',
+  'file:item:list', 'file:directory:create', 'file:item:delete', 'file:item:batchDelete', 'file:item:rename', 'file:directory:getAllFiles', 'file:directory:cancelGetAllFiles', 'file:directory:getAllFilesProgress',
+  'transfer:upload:file', 'transfer:download:file', 'transfer:download:saveAs', 'transfer:upload:cancel', 'transfer:task:list', 'transfer:upload:progress',
+  'transfer:upload:add-to-queue', 'transfer:upload:queue-status', 'transfer:upload:restore-queue',
+  'transfer:upload:completed', 'transfer:upload:failed', 'transfer:upload:cancelled',
+  'transfer:upload:resume', 'transfer:upload:auto-retry-all',
+  'transfer:download:progress', 'transfer:download:completed', 'transfer:download:failed', 'transfer:download:cancelled', 'transfer:download:auth-failed',
+  'transfer:download:init-queue', 'transfer:download:queue', 'transfer:download:batch-queue', 'transfer:download:get-queue',
+  'transfer:download:pause-queue', 'transfer:download:resume-queue', 'transfer:download:clear-queue',
+  'transfer:download:clear-pending', 'transfer:download:clear-active',
+  'transfer:download:resume', 'transfer:download:cancel', 'transfer:download:cancel-all',
+  'transfer:queue:updated',
+  'quota:usage:get', 'quota:usage:update', 'quota:usage:calculate', 'quota:admin:update',
   'crypto:encrypt', 'crypto:decrypt', 'crypto:isReady',
-  'dialog:openFile',
-  'tray:update-transfer-status', 'tray:update-transfer-counts', 'tray:show-window', 'tray:hide-window', 'tray-quick-upload',
-  'notification:show', 'app:getVersion', 'app:set-login-item-settings', 'app:get-login-item-settings', 'app:open-logs-directory',
-  'activity:log', 'activity:get-user-logs', 'activity:get-all-logs', 'activity:get-dau', 'activity:get-user-stats',
-  'downloadConfig:selectDirectory', 'downloadConfig:get', 'downloadConfig:update', 'downloadConfig:openDirectory', 'downloadConfig:openFileDirectory', 'downloadConfig:reset', 'downloadConfig:createDirectory',
-  'cache:get-info', 'cache:clear',
-  'update:check', 'update:install-now', 'update:install-on-quit',
-  'update:available', 'update:not-available', 'update:download-progress', 'update:downloaded', 'update:error',
-  'shareTransfer:exec', 'shareTransfer:list', 'shareTransfer:latest', 'shareTransfer:complete', 'shareTransfer:delete', 'shareTransfer:batchDelete',
-  'config:check', 'config:get', 'config:save', 'config:reinit'
+  'dialog:file:open',
+  'tray:status:update-transfer', 'tray:status:update-counts', 'tray:window:show', 'tray:window:hide', 'tray:action:quick-upload',
+  'notification:app:show', 'app:version:get', 'app:launch:set-login-item-settings', 'app:launch:get-login-item-settings', 'app:logs:open-directory',
+  'activity:log:create', 'activity:log:get-user-logs', 'activity:log:get-all-logs', 'activity:analytics:get-dau', 'activity:analytics:get-user-stats',
+  'downloadConfig:directory:select', 'downloadConfig:data:get', 'downloadConfig:data:update', 'downloadConfig:directory:open', 'downloadConfig:directory:openFile', 'downloadConfig:data:reset', 'downloadConfig:directory:create',
+  'cache:info:get', 'cache:data:clear',
+  'update:action:check', 'update:action:install-now', 'update:action:install-on-quit',
+  'update:event:available', 'update:event:not-available', 'update:event:download-progress', 'update:event:downloaded', 'update:event:error',
+  'shareTransfer:task:exec', 'shareTransfer:task:list', 'shareTransfer:task:latest', 'shareTransfer:task:complete', 'shareTransfer:task:delete', 'shareTransfer:task:batchDelete',
+  'autoSync:plan:createAndRun', 'autoSync:plan:list', 'autoSync:plan:update', 'autoSync:plan:pause', 'autoSync:plan:resume',
+  'autoSync:plan:delete', 'autoSync:plan:run', 'autoSync:run:list', 'autoSync:run:startup', 'autoSync:plan:resetBaseline',
+  'autoSync:event:progress',
+  'auth:session:expired',
+  'config:status:check', 'config:data:get', 'config:data:save', 'config:data:reinit'
 ]
+
+// 监听主进程广播的会话失效事件，转发到所有 onAuthExpired 订阅者
+ipcRenderer.on('auth:session:expired', (_event, payload: { code?: string } | undefined) => {
+  notifyAuthExpired(payload?.code || 'UNAUTHORIZED')
+})
 
 contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
 
   invoke: (channel: string, ...args: unknown[]) => {
     if (validChannels.includes(channel)) {
-      return ipcRenderer.invoke(channel, ...args)
+      return wrappedInvoke(channel, ...args)
     }
     return Promise.reject(new Error(`Invalid channel: ${channel}`))
   },
@@ -67,211 +111,267 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeListener(channel, unwrapListener(callback) as never)
   },
 
+  // 订阅 IPC 会话失效（UNAUTHORIZED）事件，返回取消订阅函数
+  onAuthExpired: (handler: (code: string) => void | Promise<void>) => {
+    authExpiredHandlers.add(handler)
+    return () => {
+      authExpiredHandlers.delete(handler)
+    }
+  },
+
   auth: {
-    login: (username: string, password: string, autoLogin: boolean = false) => ipcRenderer.invoke('auth:login', username, password, autoLogin),
-    logout: () => ipcRenderer.invoke('auth:logout'),
-    checkSession: () => ipcRenderer.invoke('auth:check-session'),
-    getCurrentUser: () => ipcRenderer.invoke('auth:get-current-user'),
-    getUsers: (params?: { page?: number; pageSize?: number; search?: string }) => ipcRenderer.invoke('auth:get-users', params),
-    getStorageStats: () => ipcRenderer.invoke('auth:get-storage-stats'),
-    getLoginPreferences: () => ipcRenderer.invoke('auth:get-login-preferences')
+    login: (username: string, password: string, autoLogin: boolean = false) => wrappedInvoke('auth:session:login', username, password, autoLogin),
+    logout: () => wrappedInvoke('auth:session:logout'),
+    checkSession: () => wrappedInvoke('auth:session:check'),
+    getCurrentUser: () => wrappedInvoke('auth:user:current'),
+    getUsers: (params?: { page?: number; pageSize?: number; search?: string }) => wrappedInvoke('auth:get-users', params),
+    getStorageStats: () => wrappedInvoke('auth:get-storage-stats'),
+    getLoginPreferences: () => wrappedInvoke('auth:preference:login')
   },
 
   file: {
-    list: (path: string) => ipcRenderer.invoke('file:list', path),
-    mkdir: (path: string) => ipcRenderer.invoke('file:mkdir', path),
-    delete: (dir: string, fileName: string) => ipcRenderer.invoke('file:delete', dir, fileName),
-    batchDelete: (dir: string, fileNames: string[]) => ipcRenderer.invoke('file:batchDelete', dir, fileNames),
-    rename: (path: string, newName: string) => ipcRenderer.invoke('file:rename', path, newName),
-    getAllFilesInDirectory: (remotePath: string) => ipcRenderer.invoke('file:getAllFilesInDirectory', remotePath)
+    list: (path: string) => wrappedInvoke('file:item:list', path),
+    mkdir: (path: string) => wrappedInvoke('file:directory:create', path),
+    delete: (dir: string, fileName: string) => wrappedInvoke('file:item:delete', dir, fileName),
+    batchDelete: (dir: string, fileNames: string[]) => wrappedInvoke('file:item:batchDelete', dir, fileNames),
+    rename: (path: string, newName: string) => wrappedInvoke('file:item:rename', path, newName),
+    getAllFilesInDirectory: (remotePath: string, maxFiles?: number, sessionId?: string) => wrappedInvoke('file:directory:getAllFiles', remotePath, maxFiles, sessionId),
+    cancelGetAllFiles: (sessionId: string) => wrappedInvoke('file:directory:cancelGetAllFiles', sessionId),
+    onGetAllFilesProgress: (callback: (data: { sessionId: string; count: number }) => void) =>
+      ipcRenderer.on('file:directory:getAllFilesProgress', wrapListener(callback)),
+    removeGetAllFilesProgressListener: (callback: (data: { sessionId: string; count: number }) => void) =>
+      ipcRenderer.removeListener('file:directory:getAllFilesProgress', unwrapListener(callback) as never)
   },
 
   transfer: {
     upload: (filePath: string, remotePath: string, userId: number, userToken: string, username: string, localTaskId: string) =>
-      ipcRenderer.invoke('transfer:upload', { filePath, remotePath, userId, userToken, username, localTaskId }),
+      wrappedInvoke('transfer:upload:file', { filePath, remotePath, userId, userToken, username, localTaskId }),
     download: (remotePath: string, fileName: string, userId: number, userToken: string, username: string, savePath?: string) =>
-      ipcRenderer.invoke('transfer:download', { remotePath, fileName, userId, userToken, username, savePath }),
+      wrappedInvoke('transfer:download:file', { remotePath, fileName, userId, userToken, username, savePath }),
     saveAs: (fileName: string, userId: number) =>
-      ipcRenderer.invoke('transfer:saveAs', { fileName, userId }),
+      wrappedInvoke('transfer:download:saveAs', { fileName, userId }),
     addToQueue: (task: { id: number; filePath: string; remotePath: string; userId: number; userToken: string; username: string; fileName: string; fileSize: number }) =>
-      ipcRenderer.invoke('transfer:add-to-queue', task),
-    getQueueStatus: () => ipcRenderer.invoke('transfer:queue-status'),
-    list: (userId: number) => ipcRenderer.invoke('transfer:list', userId),
+      wrappedInvoke('transfer:upload:add-to-queue', task),
+    getQueueStatus: () => wrappedInvoke('transfer:upload:queue-status'),
+    list: (userId: number) => wrappedInvoke('transfer:task:list', userId),
     restoreQueue: (userId: number, userToken: string) =>
-      ipcRenderer.invoke('transfer:restore-queue', { userId, userToken }),
+      wrappedInvoke('transfer:upload:restore-queue', { userId, userToken }),
     resume: (taskId: number, userId: number, userToken: string, username: string) =>
-      ipcRenderer.invoke('transfer:resume', { taskId, userId, userToken, username }),
+      wrappedInvoke('transfer:upload:resume', { taskId, userId, userToken, username }),
     autoRetryAll: (userId: number, userToken: string, username: string) =>
-      ipcRenderer.invoke('transfer:auto-retry-all', { userId, userToken, username }),
+      wrappedInvoke('transfer:upload:auto-retry-all', { userId, userToken, username }),
     cancel: (taskId: number) =>
-      ipcRenderer.invoke('transfer:cancel', taskId),
+      wrappedInvoke('transfer:upload:cancel', taskId),
     onProgress: (callback: (data: { taskId: string | number, progress: number }) => void) =>
-      ipcRenderer.on('transfer:progress', wrapListener(callback)),
+      ipcRenderer.on('transfer:upload:progress', wrapListener(callback)),
     removeProgressListener: (callback: (data: { taskId: string | number, progress: number }) => void) =>
-      ipcRenderer.removeListener('transfer:progress', unwrapListener(callback) as never),
+      ipcRenderer.removeListener('transfer:upload:progress', unwrapListener(callback) as never),
     onCompleted: (callback: (data: { taskId: string | number, fileName: string }) => void) =>
-      ipcRenderer.on('transfer:completed', wrapListener(callback)),
+      ipcRenderer.on('transfer:upload:completed', wrapListener(callback)),
     onFailed: (callback: (data: { taskId: string | number, fileName: string, error: string }) => void) =>
-      ipcRenderer.on('transfer:failed', wrapListener(callback)),
+      ipcRenderer.on('transfer:upload:failed', wrapListener(callback)),
     onCancelled: (callback: (data: { taskId: string | number, fileName: string }) => void) =>
-      ipcRenderer.on('transfer:cancelled', wrapListener(callback)),
+      ipcRenderer.on('transfer:upload:cancelled', wrapListener(callback)),
     onDownloadProgress: (callback: (data: { taskId: string, fileName: string, progress: number, downloadedBytes: number, totalBytes: number, speed: number }) => void) =>
-      ipcRenderer.on('transfer:download-progress', wrapListener(callback)),
-    onDownloadCompleted: (callback: (data: { taskId: string, fileName: string, savePath: string }) => void) =>
-      ipcRenderer.on('transfer:download-completed', wrapListener(callback)),
-    onDownloadFailed: (callback: (data: { taskId: string, fileName: string, error: string }) => void) =>
-      ipcRenderer.on('transfer:download-failed', wrapListener(callback)),
+      ipcRenderer.on('transfer:download:progress', wrapListener(callback)),
+    onDownloadCompleted: (callback: (data: { taskId: string, fileName: string, savePath: string, batchId?: string, batchTotal?: number }) => void) =>
+      ipcRenderer.on('transfer:download:completed', wrapListener(callback)),
+    onDownloadFailed: (callback: (data: { taskId: string, fileName: string, error: string, batchId?: string, batchTotal?: number }) => void) =>
+      ipcRenderer.on('transfer:download:failed', wrapListener(callback)),
     removeCompletedListener: (callback: (data: { taskId: string | number, fileName: string }) => void) =>
-      ipcRenderer.removeListener('transfer:completed', unwrapListener(callback) as never),
+      ipcRenderer.removeListener('transfer:upload:completed', unwrapListener(callback) as never),
     removeFailedListener: (callback: (data: { taskId: string | number, fileName: string, error: string }) => void) =>
-      ipcRenderer.removeListener('transfer:failed', unwrapListener(callback) as never),
+      ipcRenderer.removeListener('transfer:upload:failed', unwrapListener(callback) as never),
     removeCancelledListener: (callback: (data: { taskId: string | number, fileName: string }) => void) =>
-      ipcRenderer.removeListener('transfer:cancelled', unwrapListener(callback) as never),
+      ipcRenderer.removeListener('transfer:upload:cancelled', unwrapListener(callback) as never),
     removeDownloadProgressListener: (callback: (data: { taskId: string, fileName: string, progress: number, downloadedBytes: number, totalBytes: number, speed: number }) => void) =>
-      ipcRenderer.removeListener('transfer:download-progress', unwrapListener(callback) as never),
-    removeDownloadCompletedListener: (callback: (data: { taskId: string, fileName: string, savePath: string }) => void) =>
-      ipcRenderer.removeListener('transfer:download-completed', unwrapListener(callback) as never),
-    removeDownloadFailedListener: (callback: (data: { taskId: string, fileName: string, error: string }) => void) =>
-      ipcRenderer.removeListener('transfer:download-failed', unwrapListener(callback) as never),
-    onDownloadCancelled: (callback: (data: { taskId: string | number }) => void) =>
-      ipcRenderer.on('transfer:download-cancelled', wrapListener(callback)),
-    removeDownloadCancelledListener: (callback: (data: { taskId: string | number }) => void) =>
-      ipcRenderer.removeListener('transfer:download-cancelled', unwrapListener(callback) as never),
+      ipcRenderer.removeListener('transfer:download:progress', unwrapListener(callback) as never),
+    removeDownloadCompletedListener: (callback: (data: { taskId: string, fileName: string, savePath: string, batchId?: string, batchTotal?: number }) => void) =>
+      ipcRenderer.removeListener('transfer:download:completed', unwrapListener(callback) as never),
+    removeDownloadFailedListener: (callback: (data: { taskId: string, fileName: string, error: string, batchId?: string, batchTotal?: number }) => void) =>
+      ipcRenderer.removeListener('transfer:download:failed', unwrapListener(callback) as never),
+    onDownloadCancelled: (callback: (data: { taskId: string | number, fileName?: string, batchId?: string, batchTotal?: number }) => void) =>
+      ipcRenderer.on('transfer:download:cancelled', wrapListener(callback)),
+    removeDownloadCancelledListener: (callback: (data: { taskId: string | number, fileName?: string, batchId?: string, batchTotal?: number }) => void) =>
+      ipcRenderer.removeListener('transfer:download:cancelled', unwrapListener(callback) as never),
     onDownloadAuthFailed: (callback: (data: { error: string }) => void) =>
-      ipcRenderer.on('transfer:download-auth-failed', wrapListener(callback)),
+      ipcRenderer.on('transfer:download:auth-failed', wrapListener(callback)),
     removeDownloadAuthFailedListener: (callback: (data: { error: string }) => void) =>
-      ipcRenderer.removeListener('transfer:download-auth-failed', unwrapListener(callback) as never),
+      ipcRenderer.removeListener('transfer:download:auth-failed', unwrapListener(callback) as never),
     // 下载队列管理
     initDownloadQueue: (params: { userId: number; userToken: string }) =>
-      ipcRenderer.invoke('transfer:initDownloadQueue', params),
+      wrappedInvoke('transfer:download:init-queue', params),
     queueDownload: (task: { id: string; remotePath: string; fileName: string; savePath?: string; userId: number; userToken: string; priority?: number }) =>
-      ipcRenderer.invoke('transfer:queueDownload', task),
+      wrappedInvoke('transfer:download:queue', task),
     batchQueueDownload: (params: { remotePaths: string[] }) =>
-      ipcRenderer.invoke('transfer:batchQueueDownload', params),
+      wrappedInvoke('transfer:download:batch-queue', params),
     getDownloadQueue: () =>
-      ipcRenderer.invoke('transfer:getDownloadQueue'),
+      wrappedInvoke('transfer:download:get-queue'),
     pauseDownloadQueue: () =>
-      ipcRenderer.invoke('transfer:pauseDownloadQueue'),
+      wrappedInvoke('transfer:download:pause-queue'),
     resumeDownloadQueue: () =>
-      ipcRenderer.invoke('transfer:resumeDownloadQueue'),
+      wrappedInvoke('transfer:download:resume-queue'),
     clearDownloadQueue: () =>
-      ipcRenderer.invoke('transfer:clearDownloadQueue'),
+      wrappedInvoke('transfer:download:clear-queue'),
     clearPendingQueue: () =>
-      ipcRenderer.invoke('transfer:clearPendingQueue'),
+      wrappedInvoke('transfer:download:clear-pending'),
     clearActiveQueue: () =>
-      ipcRenderer.invoke('transfer:clearActiveQueue'),
+      wrappedInvoke('transfer:download:clear-active'),
     // 恢复和取消下载
     resumeDownload: (taskId: number) =>
-      ipcRenderer.invoke('transfer:resumeDownload', { taskId }),
+      wrappedInvoke('transfer:download:resume', { taskId }),
     cancelDownload: (taskId: string | number) =>
-      ipcRenderer.invoke('transfer:cancelDownload', { taskId }),
+      wrappedInvoke('transfer:download:cancel', { taskId }),
     cancelAllDownloads: (userId: number) =>
-      ipcRenderer.invoke('transfer:cancelAllDownloads', { userId }),
-    onQueueUpdated: (callback: (data: { pending: any[]; active: any[]; completed: any[]; failed: any[] }) => void) =>
-      ipcRenderer.on('transfer:queue-updated', wrapListener(callback)),
-    removeQueueUpdatedListener: (callback: (data: { pending: any[]; active: any[]; completed: any[]; failed: any[] }) => void) =>
-      ipcRenderer.removeListener('transfer:queue-updated', unwrapListener(callback) as never)
+      wrappedInvoke('transfer:download:cancel-all', { userId }),
+    onQueueUpdated: (callback: (data: { pending: any[]; active: any[]; completed: any[]; failed: any[]; counts?: { pending: number; active: number; completed: number; failed: number } }) => void) =>
+      ipcRenderer.on('transfer:queue:updated', wrapListener(callback)),
+    removeQueueUpdatedListener: (callback: (data: { pending: any[]; active: any[]; completed: any[]; failed: any[]; counts?: { pending: number; active: number; completed: number; failed: number } }) => void) =>
+      ipcRenderer.removeListener('transfer:queue:updated', unwrapListener(callback) as never)
   },
 
   dialog: {
-    openFile: (options?: { directory?: boolean }) => ipcRenderer.invoke('dialog:openFile', options)
+    openFile: (options?: { directory?: boolean }) => wrappedInvoke('dialog:file:open', options)
   },
 
   quota: {
-    get: () => ipcRenderer.invoke('quota:get'),
-    update: (quotaUsed: number) => ipcRenderer.invoke('quota:update', quotaUsed),
-    calculate: () => ipcRenderer.invoke('quota:calculate'),
-    adminUpdate: (userId: number, quotaTotal: number) => ipcRenderer.invoke('quota:admin-update', userId, quotaTotal)
+    get: () => wrappedInvoke('quota:usage:get'),
+    update: (quotaUsed: number) => wrappedInvoke('quota:usage:update', quotaUsed),
+    calculate: () => wrappedInvoke('quota:usage:calculate'),
+    adminUpdate: (userId: number, quotaTotal: number) => wrappedInvoke('quota:admin:update', userId, quotaTotal)
   },
 
   tray: {
-    updateTransferStatus: (isTransferring: boolean) => ipcRenderer.invoke('tray:update-transfer-status', isTransferring),
-    updateTransferCounts: (uploadCount: number, downloadCount: number) => ipcRenderer.invoke('tray:update-transfer-counts', uploadCount, downloadCount),
-    showWindow: () => ipcRenderer.invoke('tray:show-window'),
-    hideWindow: () => ipcRenderer.invoke('tray:hide-window'),
+    updateTransferStatus: (isTransferring: boolean) => wrappedInvoke('tray:status:update-transfer', isTransferring),
+    updateTransferCounts: (uploadCount: number, downloadCount: number) => wrappedInvoke('tray:status:update-counts', uploadCount, downloadCount),
+    showWindow: () => wrappedInvoke('tray:window:show'),
+    hideWindow: () => wrappedInvoke('tray:window:hide'),
     // Story 8.3: 监听托盘快速上传消息
-    onTrayQuickUpload: (callback: () => void) => ipcRenderer.on('tray-quick-upload', wrapListener(callback))
+    onTrayQuickUpload: (callback: () => void) => ipcRenderer.on('tray:action:quick-upload', wrapListener(callback))
   },
 
   notification: {
-    show: (options: { title: string; body: string }) => ipcRenderer.invoke('notification:show', options)
+    show: (options: { title: string; body: string }) => wrappedInvoke('notification:app:show', options)
   },
 
   app: {
-    getVersion: () => ipcRenderer.invoke('app:getVersion'),
-    setLoginItemSettings: (settings: { openAtLogin: boolean }) => ipcRenderer.invoke('app:set-login-item-settings', settings),
-    getLoginItemSettings: () => ipcRenderer.invoke('app:get-login-item-settings'),
-    openLogsDirectory: () => ipcRenderer.invoke('app:open-logs-directory')
+    getVersion: () => wrappedInvoke('app:version:get'),
+    setLoginItemSettings: (settings: { openAtLogin: boolean }) => wrappedInvoke('app:launch:set-login-item-settings', settings),
+    getLoginItemSettings: () => wrappedInvoke('app:launch:get-login-item-settings'),
+    openLogsDirectory: () => wrappedInvoke('app:logs:open-directory')
   },
 
   activity: {
     log: (params: { userId: number; actionType: string; fileCount?: number; fileSize?: number; ipAddress?: string; userAgent?: string; details?: Record<string, any> }) =>
-      ipcRenderer.invoke('activity:log', params),
+      wrappedInvoke('activity:log:create', params),
     getUserLogs: (userId: number, options?: { limit?: number; offset?: number; actionType?: string; startDate?: string; endDate?: string }) =>
-      ipcRenderer.invoke('activity:get-user-logs', userId, options),
+      wrappedInvoke('activity:log:get-user-logs', userId, options),
     getAllLogs: (options?: { limit?: number; offset?: number; userId?: number; actionType?: string; startDate?: string; endDate?: string }) =>
-      ipcRenderer.invoke('activity:get-all-logs', options),
-    getDAU: (date?: string) => ipcRenderer.invoke('activity:get-dau', date),
+      wrappedInvoke('activity:log:get-all-logs', options),
+    getDAU: (date?: string) => wrappedInvoke('activity:analytics:get-dau', date),
     getUserStats: (userId: number, startDate?: string, endDate?: string) =>
-      ipcRenderer.invoke('activity:get-user-stats', userId, startDate, endDate)
+      wrappedInvoke('activity:analytics:get-user-stats', userId, startDate, endDate)
   },
 
   downloadConfig: {
-    selectDirectory: () => ipcRenderer.invoke('downloadConfig:selectDirectory'),
-    get: () => ipcRenderer.invoke('downloadConfig:get'),
-    update: (updates: { defaultPath?: string; autoCreateDateFolder?: boolean }) => ipcRenderer.invoke('downloadConfig:update', updates),
-    openDirectory: () => ipcRenderer.invoke('downloadConfig:openDirectory'),
-    openFileDirectory: (filePath: string) => ipcRenderer.invoke('downloadConfig:openFileDirectory', filePath),
-    reset: () => ipcRenderer.invoke('downloadConfig:reset'),
-    createDirectory: (dirPath: string) => ipcRenderer.invoke('downloadConfig:createDirectory', dirPath)
+    selectDirectory: () => wrappedInvoke('downloadConfig:directory:select'),
+    get: () => wrappedInvoke('downloadConfig:data:get'),
+    update: (updates: { defaultPath?: string; autoCreateDateFolder?: boolean }) => wrappedInvoke('downloadConfig:data:update', updates),
+    openDirectory: () => wrappedInvoke('downloadConfig:directory:open'),
+    openFileDirectory: (filePath: string) => wrappedInvoke('downloadConfig:directory:openFile', filePath),
+    reset: () => wrappedInvoke('downloadConfig:data:reset'),
+    createDirectory: (dirPath: string) => wrappedInvoke('downloadConfig:directory:create', dirPath)
   },
 
   cache: {
-    getInfo: () => ipcRenderer.invoke('cache:get-info'),
-    clear: () => ipcRenderer.invoke('cache:clear')
+    getInfo: () => wrappedInvoke('cache:info:get'),
+    clear: () => wrappedInvoke('cache:data:clear')
   },
 
   updateAPI: {
-    check: () => ipcRenderer.invoke('update:check'),
-    installNow: () => ipcRenderer.invoke('update:install-now'),
-    installOnQuit: () => ipcRenderer.invoke('update:install-on-quit'),
+    check: () => wrappedInvoke('update:action:check'),
+    installNow: () => wrappedInvoke('update:action:install-now'),
+    installOnQuit: () => wrappedInvoke('update:action:install-on-quit'),
     onAvailable: (callback: (info: any) => void) =>
-      ipcRenderer.on('update:available', wrapListener(callback)),
+      ipcRenderer.on('update:event:available', wrapListener(callback)),
     onNotAvailable: (callback: () => void) =>
-      ipcRenderer.on('update:not-available', wrapListener(callback)),
+      ipcRenderer.on('update:event:not-available', wrapListener(callback)),
     onDownloadProgress: (callback: (progress: any) => void) =>
-      ipcRenderer.on('update:download-progress', wrapListener(callback)),
+      ipcRenderer.on('update:event:download-progress', wrapListener(callback)),
     onDownloaded: (callback: () => void) =>
-      ipcRenderer.on('update:downloaded', wrapListener(callback)),
+      ipcRenderer.on('update:event:downloaded', wrapListener(callback)),
     onError: (callback: (message: string) => void) =>
-      ipcRenderer.on('update:error', wrapListener(callback))
+      ipcRenderer.on('update:event:error', wrapListener(callback))
   },
 
   shareTransfer: {
     exec: (params: { url: string; userId: number }) =>
-      ipcRenderer.invoke('shareTransfer:exec', params),
+      wrappedInvoke('shareTransfer:task:exec', params),
     list: (params: { userId: number; pageNum?: number; pageSize?: number; status?: string }) =>
-      ipcRenderer.invoke('shareTransfer:list', params),
+      wrappedInvoke('shareTransfer:task:list', params),
     latest: (params: { userId: number }) =>
-      ipcRenderer.invoke('shareTransfer:latest', params),
+      wrappedInvoke('shareTransfer:task:latest', params),
     complete: (params: { id: number; userId: number }) =>
-      ipcRenderer.invoke('shareTransfer:complete', params),
+      wrappedInvoke('shareTransfer:task:complete', params),
     delete: (params: { id: number; userId: number }) =>
-      ipcRenderer.invoke('shareTransfer:delete', params),
+      wrappedInvoke('shareTransfer:task:delete', params),
     batchDelete: (params: { ids: number[]; userId: number }) =>
-      ipcRenderer.invoke('shareTransfer:batchDelete', params)
+      wrappedInvoke('shareTransfer:task:batchDelete', params)
+  },
+
+  autoSync: {
+    createPlanAndRun: (params: {
+      userId: number
+      name?: string
+      shareUrl: string
+      localSyncDir: string
+      expiresAt: number
+      autoRunOnStartup?: boolean
+      conflictPolicy?: 'skip_existing' | 'rename_remote' | 'overwrite'
+    }) => wrappedInvoke('autoSync:plan:createAndRun', params),
+    listPlans: (params: { userId: number }) =>
+      wrappedInvoke('autoSync:plan:list', params),
+    updatePlan: (params: {
+      id: number
+      userId: number
+      updates: {
+        name?: string
+        localSyncDir?: string
+        expiresAt?: number
+        autoRunOnStartup?: boolean
+        conflictPolicy?: 'skip_existing' | 'rename_remote' | 'overwrite'
+      }
+    }) => wrappedInvoke('autoSync:plan:update', params),
+    pausePlan: (params: { id: number; userId: number }) =>
+      wrappedInvoke('autoSync:plan:pause', params),
+    resumePlan: (params: { id: number; userId: number }) =>
+      wrappedInvoke('autoSync:plan:resume', params),
+    deletePlan: (params: { id: number; userId: number }) =>
+      wrappedInvoke('autoSync:plan:delete', params),
+    runPlan: (params: { id: number; userId: number }) =>
+      wrappedInvoke('autoSync:plan:run', params),
+    listRuns: (params: { planId: number; userId: number; limit?: number }) =>
+      wrappedInvoke('autoSync:run:list', params),
+    startupRun: (params: { userId: number }) =>
+      wrappedInvoke('autoSync:run:startup', params),
+    resetBaseline: (params: { id: number; userId: number }) =>
+      wrappedInvoke('autoSync:plan:resetBaseline', params),
+    onProgress: (callback: (data: { planId: number; stage: string; status: string; message?: string; current?: number; total?: number }) => void) =>
+      ipcRenderer.on('autoSync:event:progress', wrapListener(callback)),
+    removeProgressListener: (callback: (data: { planId: number; stage: string; status: string; message?: string; current?: number; total?: number }) => void) =>
+      ipcRenderer.removeListener('autoSync:event:progress', unwrapListener(callback) as never)
   },
 
   config: {
-    check: () => ipcRenderer.invoke('config:check'),
-    get: () => ipcRenderer.invoke('config:get'),
+    check: () => wrappedInvoke('config:status:check'),
+    get: () => wrappedInvoke('config:data:get'),
     /**
      * 保存配置（部分更新）
      * @param config - 与 src/main/config.ts 中的 Partial<AppConfig> 保持同步
      */
     save: (config: { alistBaseUrl?: string; n8nBaseUrl?: string; ambApiBaseUrl?: string; ambTransferToken?: string }) =>
-      ipcRenderer.invoke('config:save', config),
-    reinit: () => ipcRenderer.invoke('config:reinit')
+      wrappedInvoke('config:data:save', config),
+    reinit: () => wrappedInvoke('config:data:reinit')
   }
 })
 

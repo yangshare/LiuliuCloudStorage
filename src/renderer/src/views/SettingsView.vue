@@ -215,10 +215,10 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Link, Platform, Key } from '@element-plus/icons-vue'
 
-import { useAuthStore } from '../stores/authStore'
+import { useAuth } from '@/features/auth'
 
 const router = useRouter()
-const authStore = useAuthStore()
+const auth = useAuth()
 
 // 状态
 const autoStartEnabled = ref(false)
@@ -260,7 +260,7 @@ async function handleLogout() {
       }
     )
     
-    await authStore.logout()
+    await auth.logout()
     ElMessage.success('已退出登录')
     router.push('/login')
   } catch (error) {
@@ -666,9 +666,7 @@ onMounted(async () => {
 
 <style scoped>
 .settings-container {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 20px;
+  padding: 20px 5%;
   background: linear-gradient(135deg, #F5F5F5 0%, #E8E8E8 100%);
   height: 100vh;
   overflow-y: auto;

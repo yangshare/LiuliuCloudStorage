@@ -7,14 +7,19 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/authStore'
+import { useAuth } from '@/features/auth'
 import AdminLayout from '@/components/admin/AdminLayout.vue'
 
 const router = useRouter()
-const authStore = useAuthStore()
+const auth = useAuth()
 
 onMounted(async () => {
-  const isAdmin = await authStore.checkAdminPermission()
+  let isAdmin = false
+  try {
+    isAdmin = await auth.checkAdminPermission()
+  } catch (error) {
+    console.warn('管理员权限验证失败', error)
+  }
 
   if (!isAdmin) {
     console.warn('权限不足')

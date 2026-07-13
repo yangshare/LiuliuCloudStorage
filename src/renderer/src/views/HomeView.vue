@@ -12,14 +12,18 @@ import DownloadQueuePanel from '../components/transfer/DownloadQueuePanel.vue'
 import CreateFolderModal from '../components/file/CreateFolderModal.vue'
 import BatchActionToolbar from '../components/file/BatchActionToolbar.vue'
 import UpdateButton from '../components/common/UpdateButton.vue'
-import { useFileStore } from '../stores/fileStore'
-import { useTransferStore } from '../stores/transferStore'
-import { useAuthStore } from '../stores/authStore'
+import { useFileStore } from '@/features/file'
+import { useTransferStore } from '@/features/transfer'
+import { useTransferUpload } from '@/features/transfer/composables/useTransferUpload'
+import { useTransferDownload } from '@/features/transfer/composables/useTransferDownload'
+import { useAuthStore } from '@/features/auth'
 
 const router = useRouter()
 const route = useRoute()
 const fileStore = useFileStore()
 const transferStore = useTransferStore()
+const { addToUploadQueue } = useTransferUpload()
+const { initDownloadQueue } = useTransferDownload()
 const authStore = useAuthStore()
 const showCreateFolderModal = ref(false)
 const showFileInput = ref(false)
@@ -73,7 +77,7 @@ function handleWindowDrop(e: DragEvent) {
 
   const files = e.dataTransfer?.files
   if (files && files.length > 0) {
-    transferStore.addToUploadQueue(Array.from(files), fileStore.currentPath)
+    addToUploadQueue(Array.from(files), fileStore.currentPath)
   }
 }
 
@@ -122,7 +126,7 @@ function handleFileSelect(event: Event) {
   const target = event.target as HTMLInputElement
   const files = target.files
   if (files && files.length > 0) {
-    transferStore.addToUploadQueue(Array.from(files), fileStore.currentPath)
+    addToUploadQueue(Array.from(files), fileStore.currentPath)
   }
   // 重置输入以允许重复选择同一文件
   target.value = ''
@@ -187,9 +191,9 @@ onMounted(() => {
 
   // 初始化下载队列
   if (authStore.isLoggedIn && authStore.user) {
-    transferStore.initDownloadQueue(
+    initDownloadQueue(
       authStore.user.id,
-      authStore.token
+      authStore.user.token
     )
   }
 
@@ -199,7 +203,7 @@ onMounted(() => {
   window.addEventListener('drop', handleWindowDrop)
   window.addEventListener('keydown', handleKeydown)
   // Story 8.3: 监听托盘快速上传消息
-  window.electronAPI?.onTrayQuickUpload?.(handleTrayQuickUpload)
+  window.electronAPI?.tray?.onTrayQuickUpload?.(handleTrayQuickUpload)
 })
 
 onUnmounted(() => {

@@ -17,6 +17,7 @@ export interface FileListResult {
     cachedAt?: string
   }
   error?: string
+  code?: string
 }
 
 export interface MkdirResult {
@@ -36,14 +37,29 @@ export interface ElectronAPI {
   invoke: (channel: string, ...args: unknown[]) => Promise<unknown>
   on: (channel: string, callback: (...args: unknown[]) => void) => void
   removeListener: (channel: string, callback: (...args: unknown[]) => void) => void
+  onAuthExpired: (handler: (code: string) => void | Promise<void>) => () => void
   auth: {
     login: (username: string, password: string, autoLogin?: boolean) => Promise<{ success: boolean; message?: string; token?: string }>
     logout: () => Promise<{ success: boolean }>
-    checkSession: () => Promise<{ valid: boolean; username?: string }>
+    checkSession: () => Promise<
+      | { valid: boolean; username?: string }
+      | {
+          success: boolean
+          data?: {
+            valid: boolean
+            user?: { id: number; username: string; token: string; isAdmin?: boolean }
+          }
+          error?: string
+        }
+    >
     getCurrentUser: () => Promise<any>
     getUsers: (params?: { page?: number; pageSize?: number; search?: string }) => Promise<any>
     getStorageStats: () => Promise<any>
-    getLoginPreferences: () => Promise<{ username: string; password: string; autoLogin: boolean }>
+    getLoginPreferences: () => Promise<{
+      success: boolean
+      data?: { username: string; password: string; autoLogin: boolean }
+      error?: string
+    }>
   }
   file: {
     list: (path: string) => Promise<FileListResult>
@@ -51,7 +67,10 @@ export interface ElectronAPI {
     delete: (dir: string, fileName: string) => Promise<MkdirResult>
     batchDelete: (dir: string, fileNames: string[]) => Promise<MkdirResult>
     rename: (path: string, newName: string) => Promise<MkdirResult>
-    getAllFilesInDirectory: (remotePath: string) => Promise<{ success: boolean; data?: string[]; error?: string }>
+    getAllFilesInDirectory: (remotePath: string, maxFiles?: number, sessionId?: string) => Promise<{ success: boolean; data?: { files: string[]; truncated: boolean; cancelled: boolean }; error?: string }>
+    cancelGetAllFiles: (sessionId: string) => Promise<{ success: boolean }>
+    onGetAllFilesProgress: (callback: (data: { sessionId: string; count: number }) => void) => void
+    removeGetAllFilesProgressListener: (callback: (data: { sessionId: string; count: number }) => void) => void
   }
   transfer: {
     upload: (filePath: string, remotePath: string, userId: number, userToken: string, username: string, localTaskId: string) => Promise<{ success: boolean; taskId?: string; error?: string }>
@@ -70,31 +89,31 @@ export interface ElectronAPI {
     onFailed: (callback: (data: { taskId: string | number, fileName: string, error: string }) => void) => void
     onCancelled: (callback: (data: { taskId: string | number, fileName: string }) => void) => void
     onDownloadProgress: (callback: (data: { taskId: string, fileName: string, progress: number, downloadedBytes: number, totalBytes: number, speed: number }) => void) => void
-    onDownloadCompleted: (callback: (data: { taskId: string, fileName: string, savePath: string }) => void) => void
-    onDownloadFailed: (callback: (data: { taskId: string, fileName: string, error: string }) => void) => void
+    onDownloadCompleted: (callback: (data: { taskId: string, fileName: string, savePath: string, batchId?: string, batchTotal?: number }) => void) => void
+    onDownloadFailed: (callback: (data: { taskId: string, fileName: string, error: string, batchId?: string, batchTotal?: number }) => void) => void
     removeCompletedListener: (callback: (data: { taskId: string | number, fileName: string }) => void) => void
     removeFailedListener: (callback: (data: { taskId: string | number, fileName: string, error: string }) => void) => void
     removeCancelledListener: (callback: (data: { taskId: string | number, fileName: string }) => void) => void
     removeDownloadProgressListener: (callback: (data: { taskId: string, fileName: string, progress: number, downloadedBytes: number, totalBytes: number, speed: number }) => void) => void
-    removeDownloadCompletedListener: (callback: (data: { taskId: string, fileName: string, savePath: string }) => void) => void
-    removeDownloadFailedListener: (callback: (data: { taskId: string, fileName: string, error: string }) => void) => void
-    onDownloadCancelled: (callback: (data: { taskId: string | number }) => void) => void
-    removeDownloadCancelledListener: (callback: (data: { taskId: string | number }) => void) => void
+    removeDownloadCompletedListener: (callback: (data: { taskId: string, fileName: string, savePath: string, batchId?: string, batchTotal?: number }) => void) => void
+    removeDownloadFailedListener: (callback: (data: { taskId: string, fileName: string, error: string, batchId?: string, batchTotal?: number }) => void) => void
+    onDownloadCancelled: (callback: (data: { taskId: string | number, fileName?: string, batchId?: string, batchTotal?: number }) => void) => void
+    removeDownloadCancelledListener: (callback: (data: { taskId: string | number, fileName?: string, batchId?: string, batchTotal?: number }) => void) => void
     // 下载队列管理
     initDownloadQueue: (params: { userId: number; userToken: string }) => Promise<{ success: boolean; restoredCount?: number; error?: string }>
     queueDownload: (task: { id: string; remotePath: string; fileName: string; savePath?: string; userId: number; userToken: string; priority?: number }) => Promise<{ success: boolean; taskId?: string; error?: string }>
-    getDownloadQueue: () => Promise<{ success: boolean; state?: { pending: any[]; active: any[]; completed: any[]; failed: any[] }; error?: string }>
+    getDownloadQueue: () => Promise<{ success: boolean; state?: { pending: any[]; active: any[]; completed: any[]; failed: any[]; counts?: { pending: number; active: number; completed: number; failed: number } }; error?: string }>
     pauseDownloadQueue: () => Promise<{ success: boolean; error?: string }>
     resumeDownloadQueue: () => Promise<{ success: boolean; error?: string }>
     clearDownloadQueue: () => Promise<{ success: boolean; error?: string }>
     clearPendingQueue: () => Promise<{ success: boolean; error?: string }>
     clearActiveQueue: () => Promise<{ success: boolean; error?: string }>
-    batchQueueDownload: (params: { remotePaths: string[] }) => Promise<{ success: boolean; successCount?: number; failedCount?: number; error?: string }>
+    batchQueueDownload: (params: { remotePaths: string[] }) => Promise<{ success: boolean; successCount?: number; failedCount?: number; batchId?: string; error?: string }>
     resumeDownload: (taskId: number) => Promise<{ success: boolean; error?: string }>
     cancelDownload: (taskId: string | number) => Promise<{ success: boolean; error?: string }>
     cancelAllDownloads: (userId: number) => Promise<{ success: boolean; error?: string }>
-    onQueueUpdated: (callback: (data: { pending: any[]; active: any[]; completed: any[]; failed: any[] }) => void) => void
-    removeQueueUpdatedListener: (callback: (data: { pending: any[]; active: any[]; completed: any[]; failed: any[] }) => void) => void
+    onQueueUpdated: (callback: (data: { pending: any[]; active: any[]; completed: any[]; failed: any[]; counts?: { pending: number; active: number; completed: number; failed: number } }) => void) => void
+    removeQueueUpdatedListener: (callback: (data: { pending: any[]; active: any[]; completed: any[]; failed: any[]; counts?: { pending: number; active: number; completed: number; failed: number } }) => void) => void
     onDownloadAuthFailed: (callback: (data: { error: string }) => void) => void
     removeDownloadAuthFailedListener: (callback: (data: { error: string }) => void) => void
   }
@@ -160,6 +179,38 @@ export interface ElectronAPI {
     complete: (params: { id: number; userId: number }) => Promise<any>
     delete: (params: { id: number; userId: number }) => Promise<any>
     batchDelete: (params: { ids: number[]; userId: number }) => Promise<any>
+  }
+  autoSync: {
+    createPlanAndRun: (params: {
+      userId: number
+      name?: string
+      shareUrl: string
+      localSyncDir: string
+      expiresAt: number
+      autoRunOnStartup?: boolean
+      conflictPolicy?: 'skip_existing' | 'rename_remote' | 'overwrite'
+    }) => Promise<any>
+    listPlans: (params: { userId: number }) => Promise<any>
+    updatePlan: (params: {
+      id: number
+      userId: number
+      updates: {
+        name?: string
+        localSyncDir?: string
+        expiresAt?: number
+        autoRunOnStartup?: boolean
+        conflictPolicy?: 'skip_existing' | 'rename_remote' | 'overwrite'
+      }
+    }) => Promise<any>
+    pausePlan: (params: { id: number; userId: number }) => Promise<any>
+    resumePlan: (params: { id: number; userId: number }) => Promise<any>
+    deletePlan: (params: { id: number; userId: number }) => Promise<any>
+    runPlan: (params: { id: number; userId: number }) => Promise<any>
+    listRuns: (params: { planId: number; userId: number; limit?: number }) => Promise<any>
+    startupRun: (params: { userId: number }) => Promise<any>
+    resetBaseline: (params: { id: number; userId: number }) => Promise<any>
+    onProgress: (callback: (data: { planId: number; stage: string; status: string; message?: string; current?: number; total?: number }) => void) => void
+    removeProgressListener: (callback: (data: { planId: number; stage: string; status: string; message?: string; current?: number; total?: number }) => void) => void
   }
   config: {
     check: () => Promise<any>

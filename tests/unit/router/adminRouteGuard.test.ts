@@ -1,40 +1,44 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import router from '@/router'
-import { useAuthStore, type User } from '@/stores/authStore'
+import { useAuthStore, type User } from '@/features/auth/stores/authStore'
 
-// Mock electronAPI
 const mockCheckSession = vi.fn()
 const mockGetUsers = vi.fn()
+const mockConfigCheck = vi.fn()
+const mockStartupRun = vi.fn()
 
-global.window = {
-  ...global.window,
-  electronAPI: {
+function installElectronApi() {
+  ;(window as any).electronAPI = {
+    config: {
+      check: mockConfigCheck
+    },
     auth: {
       checkSession: mockCheckSession,
       getUsers: mockGetUsers
+    },
+    autoSync: {
+      startupRun: mockStartupRun
     }
   }
-} as any
+}
 
 describe('路由守卫 - 管理员权限控制', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks()
     setActivePinia(createPinia())
+    installElectronApi()
+    window.history.replaceState({}, '', '/')
 
-    // 默认mock: 用户已登录
-    mockCheckSession.mockResolvedValue({
-      valid: true
-    })
-  })
+    mockConfigCheck.mockResolvedValue({ complete: true })
+    mockCheckSession.mockResolvedValue({ valid: true })
+    mockStartupRun.mockResolvedValue({ success: true, executed: 0, total: 0 })
 
-  afterEach(() => {
-    vi.restoreAllMocks()
+    await router.replace('/')
   })
 
   describe('访问/admin路由', () => {
     it('应该允许管理员访问', async () => {
-      // Arrange
       const authStore = useAuthStore()
       const adminUser: User = {
         id: 1,
@@ -43,17 +47,14 @@ describe('路由守卫 - 管理员权限控制', () => {
         isAdmin: true
       }
       authStore.user = adminUser
-      mockGetUsers.mockResolvedValueOnce({ success: true, data: [] })
 
-      // Act
-      const result = await router.push('/admin')
+      await router.push('/admin')
 
-      // Assert
-      expect(mockGetUsers).toHaveBeenCalled()
+      expect(router.currentRoute.value.path).toBe('/admin/dashboard')
+      expect(mockGetUsers).not.toHaveBeenCalled()
     })
 
-    it('应该拒绝非管理员用户访问并跳转到/home', async () => {
-      // Arrange
+    it('应该拒绝非管理员用户访问并跳转到首页', async () => {
       const authStore = useAuthStore()
       const normalUser: User = {
         id: 2,
@@ -64,41 +65,31 @@ describe('路由守卫 - 管理员权限控制', () => {
       authStore.user = normalUser
       mockGetUsers.mockResolvedValueOnce({ success: false })
 
-      // Act
       await router.push('/admin')
 
-      // Assert
-      expect(router.currentRoute.value.path).toBe('/home')
+      expect(router.currentRoute.value.path).toBe('/')
       expect(mockGetUsers).toHaveBeenCalled()
     })
 
     it('未登录用户应该跳转到/login', async () => {
-      // Arrange
       const authStore = useAuthStore()
       authStore.user = null
-      mockCheckSession.mockResolvedValueOnce({
-        valid: false
-      })
+      mockCheckSession.mockResolvedValueOnce({ valid: false })
 
-      // Act
       await router.push('/admin')
 
-      // Assert
       expect(router.currentRoute.value.path).toBe('/login')
     })
 
     it('应该检查meta.requiresAdmin标记', async () => {
-      // Arrange
       const adminRoute = router.resolve('/admin')
 
-      // Act & Assert
       expect(adminRoute.meta.requiresAdmin).toBe(true)
     })
   })
 
   describe('普通路由访问', () => {
-    it('普通用户应该能访问/home路由', async () => {
-      // Arrange
+    it('普通用户应该能访问首页路由', async () => {
       const authStore = useAuthStore()
       const normalUser: User = {
         id: 2,
@@ -108,29 +99,21 @@ describe('路由守卫 - 管理员权限控制', () => {
       }
       authStore.user = normalUser
 
-      // Act
-      await router.push('/home')
+      await router.push('/')
 
-      // Assert
-      expect(router.currentRoute.value.path).toBe('/home')
+      expect(router.currentRoute.value.path).toBe('/')
     })
 
     it('普通用户应该能访问/login路由', async () => {
-      // Act
       await router.push('/login')
 
-      // Assert
       expect(router.currentRoute.value.path).toBe('/login')
     })
   })
 
   describe('路由使用Hash模式', () => {
     it('路由应该使用createWebHashHistory', () => {
-      // Assert
-      // 路由配置中使用了createWebHashHistory,这在router/index.ts中已定义
-      // 通过检查路由对象的options来验证
-      const routerOptions = router.options
-      expect(routerOptions.history).toBeDefined()
+      expect(router.options.history).toBeDefined()
     })
   })
 })

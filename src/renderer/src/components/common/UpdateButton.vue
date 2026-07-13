@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ElButton } from 'element-plus'
 import { ElMessageBox } from 'element-plus'
-import { useUpdateStore } from '@/stores/updateStore'
+import { useUpdateStore } from '@/features/update'
 import { watch } from 'vue'
 
 const updateStore = useUpdateStore()

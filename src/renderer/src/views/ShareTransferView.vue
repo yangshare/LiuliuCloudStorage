@@ -22,6 +22,52 @@
               @blur="parseAndFormatUrl"
             />
           </el-form-item>
+          <el-form-item label="自动同步">
+            <el-switch
+              v-model="syncForm.enabled"
+              active-text="创建自动同步计划"
+            />
+          </el-form-item>
+          <template v-if="syncForm.enabled">
+            <el-form-item label="计划名称">
+              <el-input
+                v-model="syncForm.name"
+                placeholder="默认使用分享短码生成"
+              />
+            </el-form-item>
+            <el-form-item label="有效期">
+              <el-radio-group v-model="syncForm.expirePreset">
+                <el-radio-button label="1">1天</el-radio-button>
+                <el-radio-button label="3">3天</el-radio-button>
+                <el-radio-button label="7">7天</el-radio-button>
+                <el-radio-button label="30">30天</el-radio-button>
+                <el-radio-button label="custom">自定义</el-radio-button>
+              </el-radio-group>
+              <el-date-picker
+                v-if="syncForm.expirePreset === 'custom'"
+                v-model="syncForm.customExpiresAt"
+                type="datetime"
+                placeholder="选择截止时间"
+                class="expire-picker"
+              />
+            </el-form-item>
+            <el-form-item label="本机目录">
+              <div class="local-dir-row">
+                <el-input
+                  v-model="syncForm.localSyncDir"
+                  placeholder="请选择本机同步目录"
+                  readonly
+                />
+                <el-button @click="selectSyncDirectory">选择</el-button>
+              </div>
+            </el-form-item>
+            <el-form-item label="启动同步">
+              <el-switch
+                v-model="syncForm.autoRunOnStartup"
+                active-text="打开应用时自动执行一次"
+              />
+            </el-form-item>
+          </template>
           <el-form-item>
             <el-button
               type="primary"
@@ -50,7 +96,6 @@
           <div class="records-header">
             <span class="records-title">转存记录</span>
             <el-space>
-              <!-- 批量删除功能暂不开放
               <el-button
                 type="danger"
                 plain
@@ -59,7 +104,6 @@
               >
                 批量删除 ({{ selectedIds.length }})
               </el-button>
-              -->
               <el-button @click="loadRecords" :loading="loading">
                 刷新
               </el-button>
@@ -69,6 +113,7 @@
           <el-table
             :data="records"
             :loading="loading"
+            :max-height="recordTableMaxHeight"
             @selection-change="handleSelectionChange"
             style="width: 100%"
           >
@@ -112,27 +157,147 @@
 
           <!-- 分页 -->
           <el-pagination
+            class="records-pagination"
             v-model:current-page="pagination.pageNum"
             v-model:page-size="pagination.pageSize"
-            :page-sizes="[10, 20, 50]"
+            :page-sizes="pageSizeOptions"
             :total="totalRecords"
-            layout="total, sizes, prev, pager, next"
-            @current-change="loadRecords"
+            background
+            layout="total, sizes, prev, pager, next, jumper"
+            @current-change="handlePageChange"
             @size-change="handlePageSizeChange"
-            style="margin-top: 16px; justify-content: flex-end;"
           />
+        </div>
+
+        <el-divider />
+
+        <div class="records-section">
+          <div class="records-header">
+            <span class="records-title">自动同步计划</span>
+            <el-button @click="loadPlans" :loading="plansLoading">
+              刷新
+            </el-button>
+          </div>
+
+          <el-table
+            :data="plans"
+            :loading="plansLoading"
+            :max-height="260"
+            style="width: 100%"
+          >
+            <el-table-column prop="name" label="计划名称" min-width="140" show-overflow-tooltip />
+            <el-table-column prop="status" label="状态" width="90">
+              <template #default="{ row }">
+                <el-tag :type="getPlanStatusConfig(row.status).type" size="small">
+                  {{ getPlanStatusConfig(row.status).text }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="localSyncDir" label="本机目录" min-width="180" show-overflow-tooltip />
+            <el-table-column prop="expiresAt" label="有效期至" width="170">
+              <template #default="{ row }">
+                {{ formatTimestamp(row.expiresAt) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="最近同步" width="190">
+              <template #default="{ row }">
+                <span v-if="row.latestRun">
+                  {{ getRunStatusText(row.latestRun) }}
+                </span>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="230" fixed="right">
+              <template #default="{ row }">
+                <el-button
+                  type="primary"
+                  size="small"
+                  :loading="runningPlanId === row.id"
+                  :disabled="row.status === 'expired' || row.status === 'syncing'"
+                  @click="runPlan(row.id)"
+                >
+                  立即同步
+                </el-button>
+                <el-button
+                  v-if="row.status === 'paused'"
+                  link
+                  type="success"
+                  @click="resumePlan(row.id)"
+                >
+                  恢复
+                </el-button>
+                <el-button
+                  v-else
+                  link
+                  type="warning"
+                  :disabled="row.status === 'expired' || row.status === 'syncing'"
+                  @click="pausePlan(row.id)"
+                >
+                  暂停
+                </el-button>
+                <el-button
+                  link
+                  type="danger"
+                  @click="deletePlan(row.id)"
+                >
+                  删除
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
         </div>
       </div>
     </el-card>
+
+    <!-- 同步进度弹窗 -->
+    <el-dialog
+      v-model="syncProgressVisible"
+      :title="syncProgressTitle"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+      :show-close="syncProgressStatus === 'success' || syncProgressStatus === 'exception'"
+      width="480px"
+      align-center
+    >
+      <div class="sync-progress-content">
+        <el-progress
+          :percentage="syncProgressPercent"
+          :status="syncProgressStatus"
+          :stroke-width="16"
+          striped
+          striped-flow
+          :duration="syncProgressStatus === 'success' || syncProgressStatus === 'exception' ? 0 : 2"
+        />
+        <div class="sync-progress-stage">{{ syncProgressStageText }}</div>
+        <div class="sync-progress-message">{{ syncProgressMessage }}</div>
+      </div>
+      <template #footer>
+        <el-button
+          v-if="syncProgressStatus === 'success' || syncProgressStatus === 'exception'"
+          type="primary"
+          @click="syncProgressVisible = false"
+        >
+          确定
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
-import { useAuthStore } from '../stores/authStore'
+import { useAuthStore } from '@/features/auth'
+
+const STAGE_TEXT_MAP: Record<string, string> = {
+  transfer: '转存',
+  scan: '扫描远程文件',
+  diff: '快照对比',
+  queue: '加入下载队列',
+  complete: '完成'
+}
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -143,6 +308,15 @@ const formRef = ref<FormInstance>()
 // 转存表单
 const transferForm = reactive({
   url: ''
+})
+
+const syncForm = reactive({
+  enabled: false,
+  name: '',
+  expirePreset: '7',
+  customExpiresAt: null as Date | null,
+  localSyncDir: '',
+  autoRunOnStartup: true
 })
 
 // 表单验证规则
@@ -160,14 +334,39 @@ const rules: FormRules = {
 // 状态
 const transferring = ref(false)
 const loading = ref(false)
+const plansLoading = ref(false)
+const runningPlanId = ref<number | null>(null)
 const records = ref<any[]>([])
+const plans = ref<any[]>([])
 const totalRecords = ref(0)
 const selectedIds = ref<number[]>([])
+const pageSizeOptions = [8, 10, 20, 50]
+const recordTableMaxHeight = 420
+
+// 同步进度状态
+const syncProgressVisible = ref(false)
+const syncProgressPercent = ref(0)
+const syncProgressStage = ref('')
+const syncProgressStatus = ref<'success' | 'exception' | undefined>(undefined)
+const syncProgressMessage = ref('')
+
+const syncProgressTitle = computed(() => {
+  const stage = STAGE_TEXT_MAP[syncProgressStage.value] || '同步'
+  return `${stage}中...`
+})
+
+const syncProgressStageText = computed(() => {
+  const stage = STAGE_TEXT_MAP[syncProgressStage.value] || syncProgressStage.value
+  if (syncProgressStage.value === 'complete') {
+    return syncProgressStatus.value === 'exception' ? '同步失败' : '同步完成'
+  }
+  return stage
+})
 
 // 分页
 const pagination = reactive({
   pageNum: 1,
-  pageSize: 20
+  pageSize: pageSizeOptions[0]
 })
 
 // 状态配置
@@ -181,9 +380,77 @@ const getStatusConfig = (status: string) => {
   return statusMap[status] || { text: status, type: 'info' }
 }
 
+const getPlanStatusConfig = (status: string) => {
+  const statusMap: Record<string, { text: string; type: 'success' | 'info' | 'warning' | 'danger' }> = {
+    enabled: { text: '启用', type: 'success' },
+    paused: { text: '暂停', type: 'info' },
+    syncing: { text: '同步中', type: 'warning' },
+    expired: { text: '已过期', type: 'info' },
+    failed: { text: '失败', type: 'danger' },
+    deleted: { text: '已删除', type: 'info' }
+  }
+  return statusMap[status] || { text: status, type: 'info' }
+}
+
 // 格式化日期
 const formatDate = (date: string | Date) => {
   return new Date(date).toLocaleString('zh-CN')
+}
+
+const formatTimestamp = (timestamp?: number | null) => {
+  if (!timestamp) return '-'
+  return new Date(timestamp).toLocaleString('zh-CN')
+}
+
+function getRunStatusText(run: any) {
+  const statusMap: Record<string, string> = {
+    running: '同步中',
+    completed: '完成',
+    partial_failed: '部分失败',
+    failed: '失败',
+    skipped: '跳过'
+  }
+  const status = statusMap[run.status] || run.status
+  const count = run.missingFileCount ?? run.missing_file_count ?? 0
+  return `${status} / 缺少 ${count} 个`
+}
+
+function resetSyncProgress() {
+  syncProgressPercent.value = 0
+  syncProgressStage.value = ''
+  syncProgressStatus.value = undefined
+  syncProgressMessage.value = ''
+}
+
+function openSyncProgress() {
+  resetSyncProgress()
+  syncProgressVisible.value = true
+}
+
+function handleSyncProgress(data: {
+  planId: number
+  stage: string
+  status: string
+  message?: string
+  current?: number
+  total?: number
+}) {
+  if (!syncProgressVisible.value) return
+
+  syncProgressStage.value = data.stage
+  syncProgressMessage.value = data.message || ''
+
+  if (data.current !== undefined && data.total !== undefined && data.total > 0) {
+    syncProgressPercent.value = Math.min(Math.round((data.current / data.total) * 100), 100)
+  }
+
+  if (data.status === 'failed') {
+    syncProgressStatus.value = 'exception'
+  } else if (data.stage === 'complete' && data.status === 'completed') {
+    syncProgressStatus.value = 'success'
+  } else {
+    syncProgressStatus.value = undefined
+  }
 }
 
 /**
@@ -266,6 +533,62 @@ function extractTargetPath(alistUrl: string): string | null {
   return sanitizePath(targetPath)
 }
 
+function getExpiresAt(): number {
+  if (syncForm.expirePreset === 'custom') {
+    if (!syncForm.customExpiresAt) {
+      throw new Error('请选择自动同步计划有效期')
+    }
+    return syncForm.customExpiresAt.getTime()
+  }
+
+  const days = Number(syncForm.expirePreset)
+  return Date.now() + days * 24 * 60 * 60 * 1000
+}
+
+async function selectSyncDirectory() {
+  try {
+    const result = await window.electronAPI.downloadConfig.selectDirectory()
+    if (result?.success && result.path) {
+      syncForm.localSyncDir = result.path
+    } else if (result?.needsCreation && result.path) {
+      const confirm = await ElMessageBox.confirm(
+        '目录不存在，是否创建并作为本机同步目录？',
+        '创建目录',
+        {
+          confirmButtonText: '创建',
+          cancelButtonText: '取消',
+          type: 'warning'
+        }
+      ).catch(() => null)
+
+      if (confirm) {
+        const created = await window.electronAPI.downloadConfig.createDirectory(result.path)
+        if (created?.success && created.path) {
+          syncForm.localSyncDir = created.path
+        } else {
+          ElMessage.error(created?.error || '创建目录失败')
+        }
+      }
+    } else if (result?.error) {
+      ElMessage.error(result.error)
+    }
+  } catch (error: any) {
+    ElMessage.error(error.message || '选择目录失败')
+  }
+}
+
+async function ensureDefaultSyncDirectory() {
+  if (syncForm.localSyncDir) return
+  try {
+    const config = await window.electronAPI.downloadConfig.get()
+    if (config?.defaultPath) {
+      syncForm.localSyncDir = config.defaultPath
+    }
+  } catch {
+    // 保持空值，由提交校验提示
+  }
+}
+
 /**
  * 执行转存
  */
@@ -280,23 +603,56 @@ async function handleTransfer() {
       return
     }
 
+    if (syncForm.enabled) {
+      if (!syncForm.localSyncDir) {
+        ElMessage.error('请选择本机同步目录')
+        return
+      }
+      try {
+        const expiresAt = getExpiresAt()
+        if (expiresAt <= Date.now()) {
+          ElMessage.error('有效期必须晚于当前时间')
+          return
+        }
+      } catch (error: any) {
+        ElMessage.error(error.message)
+        return
+      }
+    }
+
     transferring.value = true
+    if (syncForm.enabled) {
+      openSyncProgress()
+    }
     try {
-      const result = await window.electronAPI.shareTransfer.exec({
-        url: transferForm.url,
-        userId: authStore.user.id
-      })
+      const result = syncForm.enabled
+        ? await window.electronAPI.autoSync.createPlanAndRun({
+            userId: authStore.user.id,
+            name: syncForm.name.trim() || undefined,
+            shareUrl: transferForm.url,
+            localSyncDir: syncForm.localSyncDir,
+            expiresAt: getExpiresAt(),
+            autoRunOnStartup: syncForm.autoRunOnStartup,
+            conflictPolicy: 'skip_existing'
+          })
+        : await window.electronAPI.shareTransfer.exec({
+            url: transferForm.url,
+            userId: authStore.user.id
+          })
 
       if (result.success) {
-        ElMessage.success(result.message || '转存成功')
+        ElMessage.success(result.message || (syncForm.enabled ? '自动同步计划已创建' : '转存成功'))
         // 清空表单
         transferForm.url = ''
+        syncForm.name = ''
         // 刷新列表
         await loadRecords()
+        await loadPlans()
 
         // 跳转到转存路径
-        if (result.alistPath) {
-          const targetPath = extractTargetPath(result.alistPath)
+        const alistPath = result.alistPath || result.plan?.lastAlistPath
+        if (alistPath) {
+          const targetPath = extractTargetPath(alistPath)
 
           if (targetPath && targetPath !== '/') {
             ElMessage.info('正在跳转到转存目录...')
@@ -305,10 +661,16 @@ async function handleTransfer() {
           }
         }
       } else {
-        ElMessage.error(result.message || '转存失败')
+        ElMessage.error(result.message || (syncForm.enabled ? '创建自动同步计划失败' : '转存失败'))
+        if (syncForm.enabled) {
+          syncProgressVisible.value = false
+        }
       }
     } catch (error: any) {
       ElMessage.error('转存失败: ' + error.message)
+      if (syncForm.enabled) {
+        syncProgressVisible.value = false
+      }
     } finally {
       transferring.value = false
     }
@@ -342,12 +704,136 @@ async function loadRecords() {
   }
 }
 
+async function loadPlans() {
+  if (!authStore.user?.id) return
+
+  plansLoading.value = true
+  try {
+    const result = await window.electronAPI.autoSync.listPlans({
+      userId: authStore.user.id
+    })
+
+    if (result.success) {
+      plans.value = result.plans || []
+    } else {
+      ElMessage.error(result.message || '加载自动同步计划失败')
+    }
+  } catch (error: any) {
+    ElMessage.error('加载自动同步计划失败: ' + error.message)
+  } finally {
+    plansLoading.value = false
+  }
+}
+
+async function runPlan(id: number) {
+  if (!authStore.user?.id) return
+
+  runningPlanId.value = id
+  openSyncProgress()
+  try {
+    const result = await window.electronAPI.autoSync.runPlan({
+      id,
+      userId: authStore.user.id
+    })
+
+    if (!result.success) {
+      syncProgressVisible.value = false
+      ElMessage.error(result.message || '同步失败')
+    }
+    await loadPlans()
+  } catch (error: any) {
+    ElMessage.error('同步失败: ' + error.message)
+    syncProgressVisible.value = false
+  } finally {
+    runningPlanId.value = null
+  }
+}
+
+async function pausePlan(id: number) {
+  if (!authStore.user?.id) return
+
+  const result = await window.electronAPI.autoSync.pausePlan({
+    id,
+    userId: authStore.user.id
+  })
+  if (result.success) {
+    ElMessage.success('已暂停')
+    await loadPlans()
+  } else {
+    ElMessage.error(result.message || '暂停失败')
+  }
+}
+
+async function resumePlan(id: number) {
+  if (!authStore.user?.id) return
+
+  const result = await window.electronAPI.autoSync.resumePlan({
+    id,
+    userId: authStore.user.id
+  })
+  if (result.success) {
+    ElMessage.success('已恢复')
+    await loadPlans()
+  } else {
+    ElMessage.error(result.message || '恢复失败')
+  }
+}
+
+async function deletePlan(id: number) {
+  if (!authStore.user?.id) return
+
+  try {
+    await ElMessageBox.confirm(
+      '确定要删除这个自动同步计划吗？已进入下载队列的任务不会自动取消。',
+      '确认删除',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    const result = await window.electronAPI.autoSync.deletePlan({
+      id,
+      userId: authStore.user.id
+    })
+    if (result.success) {
+      ElMessage.success('删除成功')
+      await loadPlans()
+    } else {
+      ElMessage.error(result.message || '删除失败')
+    }
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除失败: ' + error.message)
+    }
+  }
+}
+
 /**
  * 处理分页大小变化
  */
-function handlePageSizeChange() {
+function handlePageChange(pageNum: number) {
+  pagination.pageNum = pageNum
+  loadRecords()
+}
+
+/**
+ * 处理分页大小变化
+ */
+function handlePageSizeChange(pageSize: number) {
+  pagination.pageSize = pageSize
   pagination.pageNum = 1
   loadRecords()
+}
+
+function moveToPreviousPageIfCurrentPageEmpty(deletedCount = 1) {
+  const remainingTotal = Math.max(totalRecords.value - deletedCount, 0)
+  const maxPage = Math.max(Math.ceil(remainingTotal / pagination.pageSize), 1)
+
+  if (pagination.pageNum > maxPage) {
+    pagination.pageNum = maxPage
+  }
 }
 
 /**
@@ -381,6 +867,7 @@ async function handleDelete(id: number) {
 
     if (result.success) {
       ElMessage.success('删除成功')
+      moveToPreviousPageIfCurrentPageEmpty()
       await loadRecords()
     } else {
       ElMessage.error(result.message || '删除失败')
@@ -398,9 +885,12 @@ async function handleDelete(id: number) {
 async function handleBatchDelete() {
   if (selectedIds.value.length === 0 || !authStore.user?.id) return
 
+  const ids = [...selectedIds.value]
+  const userId = authStore.user.id
+
   try {
     await ElMessageBox.confirm(
-      `确定要删除选中的 ${selectedIds.value.length} 条记录吗？`,
+      `确定要删除选中的 ${ids.length} 条记录吗？`,
       '确认批量删除',
       {
         confirmButtonText: '确定',
@@ -410,12 +900,13 @@ async function handleBatchDelete() {
     )
 
     const result = await window.electronAPI.shareTransfer.batchDelete({
-      ids: selectedIds.value,
-      userId: authStore.user.id
+      ids,
+      userId
     })
 
     if (result.success) {
       ElMessage.success('批量删除成功')
+      moveToPreviousPageIfCurrentPageEmpty(ids.length)
       selectedIds.value = []
       await loadRecords()
     } else {
@@ -431,16 +922,23 @@ async function handleBatchDelete() {
 // 组件挂载时加载记录
 onMounted(() => {
   loadRecords()
+  loadPlans()
+  ensureDefaultSyncDirectory()
+  window.electronAPI.autoSync.onProgress(handleSyncProgress)
+})
+
+onUnmounted(() => {
+  window.electronAPI.autoSync.removeProgressListener(handleSyncProgress)
 })
 </script>
 
 <style scoped>
 .share-transfer-container {
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 20px;
+  padding: 20px 5%;
   background: linear-gradient(135deg, #F5F5F5 0%, #E8E8E8 100%);
-  min-height: 100vh;
+  height: 100vh;
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 
 /* 卡片 - 网易云风格 */
@@ -451,6 +949,10 @@ onMounted(() => {
   background: rgba(255, 255, 255, 0.85) !important;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
+}
+
+:deep(.el-card__body) {
+  min-height: 0;
 }
 
 :deep(.el-card__header) {
@@ -477,6 +979,18 @@ onMounted(() => {
   gap: 16px;
 }
 
+.local-dir-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  width: 100%;
+}
+
+.expire-picker {
+  margin-left: 12px;
+  width: 220px;
+}
+
 /* 分割线 */
 :deep(.el-divider) {
   border-color: rgba(0, 0, 0, 0.06);
@@ -488,6 +1002,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-height: 0;
 }
 
 .records-header {
@@ -505,6 +1020,10 @@ onMounted(() => {
 /* 表格样式 */
 :deep(.el-table) {
   border-radius: var(--radius-md);
+}
+
+:deep(.el-table__body-wrapper) {
+  scrollbar-width: thin;
 }
 
 :deep(.el-table th) {
@@ -566,8 +1085,12 @@ onMounted(() => {
 }
 
 /* 分页样式 */
-:deep(.el-pagination) {
+.records-pagination {
   display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px 0;
+  margin-top: 4px;
 }
 
 :deep(.el-pagination button),
@@ -577,5 +1100,27 @@ onMounted(() => {
 
 :deep(.el-pager li.is-active) {
   background: var(--netease-red) !important;
+}
+
+/* 同步进度弹窗 */
+.sync-progress-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.sync-progress-stage {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--netease-gray-7);
+  text-align: center;
+}
+
+.sync-progress-message {
+  font-size: 13px;
+  color: var(--netease-gray-5);
+  text-align: center;
+  min-height: 20px;
 }
 </style>

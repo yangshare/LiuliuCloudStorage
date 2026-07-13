@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
-import { useQuotaStore } from '@/renderer/src/stores/quotaStore'
+import { useQuotaStore } from '@/features/quota/stores/quotaStore'
 
 // Mock window.electronAPI
 const mockQuotaAPI = {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ElAlert } from 'element-plus'
-import { useFileStore } from '../../stores/fileStore'
+import { useFileStore } from '@/features/file'
 
 const fileStore = useFileStore()
 </script>

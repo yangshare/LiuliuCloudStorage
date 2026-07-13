@@ -4,6 +4,7 @@
  */
 
 export const electronAPIMock = `
+window.__liuliuCacheCleared = false
 window.electronAPI = {
   platform: 'win32',
   invoke: () => Promise.resolve({ success: true }),
@@ -92,7 +93,59 @@ window.electronAPI = {
   app: {
     getVersion: () => Promise.resolve('1.0.0'),
     setLoginItemSettings: () => Promise.resolve({ success: true }),
-    getLoginItemSettings: () => Promise.resolve({ openAtLogin: false })
+    getLoginItemSettings: () => Promise.resolve({ success: true, openAtLogin: false }),
+    openLogsDirectory: () => Promise.resolve({ success: true })
+  },
+  downloadConfig: {
+    selectDirectory: () => Promise.resolve({ success: true, path: 'C:\\\\Downloads' }),
+    get: () => Promise.resolve({ defaultPath: 'C:\\\\Downloads', autoCreateDateFolder: false }),
+    update: () => Promise.resolve({ success: true }),
+    openDirectory: () => Promise.resolve({ success: true }),
+    openFileDirectory: () => Promise.resolve({ success: true }),
+    reset: () => Promise.resolve({ success: true }),
+    createDirectory: () => Promise.resolve({ success: true, path: 'C:\\\\Downloads' })
+  },
+  cache: {
+    getInfo: () => Promise.resolve({
+      success: true,
+      size: window.__liuliuCacheCleared ? '0 B' : '128 MB',
+      directory: 'C:\\\\Users\\\\test\\\\AppData\\\\Roaming\\\\liuliu-cloud-storage\\\\Cache',
+      lastCleanup: window.__liuliuCacheCleared ? '刚刚' : ''
+    }),
+    clear: () => {
+      window.__liuliuCacheCleared = true
+      return Promise.resolve({
+        success: true,
+        clearedSize: '128 MB',
+        remainingSize: '0 B',
+        filesDeleted: 3
+      })
+    }
+  },
+  config: {
+    check: () => Promise.resolve({ complete: true, missing: [] }),
+    get: () => Promise.resolve({
+      alistBaseUrl: 'http://localhost:5244',
+      n8nBaseUrl: '',
+      ambApiBaseUrl: 'https://amb.example.com/prod-api',
+      ambTransferToken: ''
+    }),
+    save: () => Promise.resolve({ success: true }),
+    reinit: () => Promise.resolve({ success: true })
+  },
+  autoSync: {
+    createPlanAndRun: () => Promise.resolve({ success: true }),
+    listPlans: () => Promise.resolve({ success: true, data: [] }),
+    updatePlan: () => Promise.resolve({ success: true }),
+    pausePlan: () => Promise.resolve({ success: true }),
+    resumePlan: () => Promise.resolve({ success: true }),
+    deletePlan: () => Promise.resolve({ success: true }),
+    runPlan: () => Promise.resolve({ success: true }),
+    listRuns: () => Promise.resolve({ success: true, data: [] }),
+    startupRun: () => Promise.resolve({ success: true, executed: 0, total: 0 }),
+    resetBaseline: () => Promise.resolve({ success: true }),
+    onProgress: () => {},
+    removeProgressListener: () => {}
   },
   activity: {
     log: () => Promise.resolve({ success: true }),

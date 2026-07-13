@@ -1,16 +1,23 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { ElText, ElButton, ElIcon, ElDialog, ElSpace, ElMessage, ElInput } from 'element-plus'
-import { Download, Delete, Refresh, Search } from '@element-plus/icons-vue'
-import { useFileStore } from '../../stores/fileStore'
-import { useTransferStore } from '../../stores/transferStore'
+import { ElText, ElButton, ElDialog, ElIcon, ElSpace, ElMessage, ElMessageBox, ElInput } from 'element-plus'
+import { Download, Refresh, Search, Loading } from '@element-plus/icons-vue'
+import { useFileStore } from '@/features/file'
+import { useTransferDownload } from '@/features/transfer/composables/useTransferDownload'
+import { MAX_BATCH_DOWNLOAD_FILES } from '@shared/constants'
 
 const fileStore = useFileStore()
-const transferStore = useTransferStore()
+const { batchQueueDownload } = useTransferDownload()
 
 // 删除确认对话框状态
 const showDeleteConfirm = ref(false)
 const isDeleting = ref(false)
+
+// 批量下载：目录扫描进度遮罩
+const showScanDialog = ref(false)
+const scanCount = ref(0)
+const isCancelling = ref(false)
+let scanSessionId: string | null = null
 
 async function handleBatchDownload() {
   const selectedItems = fileStore.selectedFiles
@@ -20,12 +27,7 @@ async function handleBatchDownload() {
     return
   }
 
-  console.log('[BatchActionToolbar] handleBatchDownload: selectedItems=', selectedItems)
-
-  ElMessage.info(`正在准备添加 ${selectedItems.length} 个项目到下载队列...`)
-
   const currentPath = fileStore.currentPath === '/' ? '' : fileStore.currentPath
-  let successCount = 0
   let failedCount = 0
 
   // 收集所有需要下载的文件路径
@@ -35,64 +37,122 @@ async function handleBatchDownload() {
   const directories = selectedItems.filter(f => f.isDir)
   const files = selectedItems.filter(f => !f.isDir)
 
-  console.log('[BatchActionToolbar] directories=', directories, 'files=', files, 'currentPath=', currentPath)
-
   // 直接添加文件路径
   files.forEach(file => {
     const filePath = currentPath ? `${currentPath}/${file.name}` : `/${file.name}`
     filePaths.push(filePath)
   })
 
-  // 处理目录：获取所有文件路径
-  for (const dir of directories) {
-    const dirRemotePath = currentPath ? `${currentPath}/${dir.name}` : `/${dir.name}`
-    console.log('[BatchActionToolbar] 获取目录文件: dirRemotePath=', dirRemotePath)
-    try {
-      const result = await window.electronAPI.file.getAllFilesInDirectory(dirRemotePath)
-      console.log('[BatchActionToolbar] 目录文件结果:', result)
-      if (result.success && result.data) {
-        console.log('[BatchActionToolbar] 找到文件数:', result.data.length)
-        filePaths.push(...result.data)
-      } else {
-        console.log('[BatchActionToolbar] 获取目录文件失败:', result.error)
-        failedCount++
+  // 处理目录：弹出进度遮罩，并发扫描（后端），支持取消
+  let dirTruncated = false
+  let scanCancelled = false
+  let completedDirectoryFileCount = 0
+  let currentDirectoryProgressBase = 0
+
+  if (directories.length > 0) {
+    scanSessionId = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    scanCount.value = 0
+    isCancelling.value = false
+    showScanDialog.value = true
+
+    const onProgress = (data: { sessionId: string; count: number }) => {
+      if (data.sessionId === scanSessionId) {
+        scanCount.value = Math.max(scanCount.value, currentDirectoryProgressBase + data.count)
       }
-    } catch (error) {
-      console.error('[BatchActionToolbar] 获取目录文件异常:', error)
-      failedCount++
+    }
+    window.electronAPI.file.onGetAllFilesProgress(onProgress)
+
+    try {
+      for (const dir of directories) {
+        const dirRemotePath = currentPath ? `${currentPath}/${dir.name}` : `/${dir.name}`
+        currentDirectoryProgressBase = completedDirectoryFileCount
+        try {
+          const result = await window.electronAPI.file.getAllFilesInDirectory(dirRemotePath, MAX_BATCH_DOWNLOAD_FILES, scanSessionId)
+          if (result.success && result.data) {
+            // 用户取消：主进程 abort 后返回 cancelled=true，立即中止整轮扫描
+            if (result.data.cancelled) {
+              scanCancelled = true
+              break
+            }
+            filePaths.push(...result.data.files)
+            completedDirectoryFileCount += result.data.files.length
+            scanCount.value = Math.max(scanCount.value, completedDirectoryFileCount)
+            if (result.data.truncated) {
+              dirTruncated = true
+              break  // 已超阈值，无需继续展开剩余目录
+            }
+          } else {
+            failedCount++
+          }
+        } catch (error) {
+          console.error('[BatchActionToolbar] 获取目录文件异常:', error)
+          failedCount++
+        }
+      }
+    } finally {
+      window.electronAPI.file.removeGetAllFilesProgressListener(onProgress)
+      showScanDialog.value = false
+      scanSessionId = null
+      isCancelling.value = false
+    }
+
+    if (scanCancelled) {
+      ElMessage.info('已取消批量下载')
+      return
     }
   }
 
   const totalFiles = filePaths.length
-  console.log('[BatchActionToolbar] 总文件数:', totalFiles, 'filePaths=', filePaths)
 
   if (totalFiles === 0) {
     ElMessage.warning('没有可下载的文件')
     return
   }
 
+  // 文件数量上限拦截：目录展开时已超阈值（dirTruncated）或累计超限，
+  // 阻断以避免后端批量 INSERT 触发 Drizzle mergeQueries 递归爆栈 / SQLite 参数超限
+  if (dirTruncated || totalFiles > MAX_BATCH_DOWNLOAD_FILES) {
+    await ElMessageBox.alert(
+      `选中的文件超过单次批量下载上限 ${MAX_BATCH_DOWNLOAD_FILES} 个。\n为避免程序异常，请缩小选中范围（如减少文件夹）或分多次下载。`,
+      '文件数量过多',
+      { confirmButtonText: '我知道了', type: 'warning' }
+    )
+    return
+  }
+
   ElMessage.info(`正在添加 ${totalFiles} 个文件到下载队列...`)
 
   // 使用批量入队：先立即显示在等待列表，再分批获取下载链接
-  const result = await transferStore.batchQueueDownload(filePaths)
-  successCount = result.successCount ?? 0
-  failedCount = (result.failedCount ?? 0) + failedCount
+  const result = await batchQueueDownload(filePaths)
 
   // 清空选中状态
   fileStore.clearSelection()
 
   // 显示结果
-  if (failedCount === 0) {
-    ElMessage.success(`已添加 ${successCount} 个文件到下载队列`)
-  } else if (successCount === 0) {
-    ElMessage.error(`添加失败，请稍后重试`)
+  if (!result.success) {
+    ElMessage.error(result.error || '添加失败，请稍后重试')
+  } else if (result.successCount === 0) {
+    ElMessage.warning('没有新的文件需要下载（可能已在队列中）')
   } else {
-    ElMessage.warning(`成功添加 ${successCount} 个文件，失败 ${failedCount} 个`)
+    const skipped = totalFiles - (result.successCount ?? 0)
+    if (skipped > 0) {
+      ElMessage.success(`已添加 ${result.successCount} 个文件到下载队列(${skipped} 个已在队列)`)
+    } else {
+      ElMessage.success(`已添加 ${result.successCount} 个文件到下载队列`)
+    }
   }
 }
 
-function handleBatchDelete() {
-  showDeleteConfirm.value = true
+// 取消进行中的目录扫描：通知主进程 abort，扫描循环随即拿到 cancelled 返回值
+async function handleCancelScan() {
+  if (!scanSessionId || isCancelling.value) return
+  isCancelling.value = true
+  try {
+    await window.electronAPI.file.cancelGetAllFiles(scanSessionId)
+  } catch (error) {
+    console.error('[BatchActionToolbar] 取消扫描失败:', error)
+    isCancelling.value = false
+  }
 }
 
 async function confirmBatchDelete() {
@@ -138,7 +198,6 @@ function handleCancelSelection() {
 function getDeleteConfirmContent() {
   const files = fileStore.selectedFiles
   const folderCount = files.filter(f => f.isDir).length
-  const fileCount = files.filter(f => !f.isDir).length
 
   let content = `确定要删除 ${files.length} 项吗？`
   if (folderCount > 0) {
@@ -189,6 +248,27 @@ function getDeleteConfirmContent() {
       <el-button type="danger" @click="confirmBatchDelete" :loading="isDeleting">删除</el-button>
     </template>
   </el-dialog>
+
+  <!-- 目录扫描进度对话框 -->
+  <el-dialog
+    v-model="showScanDialog"
+    title="正在统计文件"
+    width="420px"
+    :close-on-click-modal="false"
+    :show-close="false"
+    :close-on-press-escape="false"
+  >
+    <div class="scan-dialog-body">
+      <el-icon class="is-loading scan-icon"><Loading /></el-icon>
+      <div class="scan-text">
+        <div>正在扫描选中目录的文件…</div>
+        <div class="scan-count">已找到 <b>{{ scanCount }}</b> 个文件</div>
+      </div>
+    </div>
+    <template #footer>
+      <el-button @click="handleCancelScan" :loading="isCancelling">取消</el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <style scoped>
@@ -205,5 +285,28 @@ function getDeleteConfirmContent() {
 
 .search-input {
   width: 180px;
+}
+
+.scan-dialog-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.scan-icon {
+  font-size: 32px;
+  color: var(--el-color-primary);
+}
+
+.scan-text {
+  text-align: center;
+  line-height: 1.8;
+}
+
+.scan-count {
+  margin-top: 8px;
+  color: var(--el-text-color-secondary);
 }
 </style>

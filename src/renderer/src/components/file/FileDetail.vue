@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ElDrawer, ElDescriptions, ElDescriptionsItem } from 'element-plus'
-import { useFileStore } from '../../stores/fileStore'
+import { useFileStore } from '@/features/file'
 import { formatFileSize, formatDate } from '../../utils/formatters'
 
 const fileStore = useFileStore()

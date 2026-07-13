@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { onMounted, defineComponent, h } from 'vue'
-import { useUpdateStore } from '@/stores/updateStore'
+import { useUpdateStore } from '@/features/update'
 import { NNotificationProvider, NMessageProvider, useNotification, useMessage } from 'naive-ui'
+import AutoSyncGlobalProgress from '@/components/auto-sync/AutoSyncGlobalProgress.vue'
 
 // 挂载全局实例的组件
 const GlobalMount = defineComponent({
@@ -24,6 +25,7 @@ onMounted(() => {
     <n-message-provider>
       <GlobalMount />
       <router-view />
+      <AutoSyncGlobalProgress />
     </n-message-provider>
   </n-notification-provider>
 </template>

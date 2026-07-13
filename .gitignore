@@ -70,6 +70,9 @@ web_modules/
 .env.*
 !.env.example
 
+# Local qiniu upload config
+.qiniu.local.json
+
 # Application config files (keep example)
 config.json
 !config.example.json
@@ -145,15 +148,40 @@ vite.config.ts.timestamp-*
 # Electron build outputs
 dist-electron/
 release/
-app/
 
 # Local database files
 *.db
 *.sqlite
 *.sqlite3
 
+# OS generated files
+.DS_Store
+.DS_Store?
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Editor directories and files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# Temporary files
+tmp/
+temp/
+
+# CodeGraph
+.codegraph/
+
 # Claude Code temporary files
 tmpclaude-*
 
 # Playwright test results
 test-results/
+
+.claude/

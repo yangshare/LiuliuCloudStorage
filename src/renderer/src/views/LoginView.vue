@@ -3,8 +3,10 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
+import { useAuthStore } from '@/features/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
 
 const formData = ref({ username: '', password: '' })
 const autoLogin = ref(false)
@@ -12,11 +14,11 @@ const loading = ref(false)
 
 onMounted(async () => {
   try {
-    const prefs = await window.electronAPI.auth.getLoginPreferences()
-    if (prefs.username) {
-      formData.value.username = prefs.username
-      formData.value.password = prefs.password || ''
-      autoLogin.value = prefs.autoLogin
+    const result = await window.electronAPI.auth.getLoginPreferences()
+    if (result?.success && result.data?.username) {
+      formData.value.username = result.data.username
+      formData.value.password = result.data.password || ''
+      autoLogin.value = result.data.autoLogin
     }
   } catch (e) {
     console.warn('获取登录偏好失败:', e)
@@ -36,11 +38,20 @@ async function handleLogin() {
       formData.value.password,
       autoLogin.value
     )
-    if (result.success) {
+    if (result.success && result.data) {
+      const userResult = await window.electronAPI.auth.getCurrentUser()
+      authStore.setUser({
+        id: result.data.id,
+        username: result.data.username,
+        token: result.data.token,
+        isAdmin: userResult?.success && userResult.data
+          ? userResult.data.isAdmin
+          : result.data.isAdmin
+      })
       ElMessage.success('登录成功')
       router.push('/')
     } else {
-      ElMessage.error(result.message || '登录失败')
+      ElMessage.error(result.message || result.error || '登录失败')
     }
   } catch (err) {
     ElMessage.error('网络错误，请稍后重试')
@@ -48,6 +59,13 @@ async function handleLogin() {
     loading.value = false
   }
 }
+
+// 跳转到配置向导：登录前也可修改服务器/API 配置
+function goToSetup() {
+  router.push('/setup?mode=edit')
+}
+
+defineExpose({ handleLogin })
 </script>
 
 <template>
@@ -91,6 +109,11 @@ async function handleLogin() {
           >
             登录
           </el-button>
+        </div>
+
+        <!-- 修改服务器配置入口：登录前也可修改 API 配置 -->
+        <div class="config-link-row">
+          <a class="register-link" @click.prevent="goToSetup">修改服务器配置 →</a>
         </div>
       </el-form>
     </div>
@@ -193,7 +216,14 @@ async function handleLogin() {
 .register-link {
   color: var(--netease-gray-5);
   font-size: 14px;
+  cursor: pointer;
   transition: color 0.2s ease;
+}
+
+/* 修改服务器配置入口行 */
+.config-link-row {
+  text-align: center;
+  margin-top: 4px;
 }
 
 .register-link:hover {

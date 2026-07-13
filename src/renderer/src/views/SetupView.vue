@@ -39,6 +39,17 @@ const warningMessage = computed(() => {
   return null
 })
 
+// 是否为「修改配置」场景（从登录页入口进入，mode=edit）
+const isEditMode = computed(() => route.query.mode === 'edit')
+const headerTitle = computed(() => (isEditMode.value ? '修改服务器配置' : '欢迎使用溜溜网盘'))
+const headerSubtitle = computed(() =>
+  isEditMode.value ? '修改后保存即可重新生效' : '首次使用需要配置服务器地址'
+)
+const tipMessage = computed(() =>
+  isEditMode.value ? '修改完成后点击保存' : '请填写服务器地址完成初始化配置'
+)
+const saveButtonText = computed(() => (isEditMode.value ? '保存配置' : '保存并继续'))
+
 // 加载已有配置
 onMounted(async () => {
   // 显示重定向警告
@@ -146,8 +157,8 @@ async function handleSave() {
 
     <div v-else class="setup-card netease-card netease-fade-in">
       <div class="setup-header">
-        <h1 class="netease-text-gradient">欢迎使用溜溜网盘</h1>
-        <p class="setup-subtitle">首次使用需要配置服务器地址</p>
+        <h1 class="netease-text-gradient">{{ headerTitle }}</h1>
+        <p class="setup-subtitle">{{ headerSubtitle }}</p>
       </div>
 
       <el-form class="setup-form" @submit.prevent="handleSave">
@@ -191,7 +202,7 @@ async function handleSave() {
 
         <div class="tip-box">
           <span class="tip-icon">💡</span>
-          <span>请填写服务器地址完成初始化配置</span>
+          <span>{{ tipMessage }}</span>
         </div>
 
         <div class="button-group">
@@ -202,7 +213,7 @@ async function handleSave() {
             class="save-btn"
             native-type="submit"
           >
-            保存并继续
+            {{ saveButtonText }}
           </el-button>
         </div>
       </el-form>

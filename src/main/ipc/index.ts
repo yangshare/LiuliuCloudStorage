@@ -1,31 +1,33 @@
-import { registerAuthHandlers } from './handlers/auth'
-import { registerFileHandlers } from './handlers/file'
-import { registerTransferHandlers } from './handlers/transfer'
-import { registerQuotaHandlers } from './handlers/quota'
-import { registerDialogHandlers } from './handlers/dialog'
-import { registerTrayHandlers } from './handlers/tray'
-import { registerNotificationHandlers } from './handlers/notification'
-import { registerAppHandlers } from './handlers/app'
-import { registerActivityHandlers } from './handlers/activity'
-import { registerDownloadConfigHandlers } from './handlers/downloadConfig'
-import { registerUpdateHandlers } from './handlers/update'
-import { registerCacheHandlers } from './handlers/cache'
-import { registerShareTransferHandlers } from './handlers/shareTransfer'
-import { registerConfigHandlers } from './handlers/config'
+import { initAppModule } from '../features/app'
+import { initDialogModule } from '../features/dialog'
+import { initTrayModule } from '../features/tray'
+import { initNotificationModule } from '../features/notification'
+import { initUpdateModule } from '../features/update'
+import { initAuthModule } from '../features/auth'
+import { initFileModule } from '../features/file'
+import { initTransferModule } from '../features/transfer'
+import { initQuotaModule } from '../features/quota'
+import { initShareTransferModule } from '../features/shareTransfer'
+import { initAutoSyncModule } from '../features/autoSync'
+import { initActivityModule } from '../features/activity'
+import { initDownloadConfigModule } from '../features/downloadConfig'
+import { initCacheModule } from '../features/cache'
+import { initConfigModule } from '../features/config'
 
 export function registerAllHandlers(): void {
-  registerAuthHandlers()
-  registerFileHandlers()
-  registerTransferHandlers()
-  registerQuotaHandlers()
-  registerDialogHandlers()
-  registerTrayHandlers()
-  registerNotificationHandlers()
-  registerAppHandlers()
-  registerActivityHandlers()
-  registerDownloadConfigHandlers()
-  registerUpdateHandlers()
-  registerCacheHandlers()
-  registerShareTransferHandlers()
-  registerConfigHandlers()
+  initAppModule()
+  initDialogModule()
+  initTrayModule()
+  initNotificationModule()
+  initUpdateModule()
+  initAuthModule()
+  initFileModule()
+  initTransferModule()
+  initQuotaModule()
+  initShareTransferModule()
+  initAutoSyncModule()
+  initActivityModule()
+  initDownloadConfigModule()
+  initCacheModule()
+  initConfigModule()
 }

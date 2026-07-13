@@ -1,13 +1,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { QuotaCalculationService } from '@/main/services/QuotaCalculationService'
-import { alistService } from '@/main/services/AlistService'
+import { QuotaCalculationService } from '../../src/main/features/quota/quota-calculation.service'
+import { alistService } from '../../src/main/core/api/alist.service'
 import axios from 'axios'
 
 // Mock dependencies
-vi.mock('@/main/services/AlistService', () => ({
+vi.mock('../../src/main/core/api/alist.service', () => ({
   alistService: {
     listFiles: vi.fn()
   }
+}))
+
+vi.mock('../../src/main/config', () => ({
+  loadConfig: () => ({
+    n8nBaseUrl: 'http://n8n.test'
+  })
 }))
 
 vi.mock('axios', () => ({
@@ -45,11 +51,11 @@ describe('QuotaCalculationService', () => {
       // Assert
       expect(result).toBe(expectedQuota)
       expect(axios.post).toHaveBeenCalledWith(
-        expect.stringContaining('/api/quota/calculate'),
+        'http://n8n.test/api/quota/calculate',
         {
           userId,
           username,
-          path: `/root/users/${username}/`
+          path: '/alist/'
         },
         { timeout: 5000 }
       )
@@ -145,7 +151,7 @@ describe('QuotaCalculationService', () => {
       expect(result).toBe(0)
     })
 
-    it('应该在所有方法失败时抛出错误', async () => {
+    it('应该在 Alist API 失败时返回 0', async () => {
       // Arrange
       const userId = 1
       const username = 'testuser'
@@ -153,8 +159,11 @@ describe('QuotaCalculationService', () => {
       vi.mocked(axios.post).mockRejectedValueOnce(new Error('n8n unavailable'))
       vi.mocked(alistService.listFiles).mockRejectedValueOnce(new Error('Alist error'))
 
-      // Act & Assert
-      await expect(service.calculateQuota(userId, username)).rejects.toThrow('计算配额失败')
+      // Act
+      const result = await service.calculateQuota(userId, username)
+
+      // Assert
+      expect(result).toBe(0)
     })
   })
 

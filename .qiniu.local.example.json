@@ -1,0 +1,7 @@
+{
+  "accessKey": "your-qiniu-access-key",
+  "secretKey": "your-qiniu-secret-key",
+  "bucket": "your-qiniu-bucket",
+  "bucketDomain": "qiniu.yangshare.com",
+  "zone": "z2"
+}

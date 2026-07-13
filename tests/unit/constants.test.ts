@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { DEFAULT_QUOTA, QUOTA_CACHE_DURATION, SESSION_EXPIRY_DAYS } from '@/shared/constants'
+import { DEFAULT_QUOTA, QUOTA_CACHE_DURATION, SESSION_EXPIRY_DAYS } from '@shared/constants'
 
 describe('Constants', () => {
   describe('DEFAULT_QUOTA', () => {

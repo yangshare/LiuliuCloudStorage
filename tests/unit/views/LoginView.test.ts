@@ -59,3 +59,28 @@ describe('LoginView token persistence', () => {
     expect(push).toHaveBeenCalledWith('/')
   })
 })
+
+describe('LoginView 修改服务器配置入口', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    ;(window as any).electronAPI = {
+      auth: {
+        // 登录页 onMounted 会读取登录偏好；此用例不涉及登录
+        getLoginPreferences: vi.fn().mockResolvedValue({ success: true, data: { username: '', password: '', autoLogin: false } })
+      }
+    }
+  })
+
+  it('渲染「修改服务器配置」入口，点击后跳转到 /setup?mode=edit', async () => {
+    const wrapper = mount(LoginView, { global: { stubs } })
+    await flushPromises()
+
+    const link = wrapper.find('.register-link')
+    expect(link.exists()).toBe(true)
+    expect(link.text()).toContain('修改服务器配置')
+
+    await link.trigger('click')
+    expect(push).toHaveBeenCalledWith('/setup?mode=edit')
+  })
+})

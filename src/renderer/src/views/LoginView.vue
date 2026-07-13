@@ -60,6 +60,11 @@ async function handleLogin() {
   }
 }
 
+// 跳转到配置向导：登录前也可修改服务器/API 配置
+function goToSetup() {
+  router.push('/setup?mode=edit')
+}
+
 defineExpose({ handleLogin })
 </script>
 
@@ -104,6 +109,11 @@ defineExpose({ handleLogin })
           >
             登录
           </el-button>
+        </div>
+
+        <!-- 修改服务器配置入口：登录前也可修改 API 配置 -->
+        <div class="config-link-row">
+          <a class="register-link" @click.prevent="goToSetup">修改服务器配置 →</a>
         </div>
       </el-form>
     </div>
@@ -206,7 +216,14 @@ defineExpose({ handleLogin })
 .register-link {
   color: var(--netease-gray-5);
   font-size: 14px;
+  cursor: pointer;
   transition: color 0.2s ease;
+}
+
+/* 修改服务器配置入口行 */
+.config-link-row {
+  text-align: center;
+  margin-top: 4px;
 }
 
 .register-link:hover {
